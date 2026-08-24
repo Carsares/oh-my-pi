@@ -1,4 +1,5 @@
 use super::strip_verbatim_prefix;
+use crate::omp_paths;
 use std::path::{Path, PathBuf};
 
 pub(super) fn resolve_bundled_extensions(
@@ -6,21 +7,30 @@ pub(super) fn resolve_bundled_extensions(
     cwd: &Path,
     is_saved_session: bool,
 ) -> Result<Vec<PathBuf>, String> {
-    bundled_extension_names_for_launch(cwd, is_saved_session)
+    let agent_inbox = omp_paths::agent_inbox_dir()?;
+    bundled_extension_names_for_launch(cwd, is_saved_session, &agent_inbox)
         .into_iter()
         .map(|name| resolve_bundled_extension(static_dir, name))
         .collect()
 }
 
-fn bundled_extension_names_for_launch(cwd: &Path, is_saved_session: bool) -> Vec<&'static str> {
-    let normalized = cwd.to_string_lossy().replace('\\', "/");
-    let is_agent_inbox = normalized
-        .trim_end_matches('/')
-        .ends_with("/.pi/agent/super-agent");
+fn bundled_extension_names_for_launch(
+    cwd: &Path,
+    is_saved_session: bool,
+    agent_inbox: &Path,
+) -> Vec<&'static str> {
+    let is_agent_inbox = same_dir(cwd, agent_inbox);
     if is_agent_inbox && is_saved_session {
         vec!["picot-bridge.mjs", "pi-chat.mjs"]
     } else {
         vec!["picot-bridge.mjs"]
+    }
+}
+
+fn same_dir(left: &Path, right: &Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
     }
 }
 
@@ -120,8 +130,9 @@ mod tests {
 
     #[test]
     fn saved_agent_inbox_session_loads_the_bundled_telegram_listener() {
+        let agent_inbox = Path::new("/Users/me/.omp/agent/super-agent");
         assert_eq!(
-            bundled_extension_names_for_launch(Path::new("/Users/me/.pi/agent/super-agent"), true,),
+            bundled_extension_names_for_launch(agent_inbox, true, agent_inbox),
             vec!["picot-bridge.mjs", "pi-chat.mjs"]
         );
     }
@@ -129,15 +140,20 @@ mod tests {
     #[test]
     fn regular_projects_do_not_compete_for_the_telegram_listener() {
         assert_eq!(
-            bundled_extension_names_for_launch(Path::new("/Users/me/code/project"), true),
+            bundled_extension_names_for_launch(
+                Path::new("/Users/me/code/project"),
+                true,
+                Path::new("/Users/me/.omp/agent/super-agent"),
+            ),
             vec!["picot-bridge.mjs"]
         );
     }
 
     #[test]
     fn temporary_agent_inbox_runtime_does_not_steal_the_telegram_listener() {
+        let agent_inbox = Path::new("/Users/me/.omp/agent/super-agent");
         assert_eq!(
-            bundled_extension_names_for_launch(Path::new("/Users/me/.pi/agent/super-agent"), false,),
+            bundled_extension_names_for_launch(agent_inbox, false, agent_inbox),
             vec!["picot-bridge.mjs"]
         );
     }

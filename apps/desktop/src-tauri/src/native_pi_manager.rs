@@ -23,14 +23,14 @@ pub struct NativeLaunchSpec {
     pub cwd: PathBuf,
     pub session_path: Option<PathBuf>,
     pub extensions: Vec<PathBuf>,
+    pub agent_dir: PathBuf,
     pub omp_version: String,
     pub path_env: String,
-    /// When true, spawn `pi --approve`: the desktop owner trusts the chosen
-    /// workspace's project-local resources (.pi/settings.json, .agents/skills,
+    /// When true, spawn `omp --approve`: the desktop owner trusts the chosen
+    /// workspace's project-local resources (`.omp`, `.agents/skills`,
     /// project extensions) for this run. Picot's workspace is opened via the OS
-    /// folder picker, so the user has already opted in; pi's non-interactive
-    /// rpc mode otherwise leaves the project untrusted even when a saved
-    /// decision exists in ~/.pi/agent/trust.json.
+    /// folder picker, so the user has already opted in; OMP's non-interactive
+    /// RPC mode otherwise leaves the project untrusted.
     pub approve: bool,
 }
 
@@ -58,6 +58,10 @@ impl NativeLaunchSpec {
         }
         let environment = BTreeMap::from([
             ("PATH".into(), self.path_env.clone()),
+            (
+                crate::omp_paths::AGENT_DIR_ENV.into(),
+                self.agent_dir.to_string_lossy().into_owned(),
+            ),
             ("PICOT_OMP_VERSION".into(), self.omp_version.clone()),
         ]);
         LaunchDescription {
@@ -640,6 +644,7 @@ mod tests {
             cwd: PathBuf::from("/workspace"),
             session_path: Some(PathBuf::from("/sessions/a.jsonl")),
             extensions: vec![PathBuf::from("/extensions/picot-bridge.mjs")],
+            agent_dir: PathBuf::from("/omp/agent"),
             omp_version: env!("PICOT_OMP_VERSION_BUNDLED").into(),
             path_env: "/usr/bin".into(),
             approve: false,
@@ -652,6 +657,10 @@ mod tests {
             .windows(2)
             .any(|pair| pair == ["--session", "/sessions/a.jsonl"]));
         assert!(!launch.environment.contains_key("PI_STUDIO_PORT"));
+        assert_eq!(
+            launch.environment.get("PI_CODING_AGENT_DIR"),
+            Some(&"/omp/agent".to_string())
+        );
         assert!(!launch
             .args
             .iter()
@@ -665,6 +674,7 @@ mod tests {
             cwd: PathBuf::from("/workspace"),
             session_path: None,
             extensions: vec![],
+            agent_dir: PathBuf::from("/omp/agent"),
             omp_version: env!("PICOT_OMP_VERSION_BUNDLED").into(),
             path_env: "/usr/bin".into(),
             approve: true,

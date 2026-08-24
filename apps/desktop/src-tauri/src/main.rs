@@ -10,6 +10,7 @@ mod markitdown_preview;
 mod metadata_store;
 mod model_health;
 mod native_pi_manager;
+mod omp_paths;
 mod pi_launch;
 mod pi_rpc_bridge;
 mod remote_auth;
@@ -618,22 +619,7 @@ fn find_static_dir(app: &tauri::App) -> PathBuf {
 }
 
 fn agent_inbox_path() -> Result<PathBuf, String> {
-    dirs::home_dir()
-        .map(|home| home.join(".pi").join("agent").join("super-agent"))
-        .ok_or_else(|| "Cannot resolve home directory for Agent Inbox".to_string())
-}
-
-/// Encode a cwd the same way pi does for `~/.pi/agent/sessions/<dir>/`.
-/// Leading `/` or `\` is stripped, then `/`, `\`, and `:` become `-`, so a
-/// Windows path like `C:\Users\me\.pi\agent\super-agent` becomes
-/// `--C--Users-me-.pi-agent-super-agent--` instead of a name containing `:`.
-fn session_dir_name(cwd: &Path) -> String {
-    let raw = cwd.to_string_lossy();
-    let stripped = raw
-        .strip_prefix('/')
-        .or_else(|| raw.strip_prefix('\\'))
-        .unwrap_or(raw.as_ref());
-    format!("--{}--", stripped.replace(['/', '\\', ':'], "-"))
+    omp_paths::agent_inbox_dir()
 }
 
 fn now_unix_millis() -> u128 {
@@ -670,12 +656,7 @@ fn ensure_agent_inbox_placeholder_session(cwd: &Path) -> Result<(), String> {
     if find_latest_session_for_cwd(cwd).is_some() {
         return Ok(());
     }
-    let sessions_root = dirs::home_dir()
-        .ok_or_else(|| "Cannot resolve home directory for Agent Inbox sessions".to_string())?
-        .join(".pi")
-        .join("agent")
-        .join("sessions")
-        .join(session_dir_name(cwd));
+    let sessions_root = omp_paths::sessions_dir()?.join(omp_paths::session_dir_name(cwd));
     fs::create_dir_all(&sessions_root)
         .map_err(|error| format!("Cannot create Agent Inbox session folder: {error}"))?;
     let id = uuid::Uuid::new_v4().to_string();
@@ -700,7 +681,7 @@ fn ensure_agent_inbox_placeholder_session(cwd: &Path) -> Result<(), String> {
 }
 
 fn find_latest_session_for_cwd(cwd: &Path) -> Option<PathBuf> {
-    let sessions_root = dirs::home_dir()?.join(".pi/agent/sessions");
+    let sessions_root = omp_paths::sessions_dir().ok()?;
     list_session_files(&sessions_root)
         .into_iter()
         .filter(|path| {
@@ -770,7 +751,7 @@ fn extract_session_cwd(session_path: &Path) -> Option<String> {
 }
 
 fn find_latest_session_boot_target() -> Option<(String, String)> {
-    let sessions_root = dirs::home_dir()?.join(".pi/agent/sessions");
+    let sessions_root = omp_paths::sessions_dir().ok()?;
     if !sessions_root.exists() {
         log::info!(
             "[picot-native] startup target skipped: sessions dir not found at {}",
@@ -989,9 +970,9 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_static_dir, select_fresh_startup_target, session_dir_name};
+    use super::{resolve_static_dir, select_fresh_startup_target};
     use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_temp_dir(label: &str) -> PathBuf {
@@ -1022,22 +1003,6 @@ mod tests {
 
         assert_eq!(resolved, fs::canonicalize(&workspace_public).unwrap());
         let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn session_dir_name_matches_pi_encoding_on_unix_and_windows_paths() {
-        assert_eq!(
-            session_dir_name(Path::new("/Users/me/.pi/agent/super-agent")),
-            "--Users-me-.pi-agent-super-agent--"
-        );
-        assert_eq!(
-            session_dir_name(Path::new(r"C:\Users\me\.pi\agent\super-agent")),
-            "--C--Users-me-.pi-agent-super-agent--"
-        );
-        assert!(
-            !session_dir_name(Path::new(r"C:\Users\me\.pi\agent\super-agent")).contains(':'),
-            "Windows session folders cannot contain a drive colon"
-        );
     }
 
     #[test]

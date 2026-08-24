@@ -2298,6 +2298,43 @@ mod tests {
         fs::remove_dir_all(temp).unwrap();
     }
 
+    #[test]
+    fn reads_the_active_branch_from_the_omp_v3_fixture() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!("picot-omp-session-{nonce}"));
+        let workspace = temp.join("workspace");
+        let sessions = temp.join("sessions/project");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir_all(&sessions).unwrap();
+        let fixture = include_str!("../../tests/fixtures/omp-session/v3/branched-session.jsonl")
+            .replace(
+                "\"/tmp/omp-desktop-fixture\"",
+                &serde_json::to_string(&workspace.to_string_lossy()).unwrap(),
+            );
+        fs::write(sessions.join("fixture.jsonl"), fixture).unwrap();
+        let data = HostDataPlane::new(HashMap::from([("workspace-a".into(), workspace)]))
+            .unwrap()
+            .with_session_root(temp.join("sessions"));
+
+        let messages = data
+            .read_session_messages("workspace-a", "0198f4ec-4f22-7000-8000-000000000001")
+            .unwrap();
+
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0]["content"], "first turn");
+        assert_eq!(messages[1]["content"], "branched turn");
+        assert_eq!(messages[2]["content"][0]["text"], "branched response");
+        assert!(!messages.iter().any(|message| {
+            message["content"]
+                .as_array()
+                .is_some_and(|content| content.iter().any(|item| item["text"] == "first response"))
+        }));
+        fs::remove_dir_all(temp).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn rejects_symlinks_that_resolve_outside_the_workspace() {

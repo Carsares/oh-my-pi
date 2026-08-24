@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use crate::host_data::{HostDataError, HostDataPlane, WriteFileResult};
+use crate::omp_paths;
 use crate::host_git;
 use crate::host_router::{HostRouter, RoutedAction, PROTOCOL_VERSION};
 use crate::markitdown_preview::{
@@ -144,9 +145,7 @@ impl HostServer {
     ) -> Result<Self, String> {
         let mut data = HostDataPlane::new(workspace_roots)
             .map_err(|error| format!("Cannot initialize Host data plane: {error:?}"))?;
-        if let Some(home) = dirs::home_dir() {
-            data = data.with_session_root(home.join(".pi/agent/sessions"));
-        }
+        data = data.with_session_root(omp_paths::sessions_dir()?);
         // Prefer a stable, high, rarely-used port so LAN clients get a stable
         // URL/QR across restarts. Scan a small contiguous range so multiple
         // project windows each get a deterministic port (57620, 57621, ...),

@@ -1,4 +1,5 @@
 use crate::native_pi_manager::NativeLaunchSpec;
+use crate::omp_paths;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -100,11 +101,12 @@ impl PiLaunchResolver {
             cwd: PathBuf::from(strip_verbatim_prefix(cwd)),
             session_path: session_path.map(|path| PathBuf::from(strip_verbatim_prefix(path))),
             extensions,
+            agent_dir: omp_paths::agent_dir()?,
             omp_version: bundled_omp_version().to_owned(),
             path_env: build_augmented_path(),
             // Picot workspaces are opened via the OS folder picker, so the user
             // has already opted in; trust project-local resources for every
-            // pi process Picot spawns.
+            // OMP process Picot spawns.
             approve: true,
         })
     }
@@ -119,6 +121,7 @@ impl PiLaunchResolver {
         configure_child_process_for_windows(&mut command);
         command
             .args(args)
+            .env(omp_paths::AGENT_DIR_ENV, omp_paths::agent_dir()?)
             .env("PATH", augmented_path)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())

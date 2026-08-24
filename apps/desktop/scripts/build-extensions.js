@@ -14,10 +14,9 @@
  * Notes
  * - We keep node built-ins external (esbuild does this automatically with
  *   `platform: "node"`).
- * - `@earendil-works/pi-coding-agent` (and its legacy `@mariozechner/...`
- *   alias) are external too: extensions only `import type` from them, but we
- *   still mark them external defensively in case any value-level imports are
- *   added later — the pi runtime provides those at load time.
+ * - The canonical `@oh-my-pi/pi-coding-agent` package and its legacy aliases
+ *   are external too. The bundled OMP runtime provides those modules to loaded
+ *   extensions, including value-level imports such as the live settings API.
  * - Output is `.mjs` (ESM). pi's extension loader treats the module's
  *   `export default` as the factory function. Bundling as CJS hides the
  *   default behind `module.exports.default`, which jiti does not unwrap, so
@@ -36,6 +35,7 @@ const OUT_DIR = path.join(SRC_DIR, "dist");
 const ENTRIES = [["picot-bridge.ts"], ["chat-inbox/extension-entry.ts", "pi-chat.mjs"]];
 
 const EXTERNAL = [
+  "@oh-my-pi/pi-coding-agent",
   "@earendil-works/pi-coding-agent",
   "@earendil-works/pi-ai",
   "@earendil-works/pi-tui",

@@ -362,8 +362,8 @@
     "failedToLoadProviders": "Error al cargar proveedores.",
     "failedToLoadConfig": "Error al cargar la configuración",
     "failedToSaveConfig": "Error al guardar la configuración",
-    "failedToLoadModels": "Error al cargar models.json",
-    "failedToSaveModels": "Error al guardar models.json",
+    "failedToLoadModels": "Error al cargar models.yml",
+    "failedToSaveModels": "Error al guardar models.yml",
     "unknownError": "error desconocido",
     "connectionLost": "Se perdió la conexión. Por favor, recarga la página.",
     "commandUndeliverableNoRoute": "no hay sesión activa para recibirlo",
@@ -381,7 +381,7 @@
     "mobileBrokerRequired": "Iniciar un nuevo chat en otro proyecto requiere el broker de escritorio. Vuelve a abrir el código QR móvil.",
     "abortedByUser": "Cancelado por el usuario",
     "invalidJson": "JSON inválido: {detail}",
-    "modelsMustBeObject": "models.json debe ser un objeto JSON.",
+    "modelsMustBeObject": "models.yml debe ser un objeto JSON.",
     "providersMustBeObject": "'providers' debe ser un objeto.",
     "compactionFailed": "Context compaction failed.",
     "compactionFailedDetail": "Context compaction failed: {error}"
@@ -627,9 +627,9 @@
     },
     "auth": {
       "helpPre": "Las claves se almacenan localmente en",
-      "helpPost": "(chmod 600). Los lanzamientos desde GUI también importan variables de proveedor de tu shell de inicio de sesión.",
+      "helpPost": ". Los lanzamientos desde GUI también importan variables de proveedor de tu shell de inicio de sesión.",
       "notConfigured": "No configurado",
-      "configuredAuthJson": "Configurado (auth.json)",
+      "configuredAuthJson": "Configurado (agent.db)",
       "runtimeOverride": "Reemplazo en runtime",
       "customProvider": "Proveedor personalizado",
       "configured": "Configurado"
@@ -637,7 +637,7 @@
     "models": {
       "helpPre": "Edita",
       "helpPost1": "para añadir proveedores personalizados (Ollama, vLLM, LM Studio, proxies compatibles con OpenAI, anulaciones de enrutamiento de OpenRouter, etc). Consulta la",
-      "docsLink": "documentación de models.json",
+      "docsLink": "documentación de models.yml",
       "helpPost2": "para el esquema completo. Los cambios se aplican inmediatamente — no se requiere reinicio.",
       "replaceConfirm": "¿Reemplazar el contenido actual con el ejemplo de Ollama?",
       "docsOpenFailed": "No se pudo abrir el enlace de documentación"
@@ -882,9 +882,9 @@
         "smarter": "Más inteligente",
         "betaUpdates": "Actualizaciones beta",
         "receivePrereleasePicotBuilds": "Recibir versiones preliminares de Picot",
-        "piAgentAuthJson": "~/.pi/agent/auth.json",
+        "piAgentAuthJson": "~/.omp/agent/agent.db",
         "save": "Guardar",
-        "piAgentModelsJson": "~/.pi/agent/models.json",
+        "piAgentModelsJson": "~/.omp/agent/models.yml",
         "cancel": "Cancelar",
         "openLink": "Abrir enlace"
       }

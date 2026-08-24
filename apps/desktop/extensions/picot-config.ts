@@ -17,7 +17,13 @@ import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { createAgentSession, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
+import {
+  createAgentSession,
+  ModelRuntime,
+  SessionManager,
+  settings,
+} from "@oh-my-pi/pi-coding-agent";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { buildPackageSkillInventory } from "./package-skill-inventory";
 import {
   buildTelegramDmConfig,
@@ -60,18 +66,24 @@ type CatalogModel = {
 type CatalogRegistry = {
   getAll: () => CatalogModel[];
   getAvailable: () => CatalogModel[] | Promise<CatalogModel[]>;
-  getProviderAuthStatus: (provider: string) => {
+  getProviderAuthStatus?: (provider: string) => {
     configured?: boolean;
     source?: string;
     label?: string;
   };
-  getProviderDisplayName: (provider: string) => string;
+  getProviderDisplayName?: (provider: string) => string;
   refresh: () => void | Promise<void>;
+  authStorage?: {
+    getCredentialOrigin?: (provider: string) => { kind?: string } | undefined;
+    hasAuth?: (provider: string) => boolean;
+    set?: (provider: string, value: ApiKeyCredential) => void | Promise<void>;
+    remove?: (provider: string) => void | Promise<void>;
+  };
 };
 
 const MODEL_REGISTRY_REFRESH_TIMEOUT_MS = 2_000;
 
-type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto";
 
 type ConfigContext = {
   modelRegistry?: CatalogRegistry;
@@ -122,22 +134,6 @@ type SkillInventoryMutation = {
 
 type ApiKeyCredential = { type: "api_key"; key: string };
 
-type CredentialStoreLike = {
-  modify?: (
-    provider: string,
-    fn: (current: unknown) => Promise<ApiKeyCredential | undefined>,
-  ) => Promise<unknown>;
-  delete?: (provider: string) => Promise<void>;
-};
-
-type RegistryInternals = {
-  runtime?: { credentials?: CredentialStoreLike };
-  authStorage?: {
-    set?: (provider: string, value: ApiKeyCredential) => void | Promise<void>;
-    remove?: (provider: string) => void | Promise<void>;
-  };
-};
-
 export type PicotConfigResult = { ok: true; data?: unknown } | { ok: false; error: string };
 
 function errMessage(e: unknown): string {
@@ -164,48 +160,30 @@ function resolveHomeDir(): string {
   return candidates[0] || os.homedir();
 }
 
-function resolvePiAgentRoot(): string {
-  const candidates: string[] = [];
-  const add = (value?: string) => {
-    if (typeof value === "string" && value.trim()) candidates.push(path.resolve(value.trim()));
-  };
-  add(process.env.HOME);
-  add(process.env.USERPROFILE);
-  if (process.env.HOMEDRIVE && process.env.HOMEPATH) {
-    add(`${process.env.HOMEDRIVE}${process.env.HOMEPATH}`);
-  }
-  add(os.homedir());
-  for (const home of candidates) {
-    const candidate = path.join(home, ".pi", "agent");
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  const appData = process.env.APPDATA;
-  if (typeof appData === "string" && appData.trim()) {
-    const roaming = path.join(path.resolve(appData), "pi", "agent");
-    if (fs.existsSync(roaming)) return roaming;
-  }
-  return path.join(candidates[0] || os.homedir(), ".pi", "agent");
+function resolveOmpAgentRoot(): string {
+  const override = process.env.PI_CODING_AGENT_DIR?.trim();
+  if (override) return path.resolve(override);
+  return path.join(resolveHomeDir(), ".omp", "agent");
 }
 
 const HOME_DIR = resolveHomeDir();
-const PI_AGENT_ROOT = resolvePiAgentRoot();
-const MODELS_PREFS_PATH = path.join(PI_AGENT_ROOT, "picot-models.json");
-const AGENT_CONFIG_PATH = path.join(PI_AGENT_ROOT, "settings.json");
-const MODELS_CONFIG_PATH = path.join(PI_AGENT_ROOT, "models.json");
-const CHAT_CONFIG_PATH = path.join(PI_AGENT_ROOT, "chat", "config.json");
-const AUTH_CONFIG_PATH = path.join(PI_AGENT_ROOT, "auth.json");
-const CHAT_WORKER_STATUS_DIR = path.join(PI_AGENT_ROOT, "chat", "worker-status");
-const SUPER_AGENT_TASKS_PATH = path.join(PI_AGENT_ROOT, "super-agent", "tasks.json");
+const OMP_AGENT_ROOT = resolveOmpAgentRoot();
+const MODELS_PREFS_PATH = path.join(OMP_AGENT_ROOT, "picot-models.json");
+const AGENT_CONFIG_PATH = path.join(OMP_AGENT_ROOT, "config.yml");
+const MODELS_CONFIG_PATH = path.join(OMP_AGENT_ROOT, "models.yml");
+const CHAT_CONFIG_PATH = path.join(OMP_AGENT_ROOT, "chat", "config.json");
+const CHAT_WORKER_STATUS_DIR = path.join(OMP_AGENT_ROOT, "chat", "worker-status");
+const SUPER_AGENT_TASKS_PATH = path.join(OMP_AGENT_ROOT, "super-agent", "tasks.json");
 const PISTUDIO_INSTANCES_DIR = path.join(os.homedir(), ".pi", "pistudio-instances");
-const PROJECT_CONFIG_DIR_NAME = ".pi";
+const PROJECT_CONFIG_DIR_NAME = ".omp";
 const THINKING_LEVELS = new Set<ThinkingLevel>([
-  "off",
   "minimal",
   "low",
   "medium",
   "high",
   "xhigh",
   "max",
+  "auto",
 ]);
 
 function modelPreferenceKey(provider: string, modelId: string): string {
@@ -249,7 +227,7 @@ function skillInventoryOptions(scope: SkillScope, ctx: ConfigContext) {
   return {
     scope,
     cwd,
-    agentDir: PI_AGENT_ROOT,
+    agentDir: OMP_AGENT_ROOT,
     homeDir: HOME_DIR,
     projectTrusted: Boolean(ctx.isProjectTrusted?.()),
   };
@@ -331,10 +309,10 @@ async function buildModelCatalog(registry: CatalogRegistry, preferences: ModelPr
 
   return {
     providers: providerNames.map((providerName) => {
-      const status = registry.getProviderAuthStatus(providerName);
+      const status = getProviderAuthStatus(registry, providerName, availableKeys, allModels);
       return {
         provider: providerName,
-        displayName: registry.getProviderDisplayName(providerName),
+        displayName: registry.getProviderDisplayName?.(providerName) ?? providerName,
         configured: Boolean(status.configured),
         source: status.source,
         label: status.label,
@@ -361,6 +339,35 @@ async function buildModelCatalog(registry: CatalogRegistry, preferences: ModelPr
       };
     }),
   };
+}
+
+function getProviderAuthStatus(
+  registry: CatalogRegistry,
+  provider: string,
+  availableKeys: Set<string>,
+  allModels: CatalogModel[],
+): { configured: boolean; source?: string; label?: string } {
+  const compatibleStatus = registry.getProviderAuthStatus?.(provider);
+  if (compatibleStatus)
+    return { ...compatibleStatus, configured: Boolean(compatibleStatus.configured) };
+
+  const origin = registry.authStorage?.getCredentialOrigin?.(provider);
+  const configured =
+    Boolean(origin) ||
+    Boolean(registry.authStorage?.hasAuth?.(provider)) ||
+    allModels.some(
+      (model) =>
+        model.provider === provider &&
+        typeof model.id === "string" &&
+        availableKeys.has(modelPreferenceKey(provider, model.id)),
+    );
+  const source =
+    origin?.kind === "api_key" || origin?.kind === "oauth"
+      ? "stored"
+      : origin?.kind === "runtime"
+        ? "runtime"
+        : origin?.kind;
+  return { configured, source, label: origin?.kind };
 }
 
 async function runModelHealthCheck(
@@ -429,6 +436,17 @@ function readConfigFile(filePath: string, fallback: string): { content: string; 
   return { content, path: filePath };
 }
 
+function readYamlConfigAsJson(
+  filePath: string,
+  fallback: Record<string, unknown>,
+): {
+  content: string;
+  path: string;
+} {
+  const value = fs.existsSync(filePath) ? readYamlObject(filePath) : fallback;
+  return { content: `${JSON.stringify(value, null, 2)}\n`, path: filePath };
+}
+
 function writeConfigFile(filePath: string, content: unknown): void {
   if (typeof content !== "string") throw new Error("content must be a string");
   try {
@@ -440,6 +458,22 @@ function writeConfigFile(filePath: string, content: unknown): void {
   }
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, "utf8");
+}
+
+function writeYamlConfigFromJson(filePath: string, content: unknown, label: string): void {
+  if (typeof content !== "string") throw new Error("content must be a string");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch (error) {
+    throw new Error(
+      `content is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  writeYamlObjectAtomically(filePath, parsed as Record<string, unknown>);
 }
 
 async function refreshRegistryBestEffort(registry?: CatalogRegistry): Promise<boolean> {
@@ -464,26 +498,31 @@ function readSettingsObject(filePath: string): Record<string, unknown> {
   if (!fs.existsSync(filePath)) return {};
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    parsed = parseYaml(fs.readFileSync(filePath, "utf8"));
   } catch (error) {
     throw new Error(
-      `Pi settings at ${filePath} must be valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      `OMP settings at ${filePath} must be valid YAML: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+  if (parsed === null || parsed === undefined) return {};
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`Pi settings must be a JSON object: ${filePath}`);
+    throw new Error(`OMP settings must be a YAML mapping: ${filePath}`);
   }
   return parsed as Record<string, unknown>;
 }
 
-function writeSettingsObject(filePath: string, settings: Record<string, unknown>): void {
+function readYamlObject(filePath: string): Record<string, unknown> {
+  return readSettingsObject(filePath);
+}
+
+function writeYamlObjectAtomically(filePath: string, value: Record<string, unknown>): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const temporary = path.join(
     path.dirname(filePath),
     `.picot-settings-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`,
   );
   try {
-    fs.writeFileSync(temporary, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    fs.writeFileSync(temporary, stringifyYaml(value), "utf8");
     fs.renameSync(temporary, filePath);
   } finally {
     try {
@@ -515,7 +554,7 @@ function resolveSettingsPath(
   }
   return {
     scope: "project",
-    path: path.join(cwd, PROJECT_CONFIG_DIR_NAME, "settings.json"),
+    path: path.join(cwd, PROJECT_CONFIG_DIR_NAME, "config.yml"),
   };
 }
 
@@ -524,7 +563,7 @@ function getProjectSettings(
 ): { path: string; settings: Record<string, unknown> } | null {
   const cwd = asString(ctx.cwd);
   if (!cwd || (ctx.isProjectTrusted && !ctx.isProjectTrusted())) return null;
-  const settingsPath = path.join(cwd, PROJECT_CONFIG_DIR_NAME, "settings.json");
+  const settingsPath = path.join(cwd, PROJECT_CONFIG_DIR_NAME, "config.yml");
   return { path: settingsPath, settings: readSettingsObject(settingsPath) };
 }
 
@@ -538,22 +577,24 @@ function getDefaultThinkingLevel(scope: unknown, ctx: ConfigContext) {
     }
     if (requestedScope === "project") {
       const writableProject = resolveSettingsPath("project", ctx);
-      return { level: "off", source: "pi_default", path: writableProject.path };
+      return { level: "high", source: "omp_default", path: writableProject.path };
     }
   }
   const globalValue = readSettingsObject(AGENT_CONFIG_PATH).defaultThinkingLevel;
   if (typeof globalValue === "string" && THINKING_LEVELS.has(globalValue as ThinkingLevel)) {
     return { level: globalValue, source: "global", path: AGENT_CONFIG_PATH };
   }
-  return { level: "off", source: "pi_default", path: AGENT_CONFIG_PATH };
+  return { level: "high", source: "omp_default", path: AGENT_CONFIG_PATH };
 }
 
-function setDefaultThinkingLevel(level: unknown, scope: unknown, ctx: ConfigContext) {
+async function setDefaultThinkingLevel(level: unknown, scope: unknown, ctx: ConfigContext) {
   const thinkingLevel = asThinkingLevel(level);
   const target = resolveSettingsPath(scope, ctx);
-  const settings = readSettingsObject(target.path);
-  settings.defaultThinkingLevel = thinkingLevel;
-  writeSettingsObject(target.path, settings);
+  await settings.flush();
+  const nextSettings = readSettingsObject(target.path);
+  nextSettings.defaultThinkingLevel = thinkingLevel;
+  writeYamlObjectAtomically(target.path, nextSettings);
+  await settings.reloadFromDisk();
   return { level: thinkingLevel, scope: target.scope, path: target.path };
 }
 
@@ -574,28 +615,30 @@ function getDefaultAutoCompaction(scope: unknown, ctx: ConfigContext) {
     }
     if (requestedScope === "project") {
       const writableProject = resolveSettingsPath("project", ctx);
-      return { enabled: true, source: "pi_default", path: writableProject.path };
+      return { enabled: true, source: "omp_default", path: writableProject.path };
     }
   }
   const globalValue = getCompactionEnabled(readSettingsObject(AGENT_CONFIG_PATH));
   if (typeof globalValue === "boolean") {
     return { enabled: globalValue, source: "global", path: AGENT_CONFIG_PATH };
   }
-  return { enabled: true, source: "pi_default", path: AGENT_CONFIG_PATH };
+  return { enabled: true, source: "omp_default", path: AGENT_CONFIG_PATH };
 }
 
-function setDefaultAutoCompaction(enabled: unknown, scope: unknown, ctx: ConfigContext) {
+async function setDefaultAutoCompaction(enabled: unknown, scope: unknown, ctx: ConfigContext) {
   if (typeof enabled !== "boolean") throw new Error("enabled must be a boolean");
   const target = resolveSettingsPath(scope, ctx);
-  const settings = readSettingsObject(target.path);
-  const existing = settings.compaction;
+  await settings.flush();
+  const nextSettings = readSettingsObject(target.path);
+  const existing = nextSettings.compaction;
   const compaction =
     existing && typeof existing === "object" && !Array.isArray(existing)
       ? { ...(existing as Record<string, unknown>) }
       : {};
   compaction.enabled = enabled;
-  settings.compaction = compaction;
-  writeSettingsObject(target.path, settings);
+  nextSettings.compaction = compaction;
+  writeYamlObjectAtomically(target.path, nextSettings);
+  await settings.reloadFromDisk();
   return { enabled, scope: target.scope, path: target.path };
 }
 
@@ -667,69 +710,21 @@ function telegramBotPayload(identity: TelegramBotIdentity) {
   };
 }
 
-function readAuthConfig(): Record<string, unknown> {
-  if (!fs.existsSync(AUTH_CONFIG_PATH)) return {};
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(fs.readFileSync(AUTH_CONFIG_PATH, "utf8"));
-  } catch {
-    return {};
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-  return parsed as Record<string, unknown>;
-}
-
-function writeAuthConfig(auth: Record<string, unknown>): void {
-  fs.mkdirSync(path.dirname(AUTH_CONFIG_PATH), { recursive: true });
-  fs.writeFileSync(AUTH_CONFIG_PATH, JSON.stringify(auth, null, 2), {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  try {
-    fs.chmodSync(AUTH_CONFIG_PATH, 0o600);
-  } catch {
-    // chmod is best-effort on platforms/filesystems that do not support POSIX modes.
-  }
-}
-
 async function setStoredApiKey(
   registry: CatalogRegistry | undefined,
   provider: string,
   apiKey: string,
 ): Promise<void> {
-  const internals = registry as (CatalogRegistry & RegistryInternals) | undefined;
-  const credentials = internals?.runtime?.credentials;
-  if (credentials?.modify) {
-    await credentials.modify(provider, async () => ({ type: "api_key", key: apiKey }));
-    return;
-  }
-  if (internals?.authStorage?.set) {
-    await internals.authStorage.set(provider, { type: "api_key", key: apiKey });
-    return;
-  }
-  const auth = readAuthConfig();
-  auth[provider] = { type: "api_key", key: apiKey };
-  writeAuthConfig(auth);
+  if (!registry?.authStorage?.set) throw new Error("OMP model registry is unavailable");
+  await registry.authStorage.set(provider, { type: "api_key", key: apiKey });
 }
 
 async function removeStoredApiKey(
   registry: CatalogRegistry | undefined,
   provider: string,
 ): Promise<void> {
-  const internals = registry as (CatalogRegistry & RegistryInternals) | undefined;
-  const credentials = internals?.runtime?.credentials;
-  if (credentials?.delete) {
-    await credentials.delete(provider);
-    return;
-  }
-  if (internals?.authStorage?.remove) {
-    await internals.authStorage.remove(provider);
-    return;
-  }
-  if (!fs.existsSync(AUTH_CONFIG_PATH)) return;
-  const auth = readAuthConfig();
-  delete auth[provider];
-  writeAuthConfig(auth);
+  if (!registry?.authStorage?.remove) throw new Error("OMP model registry is unavailable");
+  await registry.authStorage.remove(provider);
 }
 
 // Dispatch a single Configuration operation. `ctx` is the extension command
@@ -847,10 +842,12 @@ export async function handlePicotConfig(
       }
 
       case "read_agent_config":
-        return { ok: true, data: readConfigFile(AGENT_CONFIG_PATH, "{}") };
+        return { ok: true, data: readYamlConfigAsJson(AGENT_CONFIG_PATH, {}) };
 
       case "write_agent_config": {
-        writeConfigFile(AGENT_CONFIG_PATH, params.content);
+        await settings.flush();
+        writeYamlConfigFromJson(AGENT_CONFIG_PATH, params.content, "config.yml");
+        await settings.reloadFromDisk();
         return { ok: true, data: { path: AGENT_CONFIG_PATH } };
       }
 
@@ -858,23 +855,29 @@ export async function handlePicotConfig(
         return { ok: true, data: getDefaultThinkingLevel(params.scope, ctx) };
 
       case "set_default_thinking_level":
-        return { ok: true, data: setDefaultThinkingLevel(params.level, params.scope, ctx) };
+        return { ok: true, data: await setDefaultThinkingLevel(params.level, params.scope, ctx) };
 
       case "get_default_auto_compaction":
         return { ok: true, data: getDefaultAutoCompaction(params.scope, ctx) };
 
       case "set_default_auto_compaction":
-        return { ok: true, data: setDefaultAutoCompaction(params.enabled, params.scope, ctx) };
+        return {
+          ok: true,
+          data: await setDefaultAutoCompaction(params.enabled, params.scope, ctx),
+        };
 
       case "read_models_config":
-        return { ok: true, data: readConfigFile(MODELS_CONFIG_PATH, '{\n  "providers": {}\n}\n') };
+        return {
+          ok: true,
+          data: readYamlConfigAsJson(MODELS_CONFIG_PATH, { providers: {} }),
+        };
 
       case "write_models_config": {
         const content = params.content;
         if (typeof content !== "string") throw new Error("content must be a string");
         const parsed = JSON.parse(content);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          throw new Error("models.json must be a JSON object");
+          throw new Error("models.yml must be a JSON object");
         }
         if (
           "providers" in parsed &&
@@ -882,7 +885,7 @@ export async function handlePicotConfig(
         ) {
           throw new Error("'providers' must be an object");
         }
-        writeConfigFile(MODELS_CONFIG_PATH, content);
+        writeYamlConfigFromJson(MODELS_CONFIG_PATH, content, "models.yml");
         const refreshed = await refreshRegistryBestEffort(registry);
         return { ok: true, data: { path: MODELS_CONFIG_PATH, refreshed } };
       }

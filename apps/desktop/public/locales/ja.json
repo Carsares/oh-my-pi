@@ -362,8 +362,8 @@
     "failedToLoadProviders": "プロバイダーの読み込みに失敗しました。",
     "failedToLoadConfig": "設定の読み込みに失敗しました",
     "failedToSaveConfig": "設定の保存に失敗しました",
-    "failedToLoadModels": "models.jsonの読み込みに失敗しました",
-    "failedToSaveModels": "models.jsonの保存に失敗しました",
+    "failedToLoadModels": "models.ymlの読み込みに失敗しました",
+    "failedToSaveModels": "models.ymlの保存に失敗しました",
     "unknownError": "不明なエラー",
     "connectionLost": "接続が失われました。ページを更新してください。",
     "commandUndeliverableNoRoute": "受信できるセッションが実行されていません",
@@ -381,7 +381,7 @@
     "mobileBrokerRequired": "別のプロジェクトで新しいチャットを開始するにはデスクトップブローカーが必要です。モバイルQRコードを再度開いてください。",
     "abortedByUser": "ユーザーによって中止されました",
     "invalidJson": "無効なJSON：{detail}",
-    "modelsMustBeObject": "models.jsonはJSONオブジェクトである必要があります。",
+    "modelsMustBeObject": "models.ymlはJSONオブジェクトである必要があります。",
     "providersMustBeObject": "'providers'はオブジェクトである必要があります。",
     "compactionFailed": "Context compaction failed.",
     "compactionFailedDetail": "Context compaction failed: {error}"
@@ -627,9 +627,9 @@
     },
     "auth": {
       "helpPre": "キーはローカルに保存されます",
-      "helpPost": "（chmod 600）。GUIからの起動時はログインシェルのプロバイダー変数もインポートされます。",
+      "helpPost": "。GUIからの起動時はログインシェルのプロバイダー変数もインポートされます。",
       "notConfigured": "未設定",
-      "configuredAuthJson": "設定済み (auth.json)",
+      "configuredAuthJson": "設定済み (agent.db)",
       "runtimeOverride": "ランタイムオーバーライド",
       "customProvider": "カスタムプロバイダー",
       "configured": "設定済み"
@@ -637,7 +637,7 @@
     "models": {
       "helpPre": "編集",
       "helpPost1": "でカスタムプロバイダーを追加できます（Ollama、vLLM、LM Studio、OpenAI互換プロキシ、OpenRouterルーティングオーバーライドなど）。完全なスキーマは",
-      "docsLink": "models.jsonドキュメント",
+      "docsLink": "models.ymlドキュメント",
       "helpPost2": "を参照してください。変更はすぐに反映されます — 再起動不要。",
       "replaceConfirm": "現在の内容をOllamaの例で置き換えますか？",
       "docsOpenFailed": "ドキュメントリンクを開けませんでした"
@@ -882,9 +882,9 @@
         "smarter": "賢め",
         "betaUpdates": "ベータアップデート",
         "receivePrereleasePicotBuilds": "プレリリース版Picotビルドを受け取る",
-        "piAgentAuthJson": "~/.pi/agent/auth.json",
+        "piAgentAuthJson": "~/.omp/agent/agent.db",
         "save": "保存",
-        "piAgentModelsJson": "~/.pi/agent/models.json",
+        "piAgentModelsJson": "~/.omp/agent/models.yml",
         "cancel": "キャンセル",
         "openLink": "リンクを開く"
       }

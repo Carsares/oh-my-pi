@@ -362,8 +362,8 @@
     "failedToLoadProviders": "加载提供者失败。",
     "failedToLoadConfig": "加载配置失败",
     "failedToSaveConfig": "保存配置失败",
-    "failedToLoadModels": "加载 models.json 失败",
-    "failedToSaveModels": "保存 models.json 失败",
+    "failedToLoadModels": "加载 models.yml 失败",
+    "failedToSaveModels": "保存 models.yml 失败",
     "unknownError": "未知错误",
     "connectionLost": "连接断开。请刷新页面。",
     "commandUndeliverableNoRoute": "没有运行中的会话可接收",
@@ -381,7 +381,7 @@
     "mobileBrokerRequired": "在另一个项目中发起新聊天需要桌面端代理。请重新打开移动端二维码。",
     "abortedByUser": "已被用户中止",
     "invalidJson": "无效的 JSON：{detail}",
-    "modelsMustBeObject": "models.json 必须是 JSON 对象。",
+    "modelsMustBeObject": "models.yml 必须是 JSON 对象。",
     "providersMustBeObject": "'providers' 必须是对象。",
     "compactionFailed": "上下文压缩失败。",
     "compactionFailedDetail": "上下文压缩失败：{error}"
@@ -627,9 +627,9 @@
     },
     "auth": {
       "helpPre": "密钥本地存储在",
-      "helpPost": "（chmod 600）。从 Finder/Dock 启动时也会导入 login shell 中导出的 provider 环境变量。",
+      "helpPost": "。从 Finder/Dock 启动时也会导入 login shell 中导出的 provider 环境变量。",
       "notConfigured": "未配置",
-      "configuredAuthJson": "已配置 (auth.json)",
+      "configuredAuthJson": "已配置 (agent.db)",
       "runtimeOverride": "运行时覆盖",
       "customProvider": "自定义提供者",
       "configured": "已配置"
@@ -637,7 +637,7 @@
     "models": {
       "helpPre": "编辑",
       "helpPost1": "以添加自定义提供者（Ollama、vLLM、LM Studio、OpenAI 兼容代理、OpenRouter 路由覆盖等）。参见",
-      "docsLink": "models.json 文档",
+      "docsLink": "models.yml 文档",
       "helpPost2": "了解完整架构。更改即时生效 — 无需重启。",
       "replaceConfirm": "用 Ollama 示例替换当前内容？",
       "docsOpenFailed": "无法打开文档链接"
@@ -882,9 +882,9 @@
         "smarter": "更智能",
         "betaUpdates": "Beta updates",
         "receivePrereleasePicotBuilds": "Receive prerelease Picot builds",
-        "piAgentAuthJson": "~/.pi/agent/auth.json",
+        "piAgentAuthJson": "~/.omp/agent/agent.db",
         "save": "保存",
-        "piAgentModelsJson": "~/.pi/agent/models.json",
+        "piAgentModelsJson": "~/.omp/agent/models.yml",
         "cancel": "取消",
         "openLink": "打开链接"
       }

@@ -1480,9 +1480,9 @@
                     <span
                       class="thinking-effort-name"
                       id="thinking-effort-name"
-                      data-thinking-level="off"
-                      data-i18n="settings.thinkingLevels.off"
-                      >off</span
+                      data-thinking-level="minimal"
+                      data-i18n="settings.thinkingLevels.minimal"
+                      >minimal</span
                     >
                     <span data-i18n="settings.thinkingSmarter">Smarter</span>
                   </div>
@@ -1495,21 +1495,10 @@
                     <input
                       type="radio"
                       class="thinking-effort-dot"
-                      data-level="off"
-                      name="thinking-effort-level"
-                      value="off"
-                      checked
-                      aria-label="off"
-                      data-i18n-aria-label="settings.thinkingLevels.off"
-                      title="off"
-                      data-i18n-title="settings.thinkingLevels.off"
-                    />
-                    <input
-                      type="radio"
-                      class="thinking-effort-dot"
                       data-level="minimal"
                       name="thinking-effort-level"
                       value="minimal"
+                      checked
                       aria-label="minimal"
                       data-i18n-aria-label="settings.thinkingLevels.minimal"
                       title="minimal"
@@ -1911,11 +1900,11 @@
                   >Keys are stored locally in</span
                 >
                 <code data-i18n="migrated.index.text.piAgentAuthJson"
-                  >~/.pi/agent/auth.json</code
+                  >~/.omp/agent/agent.db</code
                 >
                 <span data-i18n="settings.auth.helpPost"
-                  >(chmod 600). GUI launches also import provider variables from
-                  your login shell.</span
+                  >. GUI launches also import provider variables from your login
+                  shell.</span
                 >
               </p>
               <div class="settings-api-keys" id="settings-api-keys">
@@ -2028,7 +2017,7 @@
               <p class="settings-help">
                 <span data-i18n="settings.models.helpPre">Edit</span>
                 <code data-i18n="migrated.index.text.piAgentModelsJson"
-                  >~/.pi/agent/models.json</code
+                  >~/.omp/agent/models.yml</code
                 >
                 <span data-i18n="settings.models.helpPost1"
                   >to add custom providers (Ollama, vLLM, LM Studio,
@@ -2036,12 +2025,12 @@
                   See the</span
                 >
                 <a
-                  href="https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/models.md"
+                  href="https://github.com/can1357/oh-my-pi/blob/main/docs/models.md"
                   id="models-config-docs-link"
                   target="_blank"
                   rel="noopener noreferrer"
                   data-i18n="settings.models.docsLink"
-                  >models.json docs</a
+                  >models.yml docs</a
                 >
                 <span data-i18n="settings.models.helpPost2"
                   >for the full schema. Changes are picked up immediately — no

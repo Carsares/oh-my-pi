@@ -12,11 +12,18 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
-vi.mock("@earendil-works/pi-coding-agent", () => ({
+const ompSettings = vi.hoisted(() => ({
+  flush: vi.fn(async () => undefined),
+  reloadFromDisk: vi.fn(async () => undefined),
+}));
+
+vi.mock("@oh-my-pi/pi-coding-agent", () => ({
   createAgentSession: vi.fn(),
   ModelRuntime: { create: vi.fn() },
   SessionManager: { inMemory: vi.fn(), listAll: vi.fn(), open: vi.fn() },
+  settings: ompSettings,
 }));
 vi.mock("./session-title", () => ({
   generateTitleForSession: vi.fn().mockResolvedValue("Generated title"),
@@ -29,9 +36,12 @@ async function loadConfigWithTempHome() {
   tempHomes.push(home);
   vi.resetModules();
   process.env.HOME = home;
+  const agentDir = join(home, "relocated-omp-agent");
+  vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
   const module = await import("./picot-config.ts");
   return {
     home,
+    agentDir,
     handlePicotConfig: module.handlePicotConfig,
   };
 }
@@ -51,7 +61,7 @@ describe("picot config default settings operations", () => {
     const sessionPath = join(home, "session.jsonl");
     writeFileSync(sessionPath, '{"type":"session","id":"s1"}\n', "utf8");
     const appendSessionInfo = vi.fn();
-    const { SessionManager } = await import("@earendil-works/pi-coding-agent");
+    const { SessionManager } = await import("@oh-my-pi/pi-coding-agent");
     vi.mocked(SessionManager.listAll).mockResolvedValue([{ path: sessionPath }] as never);
     vi.mocked(SessionManager.open).mockReturnValue({ appendSessionInfo } as never);
     const { handlePicotConfig } = await loadConfigWithTempHome();
@@ -75,7 +85,7 @@ describe("picot config default settings operations", () => {
     tempHomes.push(home);
     const sessionPath = join(home, "session.jsonl");
     writeFileSync(sessionPath, '{"type":"session","id":"s1"}\n', "utf8");
-    const { SessionManager } = await import("@earendil-works/pi-coding-agent");
+    const { SessionManager } = await import("@oh-my-pi/pi-coding-agent");
     vi.mocked(SessionManager.listAll).mockResolvedValue([] as never);
     const { handlePicotConfig } = await loadConfigWithTempHome();
 
@@ -104,10 +114,10 @@ describe("picot config default settings operations", () => {
   });
 
   it("writes global default thinking level while preserving unknown settings", async () => {
-    const { home, handlePicotConfig } = await loadConfigWithTempHome();
-    const settingsPath = join(home, ".pi", "agent", "settings.json");
-    mkdirSync(join(home, ".pi", "agent"), { recursive: true });
-    writeFileSync(settingsPath, JSON.stringify({ thinkingLevel: "low", unknown: 7 }), "utf8");
+    const { agentDir, handlePicotConfig } = await loadConfigWithTempHome();
+    const settingsPath = join(agentDir, "config.yml");
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(settingsPath, stringifyYaml({ thinkingLevel: "low", unknown: 7 }), "utf8");
 
     await expect(
       handlePicotConfig("set_default_thinking_level", { level: "medium" }, {}),
@@ -116,11 +126,14 @@ describe("picot config default settings operations", () => {
       data: { level: "medium", scope: "global", path: settingsPath },
     });
 
-    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
+    expect(parseYaml(readFileSync(settingsPath, "utf8"))).toEqual({
       thinkingLevel: "low",
       unknown: 7,
       defaultThinkingLevel: "medium",
     });
+    expect(ompSettings.flush).toHaveBeenCalledTimes(1);
+    expect(ompSettings.reloadFromDisk).toHaveBeenCalledTimes(1);
+    expect(existsSync(join(agentDir, "settings.json"))).toBe(false);
   });
 
   it("rejects unsupported default thinking levels", async () => {
@@ -129,15 +142,18 @@ describe("picot config default settings operations", () => {
     await expect(
       handlePicotConfig("set_default_thinking_level", { level: "turbo" }, {}),
     ).resolves.toEqual({ ok: false, error: "Unsupported thinking level: turbo" });
+    await expect(
+      handlePicotConfig("set_default_thinking_level", { level: "off" }, {}),
+    ).resolves.toEqual({ ok: false, error: "Unsupported thinking level: off" });
   });
 
   it("writes global default auto-compaction while preserving compaction settings", async () => {
-    const { home, handlePicotConfig } = await loadConfigWithTempHome();
-    const settingsPath = join(home, ".pi", "agent", "settings.json");
-    mkdirSync(join(home, ".pi", "agent"), { recursive: true });
+    const { agentDir, handlePicotConfig } = await loadConfigWithTempHome();
+    const settingsPath = join(agentDir, "config.yml");
+    mkdirSync(agentDir, { recursive: true });
     writeFileSync(
       settingsPath,
-      JSON.stringify({ compaction: { reserveTokens: 8192 }, unknown: true }),
+      stringifyYaml({ compaction: { reserveTokens: 8192 }, unknown: true }),
       "utf8",
     );
 
@@ -145,17 +161,45 @@ describe("picot config default settings operations", () => {
       handlePicotConfig("set_default_auto_compaction", { enabled: false }, {}),
     ).resolves.toEqual({ ok: true, data: { enabled: false, scope: "global", path: settingsPath } });
 
-    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
+    expect(parseYaml(readFileSync(settingsPath, "utf8"))).toEqual({
       compaction: { reserveTokens: 8192, enabled: false },
       unknown: true,
     });
+  });
+
+  it("presents OMP YAML as JSON and writes JSON edits back to config.yml", async () => {
+    const { agentDir, handlePicotConfig } = await loadConfigWithTempHome();
+    const settingsPath = join(agentDir, "config.yml");
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(settingsPath, "theme:\n  dark: titanium\nunknown: keep\n", "utf8");
+
+    await expect(handlePicotConfig("read_agent_config", {}, {})).resolves.toEqual({
+      ok: true,
+      data: {
+        path: settingsPath,
+        content: `${JSON.stringify({ theme: { dark: "titanium" }, unknown: "keep" }, null, 2)}\n`,
+      },
+    });
+    await expect(
+      handlePicotConfig(
+        "write_agent_config",
+        { content: JSON.stringify({ theme: { dark: "flexoki" }, unknown: "keep" }) },
+        {},
+      ),
+    ).resolves.toEqual({ ok: true, data: { path: settingsPath } });
+
+    expect(parseYaml(readFileSync(settingsPath, "utf8"))).toEqual({
+      theme: { dark: "flexoki" },
+      unknown: "keep",
+    });
+    expect(existsSync(join(agentDir, "settings.json"))).toBe(false);
   });
 });
 
 describe("picot config skills operations", () => {
   it("lists and mutates global skills through the config command bridge", async () => {
-    const { home, handlePicotConfig } = await loadConfigWithTempHome();
-    const skillDir = join(home, ".pi", "agent", "skills", "demo-skill");
+    const { agentDir, handlePicotConfig } = await loadConfigWithTempHome();
+    const skillDir = join(agentDir, "skills", "demo-skill");
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(
       join(skillDir, "SKILL.md"),
@@ -179,16 +223,47 @@ describe("picot config skills operations", () => {
       ),
     ).resolves.toMatchObject({ ok: true });
 
-    expect(JSON.parse(readFileSync(join(home, ".pi", "agent", "settings.json"), "utf8"))).toEqual({
+    expect(JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8"))).toEqual({
       skills: ["-skills/demo-skill"],
     });
   });
 });
 
 describe("picot config models operations", () => {
-  it("saves models.json even when registry refresh does not finish", async () => {
-    const { home, handlePicotConfig } = await loadConfigWithTempHome();
-    const modelsPath = join(home, ".pi", "agent", "models.json");
+  it("derives provider auth state from the OMP model registry", async () => {
+    const { handlePicotConfig } = await loadConfigWithTempHome();
+    const model = { provider: "anthropic", id: "claude-sonnet", name: "Claude Sonnet" };
+    const registry = {
+      getAll: vi.fn(() => [model]),
+      getAvailable: vi.fn(() => [model]),
+      authStorage: {
+        getCredentialOrigin: vi.fn(() => ({ kind: "api_key" })),
+        hasAuth: vi.fn(() => true),
+      },
+      refresh: vi.fn(async () => undefined),
+    };
+
+    await expect(
+      handlePicotConfig("list_model_catalog", {}, { modelRegistry: registry }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        providers: [
+          {
+            provider: "anthropic",
+            displayName: "anthropic",
+            configured: true,
+            source: "stored",
+            models: [{ id: "claude-sonnet", available: true }],
+          },
+        ],
+      },
+    });
+  });
+
+  it("saves models.yml even when registry refresh does not finish", async () => {
+    const { agentDir, handlePicotConfig } = await loadConfigWithTempHome();
+    const modelsPath = join(agentDir, "models.yml");
     const registry = {
       refresh: vi.fn(() => new Promise(() => undefined)),
     };
@@ -211,43 +286,35 @@ describe("picot config models operations", () => {
     }
 
     expect(registry.refresh).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(readFileSync(modelsPath, "utf8"))).toEqual({
+    expect(parseYaml(readFileSync(modelsPath, "utf8"))).toEqual({
       providers: { local: { models: [{ id: "qwen" }] } },
     });
+    expect(existsSync(join(agentDir, "models.json"))).toBe(false);
   });
 });
 
 describe("picot config auth operations", () => {
-  it("stores and removes API keys without requiring registry authStorage", async () => {
-    vi.stubEnv("HOME", "");
-    const { home, handlePicotConfig } = await loadConfigWithTempHome();
-    const authPath = join(home, ".pi", "agent", "auth.json");
+  it("rejects credential mutations without the live OMP registry", async () => {
+    const { agentDir, handlePicotConfig } = await loadConfigWithTempHome();
 
     await expect(
       handlePicotConfig("set_api_key", { provider: "openai", apiKey: "sk-test" }, {}),
-    ).resolves.toEqual({ ok: true, data: { provider: "openai" } });
-
-    expect(JSON.parse(readFileSync(authPath, "utf8"))).toEqual({
-      openai: { type: "api_key", key: "sk-test" },
-    });
-
+    ).resolves.toEqual({ ok: false, error: "OMP model registry is unavailable" });
     await expect(handlePicotConfig("remove_api_key", { provider: "openai" }, {})).resolves.toEqual({
-      ok: true,
-      data: { provider: "openai" },
+      ok: false,
+      error: "OMP model registry is unavailable",
     });
-
-    expect(existsSync(authPath)).toBe(true);
-    expect(JSON.parse(readFileSync(authPath, "utf8"))).toEqual({});
+    expect(existsSync(join(agentDir, "auth.json"))).toBe(false);
   });
 
-  it("updates the active registry credential store before refreshing", async () => {
-    const { handlePicotConfig } = await loadConfigWithTempHome();
-    const credentials = {
-      modify: vi.fn(async () => undefined),
-      delete: vi.fn(async () => undefined),
+  it("updates OMP authStorage before refreshing the model registry", async () => {
+    const { agentDir, handlePicotConfig } = await loadConfigWithTempHome();
+    const authStorage = {
+      set: vi.fn(async () => undefined),
+      remove: vi.fn(async () => undefined),
     };
     const registry = {
-      runtime: { credentials },
+      authStorage,
       refresh: vi.fn(async () => undefined),
     };
 
@@ -259,8 +326,7 @@ describe("picot config auth operations", () => {
       ),
     ).resolves.toEqual({ ok: true, data: { provider: "anthropic" } });
 
-    expect(credentials.modify).toHaveBeenCalledWith("anthropic", expect.any(Function));
-    await expect(credentials.modify.mock.calls[0][1](undefined)).resolves.toEqual({
+    expect(authStorage.set).toHaveBeenCalledWith("anthropic", {
       type: "api_key",
       key: "sk-ant-test",
     });
@@ -270,7 +336,8 @@ describe("picot config auth operations", () => {
       handlePicotConfig("remove_api_key", { provider: "anthropic" }, { modelRegistry: registry }),
     ).resolves.toEqual({ ok: true, data: { provider: "anthropic" } });
 
-    expect(credentials.delete).toHaveBeenCalledWith("anthropic");
+    expect(authStorage.remove).toHaveBeenCalledWith("anthropic");
     expect(registry.refresh).toHaveBeenCalledTimes(2);
+    expect(existsSync(join(agentDir, "auth.json"))).toBe(false);
   });
 });

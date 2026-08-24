@@ -48,13 +48,12 @@ describe("setupThinkingEffortControl", () => {
       <div class="thinking-effort" id="thinking-effort" role="radiogroup">
         <div class="thinking-effort-ends">
           <span>Faster</span>
-          <span class="thinking-effort-name" id="thinking-effort-name">off</span>
+          <span class="thinking-effort-name" id="thinking-effort-name">minimal</span>
           <span>Smarter</span>
         </div>
         <div class="thinking-effort-track">
           <span class="thinking-effort-thumb" id="thinking-effort-marker"></span>
-          <input type="radio" class="thinking-effort-dot" data-level="off" name="thinking-effort-level" value="off" checked />
-          <input type="radio" class="thinking-effort-dot" data-level="minimal" name="thinking-effort-level" value="minimal" />
+          <input type="radio" class="thinking-effort-dot" data-level="minimal" name="thinking-effort-level" value="minimal" checked />
           <input type="radio" class="thinking-effort-dot" data-level="low" name="thinking-effort-level" value="low" />
           <input type="radio" class="thinking-effort-dot" data-level="medium" name="thinking-effort-level" value="medium" />
           <input type="radio" class="thinking-effort-dot" data-level="high" name="thinking-effort-level" value="high" />
@@ -176,7 +175,7 @@ describe("setupThinkingEffortControl", () => {
 
     await vi.waitFor(() => {
       expect(runtime.request).toHaveBeenCalledWith(
-        { type: "set_thinking_level", level: "minimal" },
+        { type: "set_thinking_level", level: "low" },
         { sessionId: "test-session", instanceId: "test-instance" },
         { idempotencyKey: expect.any(String) },
       );
@@ -262,14 +261,16 @@ describe("thinking effort static shell contract", () => {
     expect(shellDocument.querySelector("#setting-thinking .settings-label-sub")?.textContent).toBe(
       "Reasoning depth",
     );
-    expect(dots.map((s) => s.dataset.level)).toEqual(["off", "minimal", "low", "medium", "high"]);
+    expect(dots.map((s) => s.dataset.level)).toEqual(["minimal", "low", "medium", "high"]);
     const ends = Array.from(
       shellDocument.querySelectorAll(
         "#thinking-effort .thinking-effort-ends > span:not(.thinking-effort-name)",
       ),
     );
     expect(ends.map((e) => e.textContent.trim())).toEqual(["Faster", "Smarter"]);
-    expect(shellDocument.querySelector("#thinking-effort-name")?.textContent.trim()).toBe("off");
+    expect(shellDocument.querySelector("#thinking-effort-name")?.textContent.trim()).toBe(
+      "minimal",
+    );
     expect(shellDocument.querySelector("#thinking-effort-marker")).not.toBeNull();
 
     dom.window.close();

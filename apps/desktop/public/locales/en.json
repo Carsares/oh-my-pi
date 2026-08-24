@@ -362,8 +362,8 @@
     "failedToLoadProviders": "Failed to load providers.",
     "failedToLoadConfig": "Failed to load config",
     "failedToSaveConfig": "Failed to save config",
-    "failedToLoadModels": "Failed to load models.json",
-    "failedToSaveModels": "Failed to save models.json",
+    "failedToLoadModels": "Failed to load models.yml",
+    "failedToSaveModels": "Failed to save models.yml",
     "unknownError": "unknown error",
     "connectionLost": "Connection lost. Please refresh the page.",
     "commandUndeliverableNoRoute": "no running session to receive it",
@@ -381,7 +381,7 @@
     "mobileBrokerRequired": "Starting a new chat in another project requires the desktop broker. Reopen the mobile QR code.",
     "abortedByUser": "Aborted by user",
     "invalidJson": "Invalid JSON: {detail}",
-    "modelsMustBeObject": "models.json must be a JSON object.",
+    "modelsMustBeObject": "models.yml must be a JSON object.",
     "providersMustBeObject": "'providers' must be an object.",
     "compactionFailed": "Context compaction failed.",
     "compactionFailedDetail": "Context compaction failed: {error}"
@@ -627,9 +627,9 @@
     },
     "auth": {
       "helpPre": "Keys are stored locally in",
-      "helpPost": "(chmod 600). GUI launches also import provider variables from your login shell.",
+      "helpPost": ". GUI launches also import provider variables from your login shell.",
       "notConfigured": "Not configured",
-      "configuredAuthJson": "Configured (auth.json)",
+      "configuredAuthJson": "Configured (agent.db)",
       "runtimeOverride": "Runtime override",
       "customProvider": "Custom provider",
       "configured": "Configured"
@@ -637,7 +637,7 @@
     "models": {
       "helpPre": "Edit",
       "helpPost1": "to add custom providers (Ollama, vLLM, LM Studio, OpenAI-compatible proxies, OpenRouter routing overrides, etc). See the",
-      "docsLink": "models.json docs",
+      "docsLink": "models.yml docs",
       "helpPost2": "for the full schema. Changes are picked up immediately — no restart needed.",
       "replaceConfirm": "Replace current content with the Ollama example?",
       "docsOpenFailed": "Could not open the documentation link"
@@ -882,9 +882,9 @@
         "smarter": "Smarter",
         "betaUpdates": "Beta updates",
         "receivePrereleasePicotBuilds": "Receive prerelease Picot builds",
-        "piAgentAuthJson": "~/.pi/agent/auth.json",
+        "piAgentAuthJson": "~/.omp/agent/agent.db",
         "save": "Save",
-        "piAgentModelsJson": "~/.pi/agent/models.json",
+        "piAgentModelsJson": "~/.omp/agent/models.yml",
         "cancel": "Cancel",
         "openLink": "Open Link"
       }

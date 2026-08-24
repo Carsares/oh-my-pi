@@ -3,37 +3,47 @@ import { HostControlGateway } from "./control-gateway.js";
 import { createInMemoryRuntimeAdapter } from "./runtime-gateway.js";
 
 describe("HostControlGateway", () => {
-  it("lists configured pi packages via a host_request", async () => {
+  it("lists OMP plugins via a host_request", async () => {
     const adapter = createInMemoryRuntimeAdapter();
     const control = new HostControlGateway(adapter);
-    const response = control.listPiPackages();
+    const response = control.listOmpPlugins("/tmp/project");
     const sent = adapter.takeSent();
-    expect(sent).toMatchObject({ type: "host_request", operation: "list_pi_packages" });
+    expect(sent).toMatchObject({
+      type: "host_request",
+      operation: "list_omp_plugins",
+      cwd: "/tmp/project",
+    });
     adapter.receive({
       type: "host_response",
       requestId: sent.requestId,
-      operation: "list_pi_packages",
-      packages: ["npm:pi-web-access"],
+      operation: "list_omp_plugins",
+      plugins: { npm: [{ name: "example" }], marketplace: [] },
     });
-    await expect(response).resolves.toEqual(["npm:pi-web-access"]);
+    await expect(response).resolves.toEqual({ npm: [{ name: "example" }], marketplace: [] });
   });
 
-  it("sends the source with install/remove requests", async () => {
+  it("sends OMP plugin install and uninstall requests", async () => {
     const adapter = createInMemoryRuntimeAdapter();
     const control = new HostControlGateway(adapter);
-    const install = control.installPiPackage("npm:foo");
+    const install = control.installOmpPlugin("npm:foo", { cwd: "/tmp/project" });
     const installFrame = adapter.takeSent();
     expect(installFrame).toMatchObject({
       type: "host_request",
-      operation: "install_pi_package",
-      source: "npm:foo",
+      operation: "install_omp_plugin",
+      pluginSource: "npm:foo",
+      cwd: "/tmp/project",
     });
     adapter.receive({ type: "host_response", requestId: installFrame.requestId, ok: true });
     await expect(install).resolves.toBeUndefined();
 
-    const remove = control.removePiPackage("npm:foo");
+    const remove = control.uninstallOmpPlugin("foo");
     const removeFrame = adapter.takeSent();
-    expect(removeFrame).toMatchObject({ operation: "remove_pi_package", source: "npm:foo" });
+    expect(removeFrame).toMatchObject({
+      operation: "uninstall_omp_plugin",
+      pluginId: "foo",
+      kind: "npm",
+      scope: "user",
+    });
     adapter.receive({ type: "host_response", requestId: removeFrame.requestId, ok: true });
     await expect(remove).resolves.toBeUndefined();
   });
@@ -41,7 +51,7 @@ describe("HostControlGateway", () => {
   it("rejects the request when the host returns an error", async () => {
     const adapter = createInMemoryRuntimeAdapter();
     const control = new HostControlGateway(adapter);
-    const response = control.installPiPackage("npm:bad");
+    const response = control.installOmpPlugin("npm:bad");
     const sent = adapter.takeSent();
     adapter.receive({
       type: "host_response",
@@ -51,64 +61,68 @@ describe("HostControlGateway", () => {
     await expect(response).rejects.toThrow("npm is not installed");
   });
 
-  it("passes the local (project scope) flag on install/remove", async () => {
+  it("passes marketplace scope on uninstall", async () => {
     const adapter = createInMemoryRuntimeAdapter();
     const control = new HostControlGateway(adapter);
-    const install = control.installPiPackage("npm:foo", { local: true });
-    const installFrame = adapter.takeSent();
-    expect(installFrame).toMatchObject({
-      operation: "install_pi_package",
-      source: "npm:foo",
-      local: true,
+    const remove = control.uninstallOmpPlugin("foo@official", {
+      kind: "marketplace",
+      scope: "project",
+      cwd: "/tmp/project",
     });
-    adapter.receive({ type: "host_response", requestId: installFrame.requestId, ok: true });
-    await expect(install).resolves.toBeUndefined();
-
-    const remove = control.removePiPackage("npm:foo", { local: true });
     const removeFrame = adapter.takeSent();
     expect(removeFrame).toMatchObject({
-      operation: "remove_pi_package",
-      source: "npm:foo",
-      local: true,
+      operation: "uninstall_omp_plugin",
+      pluginId: "foo@official",
+      kind: "marketplace",
+      scope: "project",
+      cwd: "/tmp/project",
     });
     adapter.receive({ type: "host_response", requestId: removeFrame.requestId, ok: true });
     await expect(remove).resolves.toBeUndefined();
   });
 
-  it("sends the source for an update request", async () => {
+  it("sends plugin identity for an update request", async () => {
     const adapter = createInMemoryRuntimeAdapter();
     const control = new HostControlGateway(adapter);
-    const response = control.updatePiPackage("npm:foo");
+    const response = control.updateOmpPlugin("foo", { cwd: "/tmp/project" });
     const sent = adapter.takeSent();
     expect(sent).toMatchObject({
       type: "host_request",
-      operation: "update_pi_package",
-      source: "npm:foo",
+      operation: "update_omp_plugin",
+      pluginId: "foo",
+      kind: "npm",
+      scope: "user",
+      cwd: "/tmp/project",
     });
     adapter.receive({ type: "host_response", requestId: sent.requestId, ok: true });
     await expect(response).resolves.toBeUndefined();
   });
 
-  it("reports whether a disable returned a change", async () => {
+  it("sends the desired OMP plugin enabled state", async () => {
     const adapter = createInMemoryRuntimeAdapter();
     const control = new HostControlGateway(adapter);
-    const response = control.setPiPackageDisabled("npm:foo", "global", true, "/tmp");
+    const response = control.setOmpPluginEnabled("foo@official", false, {
+      kind: "marketplace",
+      scope: "project",
+      cwd: "/tmp",
+    });
     const sent = adapter.takeSent();
     expect(sent).toMatchObject({
       type: "host_request",
-      operation: "set_pi_package_disabled",
-      source: "npm:foo",
-      scope: "global",
-      disabled: true,
+      operation: "set_omp_plugin_enabled",
+      pluginId: "foo@official",
+      kind: "marketplace",
+      scope: "project",
+      enabled: false,
       cwd: "/tmp",
     });
     adapter.receive({
       type: "host_response",
       requestId: sent.requestId,
-      operation: "set_pi_package_disabled",
-      changed: true,
+      operation: "set_omp_plugin_enabled",
+      ok: true,
     });
-    await expect(response).resolves.toBe(true);
+    await expect(response).resolves.toBeUndefined();
   });
 
   it("returns the new instance id after a runtime restart", async () => {

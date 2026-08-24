@@ -7,7 +7,7 @@ import { enhanceSelect } from "../../ui/select-menu.js";
 //
 // The package catalog is fetched from the public pi-packages registry over
 // plain HTTP. Installed-state detection and install/uninstall run the embedded
-// `pi` CLI on the Rust host via the HostControlGateway (`host_request` frames).
+// OMP plugin CLI on the Rust host via the HostControlGateway (`host_request` frames).
 // When no control gateway is available (e.g. a future remote client) the tab
 // still browses the catalog but disables the install actions.
 
@@ -160,12 +160,10 @@ export function setupPackageBrowse(control, { notify } = {}) {
       return installedSet;
     }
     try {
-      const configured = await control.listPiPackages();
-      // listPiPackages now returns package objects; keep just the sources for
-      // installed-state matching against the catalog.
+      const configured = await control.listOmpPlugins();
       installedSet = new Set(
-        (Array.isArray(configured) ? configured : []).map((pkg) =>
-          typeof pkg === "string" ? pkg : pkg.source,
+        (Array.isArray(configured?.npm) ? configured.npm : []).map((plugin) =>
+          browseSourceFor(plugin),
         ),
       );
     } catch {
@@ -283,10 +281,10 @@ export function setupPackageBrowse(control, { notify } = {}) {
         status.title = status.textContent;
         try {
           if (installed) {
-            await control.removePiPackage(source);
+            await control.uninstallOmpPlugin(pkg.name);
             installedSet.delete(source);
           } else {
-            await control.installPiPackage(source);
+            await control.installOmpPlugin(source);
             installedSet.add(source);
           }
           render();

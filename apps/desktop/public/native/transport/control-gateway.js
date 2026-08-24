@@ -1,7 +1,7 @@
 // Host control gateway: sends `host_request` frames over the native /v2/ws
 // protocol and resolves the matching `host_response`. This is the write-capable
-// counterpart to the read-only HostDataGateway — it covers package management
-// and opening external links, which run the embedded `pi` CLI on the Rust host.
+// counterpart to the read-only HostDataGateway — it covers plugin management
+// and opening external links, which run the embedded OMP CLI on the Rust host.
 //
 // Requests are correlated by a `host-` prefixed requestId; frames that don't
 // match a pending request are ignored (other gateways share the same adapter).
@@ -38,33 +38,29 @@ export class HostControlGateway {
     });
   }
 
-  async listPiPackages() {
-    const frame = await this.#request("list_pi_packages");
-    // List returns an array of package objects (source, scope, installedPath,
-    // disabled, packageName, version, description).
-    return Array.isArray(frame?.packages) ? frame.packages : [];
+  async listOmpPlugins(cwd = "") {
+    const frame = await this.#request("list_omp_plugins", { cwd });
+    const plugins = frame?.plugins;
+    return {
+      npm: Array.isArray(plugins?.npm) ? plugins.npm : [],
+      marketplace: Array.isArray(plugins?.marketplace) ? plugins.marketplace : [],
+    };
   }
 
-  async installPiPackage(source, { local = false } = {}) {
-    await this.#request("install_pi_package", { source, local });
+  async installOmpPlugin(pluginSource, { cwd = "" } = {}) {
+    await this.#request("install_omp_plugin", { pluginSource, cwd });
   }
 
-  async removePiPackage(source, { local = false } = {}) {
-    await this.#request("remove_pi_package", { source, local });
+  async uninstallOmpPlugin(pluginId, { kind = "npm", scope = "user", cwd = "" } = {}) {
+    await this.#request("uninstall_omp_plugin", { pluginId, kind, scope, cwd });
   }
 
-  async updatePiPackage(source = "") {
-    await this.#request("update_pi_package", { source });
+  async updateOmpPlugin(pluginId, { kind = "npm", scope = "user", cwd = "" } = {}) {
+    await this.#request("update_omp_plugin", { pluginId, kind, scope, cwd });
   }
 
-  async setPiPackageDisabled(source, scope, disabled, cwd = "") {
-    const frame = await this.#request("set_pi_package_disabled", {
-      source,
-      scope,
-      disabled,
-      cwd,
-    });
-    return Boolean(frame?.changed);
+  async setOmpPluginEnabled(pluginId, enabled, { kind = "npm", scope = "user", cwd = "" } = {}) {
+    await this.#request("set_omp_plugin_enabled", { pluginId, kind, scope, enabled, cwd });
   }
 
   async restartRuntime(workspaceId, sessionId) {
@@ -97,7 +93,7 @@ export class HostControlGateway {
   }
 
   // Skills install flow: pick a local source directory, scan it for skill
-  // candidates, then link selected candidates into Pi's settings.json.
+  // candidates, then add selected roots to OMP's config.yml.
   async pickSkillSource(workspaceId) {
     return this.#request("pick_skill_source", { workspaceId });
   }

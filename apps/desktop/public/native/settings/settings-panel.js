@@ -5,7 +5,6 @@ import { loadCostDashboard } from "./cost-dashboard.js";
 import { setupLanguageSelector } from "./language-selector.js";
 import { setupPackageBrowse } from "./package-browse.js";
 import { setupPackageManager } from "./package-manager.js";
-import { setupPackageSkillsTab } from "./package-skills-tab.js";
 import { setupSettingsConfig } from "./settings-config.js";
 import { setupSettingsToggles } from "./settings-toggles.js";
 import { setupDiscoveredSkillsTab } from "./skills-discovered-tab.js";
@@ -116,16 +115,10 @@ export function setupSettingsPanel({
         showError: showSkillsError,
       })
     : null;
-  const packageTab = setupPackageSkillsTab({
-    container: document.getElementById("settings-package-skills"),
-    rpcCommand: skillsRpc,
-  });
-
   const skillsTabs = Array.from(document.querySelectorAll("[data-skills-page-tab]"));
   const skillsPanels = {
     discovered: document.getElementById("settings-skills"),
     install: document.getElementById("settings-install-skills"),
-    packages: document.getElementById("settings-package-skills"),
   };
   const skillsShell = setupSkillsTabShell({
     tabs: skillsTabs,
@@ -133,7 +126,6 @@ export function setupSettingsPanel({
     activate: (name) => {
       if (name === "discovered") discoveredTab.activate?.();
       else if (name === "install") installTab?.activate?.();
-      else if (name === "packages") packageTab.activate?.();
     },
   });
 

@@ -24,7 +24,6 @@ import {
   settings,
 } from "@oh-my-pi/pi-coding-agent";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import { buildPackageSkillInventory } from "./package-skill-inventory";
 import {
   buildTelegramDmConfig,
   buildTelegramDoctorReport,
@@ -812,14 +811,6 @@ export async function handlePicotConfig(
         await removeStoredApiKey(registry, provider);
         if (registry) await registry.refresh();
         return { ok: true, data: { provider } };
-      }
-
-      case "list_package_skill_inventory": {
-        const scope = parseSkillScope(params.scope);
-        return {
-          ok: true,
-          data: buildPackageSkillInventory(skillInventoryOptions(scope, ctx)),
-        };
       }
 
       case "list_skill_inventory": {

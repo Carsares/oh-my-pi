@@ -354,8 +354,11 @@ mod tests {
             "pick_folder",
             "open_app",
             "install_package",
-            "install_pi_package",
-            "remove_pi_package",
+            "install_omp_plugin",
+            "uninstall_omp_plugin",
+            "update_omp_plugin",
+            "set_omp_plugin_enabled",
+            "list_omp_plugins",
             "check_for_updates",
             "delete_workspace",
         ] {

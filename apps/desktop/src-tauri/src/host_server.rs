@@ -10,7 +10,7 @@ use crate::markitdown_preview::{
 use crate::model_health::{self, ModelTestOutcome, ModelTestRequest};
 use crate::native_pi_manager::NativePiManager;
 use crate::pi_launch::{
-    list_installed_apps, open_external, open_in_app, set_package_disabled, PiLaunchResolver,
+    list_installed_apps, open_external, open_in_app, PiLaunchResolver,
 };
 use crate::remote_auth::RemoteAuth;
 use crate::runtime_coordinator::{RuntimeStatus, RuntimeTarget};
@@ -1578,81 +1578,98 @@ async fn dispatch_host_operation(
     frame: &Value,
 ) -> Result<Value, (&'static str, String)> {
     match operation {
-        "list_pi_packages" => {
+        "list_omp_plugins" => {
+            let cwd = frame
+                .get("cwd")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned();
             let resolver = state.pi_launch.clone();
-            let packages = tokio::task::spawn_blocking(move || resolver.list_pi_packages())
+            let plugins = tokio::task::spawn_blocking(move || resolver.list_omp_plugins(&cwd))
                 .await
                 .map_err(|error| ("host_operation_failed", error.to_string()))?
-                .map_err(|message| ("list_pi_packages_failed", message))?;
+                .map_err(|message| ("list_omp_plugins_failed", message))?;
             Ok(json!({
                 "type": "host_response",
                 "requestId": request_id,
-                "operation": "list_pi_packages",
-                "packages": packages,
+                "operation": "list_omp_plugins",
+                "plugins": plugins,
             }))
         }
-        "install_pi_package" | "remove_pi_package" | "update_pi_package" => {
-            let source = frame
-                .get("source")
+        "install_omp_plugin" => {
+            let plugin_source = frame
+                .get("pluginSource")
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
-                .ok_or(("invalid_source", "Package source cannot be empty".into()))?
-                .to_owned();
-            let local = frame.get("local").and_then(Value::as_bool).unwrap_or(false);
-            let resolver = state.pi_launch.clone();
-            let operation = operation.to_string();
-            let operation_ref = operation.clone();
-            tokio::task::spawn_blocking(move || match operation_ref.as_str() {
-                "install_pi_package" => resolver.install_pi_package(&source, local),
-                "remove_pi_package" => resolver.remove_pi_package(&source, local),
-                "update_pi_package" => resolver.update_pi_package(&source),
-                _ => unreachable!(),
-            })
-            .await
-            .map_err(|error| ("host_operation_failed", error.to_string()))?
-            .map_err(|message| ("package_operation_failed", message))?;
-            Ok(json!({
-                "type": "host_response",
-                "requestId": request_id,
-                "operation": operation,
-                "ok": true,
-            }))
-        }
-        "set_pi_package_disabled" => {
-            let source = frame
-                .get("source")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .ok_or(("invalid_source", "Package source cannot be empty".into()))?
-                .to_owned();
-            let disabled = frame
-                .get("disabled")
-                .and_then(Value::as_bool)
-                .unwrap_or(true);
-            let scope = frame
-                .get("scope")
-                .and_then(Value::as_str)
-                .unwrap_or("global")
+                .ok_or(("invalid_plugin_source", "Plugin source cannot be empty".into()))?
                 .to_owned();
             let cwd = frame
                 .get("cwd")
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_owned();
-            let changed = tokio::task::spawn_blocking(move || {
-                set_package_disabled(&scope, &cwd, &source, disabled)
-            })
-            .await
-            .map_err(|error| ("host_operation_failed", error.to_string()))?
-            .map_err(|message| ("set_pi_package_disabled_failed", message))?;
+            let resolver = state.pi_launch.clone();
+            tokio::task::spawn_blocking(move || resolver.install_omp_plugin(&plugin_source, &cwd))
+                .await
+                .map_err(|error| ("host_operation_failed", error.to_string()))?
+                .map_err(|message| ("plugin_operation_failed", message))?;
             Ok(json!({
                 "type": "host_response",
                 "requestId": request_id,
-                "operation": "set_pi_package_disabled",
+                "operation": "install_omp_plugin",
                 "ok": true,
-                "changed": changed,
+            }))
+        }
+        "uninstall_omp_plugin" | "update_omp_plugin" | "set_omp_plugin_enabled" => {
+            let plugin_id = frame
+                .get("pluginId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_plugin_id", "Plugin id cannot be empty".into()))?
+                .to_owned();
+            let kind = frame
+                .get("kind")
+                .and_then(Value::as_str)
+                .filter(|kind| matches!(*kind, "npm" | "marketplace"))
+                .ok_or(("invalid_plugin_kind", "Plugin kind is required".into()))?
+                .to_owned();
+            let scope = frame
+                .get("scope")
+                .and_then(Value::as_str)
+                .filter(|scope| matches!(*scope, "user" | "project"))
+                .unwrap_or("user")
+                .to_owned();
+            let cwd = frame
+                .get("cwd")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned();
+            let enabled = frame.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+            let operation = operation.to_owned();
+            let operation_ref = operation.clone();
+            let resolver = state.pi_launch.clone();
+            tokio::task::spawn_blocking(move || match operation_ref.as_str() {
+                "uninstall_omp_plugin" => {
+                    resolver.uninstall_omp_plugin(&plugin_id, &kind, &scope, &cwd)
+                }
+                "update_omp_plugin" => {
+                    resolver.update_omp_plugin(&plugin_id, &kind, &scope, &cwd)
+                }
+                "set_omp_plugin_enabled" => {
+                    resolver.set_omp_plugin_enabled(&plugin_id, &kind, &scope, enabled, &cwd)
+                }
+                _ => unreachable!(),
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?
+            .map_err(|message| ("plugin_operation_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": operation,
+                "ok": true,
             }))
         }
         "list_installed_apps" => Ok(json!({

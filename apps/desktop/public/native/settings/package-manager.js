@@ -1,13 +1,12 @@
-// Settings → Extensions → "Installed Packages" management.
+// Settings → Extensions → installed OMP plugin management.
 //
 // Owns the management layer that pi-web exposes but Picot's community browser
 // does not: a master-detail view over the installed packages — sidebar list
 // grouped by scope, and a detail pane with enable/disable, update, remove,
 // status fields, and the resolved extensions/skills/prompts/themes a package
 // contributes — plus an agent-reload action and a diagnostics/totals footer.
-// Package operations run the embedded `pi` CLI on the Rust host via the
-// HostControlGateway (`host_request` frames); `listPiPackages` returns full
-// package objects including package-level metadata and a resolved `resources` list.
+// Plugin operations run the embedded OMP CLI on the Rust host via the
+// HostControlGateway (`host_request` frames).
 //
 // This is a distinct concern from the community catalog browser
 // (package-browse.js), so it lives in its own module per the repo's
@@ -18,25 +17,25 @@ import { getPackageInstallFailure } from "../../packages/install-status.js";
 
 const RESOURCE_GROUPS = [
   ["extensions", "extensions"],
-  ["skills", "skills"],
-  ["prompts", "prompts"],
-  ["themes", "themes"],
+  ["commands", "commands"],
+  ["tools", "tools"],
+  ["hooks", "hooks"],
 ];
 
-function sourceOf(pkg) {
-  return typeof pkg?.source === "string" ? pkg.source : "";
+function pluginIdOf(plugin) {
+  return typeof plugin?.id === "string" ? plugin.id : "";
 }
 
-function keyOf(pkg) {
-  return `${pkg.scope}\0${pkg.source}`;
+function keyOf(plugin) {
+  return `${plugin.kind}\0${plugin.scope}\0${plugin.id}`;
 }
 
 // Normalize a user-typed install source: trim whitespace and unwrap a pasted
-// `pi install ...` command so any of `npm:foo`, `pi install npm:foo`, or
-// `npm install @scope/pkg` style inputs work.
+// `omp plugin install ...` command so either a source or a pasted install
+// command can be used.
 function normalizeSource(raw) {
   let value = String(raw || "").trim();
-  const installMatch = value.match(/(?:^|\s)(?:pi|npm)\s+install\s+(.+)$/i);
+  const installMatch = value.match(/(?:^|\s)(?:(?:omp\s+plugin)|npm)\s+install\s+(.+)$/i);
   if (installMatch) {
     value = installMatch[1]
       .split(/\s+/)
@@ -64,6 +63,67 @@ function statusLabel(status) {
 
 function installedPathLabel(pkg) {
   return pkg?.installedPath ? shortenPath(pkg.installedPath) : t("extensions.notOnDisk");
+}
+
+function manifestResources(manifest = {}) {
+  const resources = [];
+  const add = (kind, value) => {
+    for (const entry of Array.isArray(value) ? value : value ? [value] : []) {
+      if (typeof entry !== "string" || !entry) continue;
+      resources.push({ kind, name: entry.split("/").pop() || entry, relativePath: entry });
+    }
+  };
+  add("extensions", manifest.extensions);
+  add("commands", manifest.commands);
+  add("tools", manifest.tools);
+  add("hooks", manifest.hooks);
+  return resources;
+}
+
+function resourceCounts(resources) {
+  const counts = {};
+  for (const resource of resources) counts[resource.kind] = (counts[resource.kind] || 0) + 1;
+  return counts;
+}
+
+export function normalizeOmpPluginList(listed) {
+  const npm = (Array.isArray(listed?.npm) ? listed.npm : []).map((plugin, index) => {
+    const resources = manifestResources(plugin.manifest);
+    return {
+      id: plugin.name || `npm-${index}`,
+      kind: "npm",
+      scope: "user",
+      installedPath: plugin.path || null,
+      packageName: plugin.name || null,
+      version: plugin.version || null,
+      description: plugin.manifest?.description || null,
+      disabled: plugin.enabled === false,
+      status: plugin.enabled === false ? "disabled" : "loaded",
+      counts: resourceCounts(resources),
+      resources,
+      index,
+    };
+  });
+  const marketplace = (Array.isArray(listed?.marketplace) ? listed.marketplace : []).map(
+    (plugin, index) => {
+      const entry = Array.isArray(plugin.entries) ? plugin.entries[0] : null;
+      return {
+        id: plugin.id || `marketplace-${index}`,
+        kind: "marketplace",
+        scope: plugin.scope === "project" ? "project" : "user",
+        installedPath: entry?.installPath || null,
+        packageName: plugin.id || null,
+        version: entry?.version || null,
+        description: null,
+        disabled: entry?.enabled === false,
+        status: entry?.enabled === false ? "disabled" : plugin.shadowedBy ? "shadowed" : "loaded",
+        counts: {},
+        resources: [],
+        index,
+      };
+    },
+  );
+  return [...npm, ...marketplace];
 }
 
 function resourceSummary(pkg) {
@@ -197,24 +257,8 @@ export function setupPackageManager(deps) {
     }
     try {
       cwd = await resolveCwd();
-      const listed = await control.listPiPackages();
-      packages = (Array.isArray(listed) ? listed : []).map((pkg, index) => {
-        const p = typeof pkg === "string" ? { source: pkg } : pkg;
-        const status = p.disabled ? "disabled" : p.installedPath ? "loaded" : "installed";
-        return {
-          source: sourceOf(p),
-          scope: p.scope || "global",
-          installedPath: p.installedPath || null,
-          packageName: p.packageName || null,
-          version: p.version || null,
-          description: p.description || null,
-          disabled: Boolean(p.disabled),
-          status,
-          counts: p.counts || {},
-          resources: Array.isArray(p.resources) ? p.resources : [],
-          index,
-        };
-      });
+      const listed = await control.listOmpPlugins(cwd);
+      packages = normalizeOmpPluginList(listed);
       if (!packages.some((p) => keyOf(p) === selectedKey)) {
         selectedKey = packages[0] ? keyOf(packages[0]) : null;
       }
@@ -261,7 +305,7 @@ export function setupPackageManager(deps) {
       groupsEl.appendChild(emptyNote(t("extensions.noInstalled")));
       return;
     }
-    for (const scope of ["global", "project"]) {
+    for (const scope of ["user", "project"]) {
       const scoped = packages.filter((pkg) => pkg.scope === scope);
       if (!scoped.length) continue;
       const header = document.createElement("div");
@@ -284,7 +328,7 @@ export function setupPackageManager(deps) {
 
     const name = document.createElement("div");
     name.className = "pkg-manager-sidebar-name";
-    name.textContent = pkg.packageName || pkg.source;
+    name.textContent = pkg.packageName || pkg.id;
     row.appendChild(name);
 
     const meta = document.createElement("div");
@@ -328,8 +372,8 @@ export function setupPackageManager(deps) {
 
     const sourceEl = document.createElement("span");
     sourceEl.className = "pkg-manager-source";
-    sourceEl.textContent = pkg.source;
-    sourceEl.title = pkg.source;
+    sourceEl.textContent = pluginIdOf(pkg);
+    sourceEl.title = pluginIdOf(pkg);
     header.appendChild(sourceEl);
     detailEl.appendChild(header);
 
@@ -337,7 +381,7 @@ export function setupPackageManager(deps) {
     actions.className = "settings-extension-actions pkg-manager-actions";
 
     const updateBtn = iconButton(t("extensions.update"), {
-      disabled: busy || !canManage,
+      disabled: busy || !canManage || pkg.kind !== "marketplace",
       title: t("extensions.updateTip"),
     });
     updateBtn.addEventListener("click", () => runUpdate(pkg, key));
@@ -398,7 +442,7 @@ export function setupPackageManager(deps) {
       footerEl.textContent = t("extensions.noPackagesSummary");
       return;
     }
-    const totals = { extensions: 0, skills: 0, prompts: 0, themes: 0 };
+    const totals = { extensions: 0, commands: 0, tools: 0, hooks: 0 };
     for (const pkg of packages) {
       for (const [key] of RESOURCE_GROUPS) {
         totals[key] += pkg.counts?.[key] ?? 0;
@@ -460,12 +504,16 @@ export function setupPackageManager(deps) {
     busyScope = key;
     render();
     try {
-      await control.setPiPackageDisabled(pkg.source, pkg.scope, !pkg.disabled, cwd);
+      await control.setOmpPluginEnabled(pkg.id, pkg.disabled, {
+        kind: pkg.kind,
+        scope: pkg.scope,
+        cwd,
+      });
       pkg.disabled = !pkg.disabled;
       pkg.status = pkg.disabled ? "disabled" : pkg.installedPath ? "loaded" : "installed";
       lastMessage = pkg.disabled
-        ? t("extensions.packageDisabledMessage", { source: pkg.source })
-        : t("extensions.packageEnabledMessage", { source: pkg.source });
+        ? t("extensions.packageDisabledMessage", { source: pkg.id })
+        : t("extensions.packageEnabledMessage", { source: pkg.id });
       lastError = null;
     } catch (error) {
       lastError = summarizeActionError(error);
@@ -481,9 +529,9 @@ export function setupPackageManager(deps) {
     busyScope = key;
     render();
     try {
-      await control.updatePiPackage(pkg.source);
+      await control.updateOmpPlugin(pkg.id, { kind: pkg.kind, scope: pkg.scope, cwd });
       await load(true);
-      lastMessage = t("extensions.updateMessage", { source: pkg.source });
+      lastMessage = t("extensions.updateMessage", { source: pkg.id });
       lastError = null;
       render();
     } catch (error) {
@@ -500,12 +548,12 @@ export function setupPackageManager(deps) {
     busyScope = key;
     render();
     try {
-      await control.removePiPackage(pkg.source, { local: pkg.scope === "project" });
+      await control.uninstallOmpPlugin(pkg.id, { kind: pkg.kind, scope: pkg.scope, cwd });
       packages = packages.filter((p) => keyOf(p) !== key);
       if (selectedKey === key) {
         selectedKey = packages[0] ? keyOf(packages[0]) : null;
       }
-      lastMessage = t("extensions.removeMessage", { source: pkg.source });
+      lastMessage = t("extensions.removeMessage", { source: pkg.id });
       lastError = null;
       render();
     } catch (error) {

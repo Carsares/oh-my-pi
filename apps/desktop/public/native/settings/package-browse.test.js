@@ -73,13 +73,13 @@ describe("package browser installed filter", () => {
       },
     ]);
     const control = {
-      listPiPackages: vi
+      listOmpPlugins: vi
         .fn()
         .mockRejectedValueOnce(new Error("host not ready"))
-        .mockResolvedValueOnce(["npm:pi-web-access"]),
+        .mockResolvedValueOnce({ npm: [{ name: "pi-web-access" }], marketplace: [] }),
       openExternal: vi.fn(),
-      installPiPackage: vi.fn(),
-      removePiPackage: vi.fn(),
+      installOmpPlugin: vi.fn(),
+      uninstallOmpPlugin: vi.fn(),
     };
 
     const browse = setupPackageBrowse(control);
@@ -91,7 +91,7 @@ describe("package browser installed filter", () => {
     installedOnly.checked = true;
     installedOnly.dispatchEvent(new Event("change", { bubbles: true }));
     await vi.waitFor(() => {
-      expect(control.listPiPackages).toHaveBeenCalledTimes(2);
+      expect(control.listOmpPlugins).toHaveBeenCalledTimes(2);
       expect(packageRows()).toHaveLength(1);
     });
 

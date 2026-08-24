@@ -12,8 +12,28 @@ describe("setupThinkingEffortControl", () => {
 
   beforeEach(() => {
     runtime = {
-      request: vi.fn().mockResolvedValue({
-        response: { data: { levels: ["off", "minimal", "low", "medium", "high"] } },
+      request: vi.fn((command) => {
+        if (command.type === "get_state") {
+          return Promise.resolve({
+            response: { data: { model: { provider: "openai", id: "gpt-5" } } },
+          });
+        }
+        if (command.type === "get_available_models") {
+          return Promise.resolve({
+            response: {
+              data: {
+                models: [
+                  {
+                    provider: "openai",
+                    id: "gpt-5",
+                    thinking: { efforts: ["off", "minimal", "low", "medium", "high"] },
+                  },
+                ],
+              },
+            },
+          });
+        }
+        return Promise.resolve({ response: { data: {} } });
       }),
     };
     getTarget = vi.fn().mockReturnValue({ sessionId: "test-session", instanceId: "test-instance" });
@@ -88,7 +108,23 @@ describe("setupThinkingEffortControl", () => {
   });
 
   it("keeps the saved default without changing a session whose provider does not support it", async () => {
-    runtime.request.mockResolvedValue({ response: { data: { levels: ["off"] } } });
+    runtime.request.mockImplementation((command) => {
+      if (command.type === "get_state") {
+        return Promise.resolve({
+          response: { data: { model: { provider: "anthropic", id: "claude" } } },
+        });
+      }
+      if (command.type === "get_available_models") {
+        return Promise.resolve({
+          response: {
+            data: {
+              models: [{ provider: "anthropic", id: "claude" }],
+            },
+          },
+        });
+      }
+      return Promise.resolve({ response: { data: {} } });
+    });
     const configGateway = { call: vi.fn().mockResolvedValue({ ok: true }) };
     const onRuntimeLevelChanged = vi.fn();
     setupThinkingEffortControl({
@@ -108,10 +144,8 @@ describe("setupThinkingEffortControl", () => {
       });
       expect(document.getElementById("thinking-effort-name").textContent).toBe("medium");
     });
-    expect(runtime.request).toHaveBeenCalledWith(
-      { type: "get_available_thinking_levels" },
-      getTarget(),
-    );
+    expect(runtime.request).toHaveBeenCalledWith({ type: "get_state" }, getTarget());
+    expect(runtime.request).toHaveBeenCalledWith({ type: "get_available_models" }, getTarget());
     expect(runtime.request).not.toHaveBeenCalledWith(
       { type: "set_thinking_level", level: "medium" },
       expect.anything(),

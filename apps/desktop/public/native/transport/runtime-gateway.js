@@ -4,7 +4,7 @@ const MUTATION_TYPES = new Set([
   "follow_up",
   "compact",
   "bash",
-  "fork",
+  "branch",
   "clone",
   "navigate_tree",
   "set_model",

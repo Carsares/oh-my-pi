@@ -604,7 +604,7 @@ fn is_mutation(command_type: &str) -> bool {
             | "follow_up"
             | "compact"
             | "bash"
-            | "fork"
+            | "branch"
             | "clone"
             | "navigate_tree"
             | "set_model"

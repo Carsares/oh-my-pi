@@ -15,6 +15,22 @@ function runtimeResponseData(response) {
   return response?.response?.data ?? response?.data ?? response;
 }
 
+async function getAvailableThinkingLevels(runtime, target) {
+  const stateResponse = await runtime.request({ type: "get_state" }, target);
+  const currentModel = runtimeResponseData(stateResponse)?.model;
+  if (!currentModel?.provider || !currentModel?.id) return [];
+
+  const modelsResponse = await runtime.request({ type: "get_available_models" }, target);
+  const models = runtimeResponseData(modelsResponse)?.models;
+  if (!Array.isArray(models)) return [];
+
+  const model = models.find(
+    (candidate) =>
+      candidate?.provider === currentModel.provider && candidate?.id === currentModel.id,
+  );
+  return Array.isArray(model?.thinking?.efforts) ? model.thinking.efforts : [];
+}
+
 export function setupThinkingEffortControl({
   runtime,
   getTarget,
@@ -82,12 +98,8 @@ export function setupThinkingEffortControl({
     const target = getTarget?.();
     if (runtime && target) {
       try {
-        const availableResponse = await runtime.request(
-          { type: "get_available_thinking_levels" },
-          target,
-        );
-        const availableLevels = runtimeResponseData(availableResponse)?.levels;
-        if (Array.isArray(availableLevels) && availableLevels.includes(level)) {
+        const availableLevels = await getAvailableThinkingLevels(runtime, target);
+        if (availableLevels.includes(level)) {
           await runtime.request({ type: "set_thinking_level", level }, target, {
             idempotencyKey: randomId(),
           });

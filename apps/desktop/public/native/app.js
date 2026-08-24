@@ -753,7 +753,7 @@ messagesElement.addEventListener("previewfile", (event) => {
 messagesElement.addEventListener("messagefork", async (event) => {
   const { entryId } = event.detail;
   try {
-    const result = await runtime.request({ type: "fork", entryId }, target, {
+    const result = await runtime.request({ type: "branch", entryId }, target, {
       idempotencyKey: randomId(),
     });
     const data = result?.response?.data;
@@ -1103,7 +1103,7 @@ async function hydrateSnapshotOnce() {
 }
 
 async function loadCommands() {
-  const result = await runtime.request({ type: "get_commands" }, target);
+  const result = await runtime.request({ type: "get_available_commands" }, target);
   commandCatalog = buildCommandCatalog({
     nativeCommands: result.response?.data?.commands ?? [],
   });

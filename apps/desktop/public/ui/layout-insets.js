@@ -1,0 +1,76 @@
+const BASE_TOP_INSET = 52;
+const BASE_BOTTOM_INSET = 128;
+const CHROME_GAP = 12;
+
+function defaultMeasureHeight(element) {
+  if (!element) return 0;
+  const rect = element.getBoundingClientRect?.();
+  return Math.ceil(rect?.height || element.offsetHeight || 0);
+}
+
+export function syncMessagesInsets({
+  main,
+  messages,
+  header,
+  inputArea,
+  workspaceContent,
+  measureHeight = defaultMeasureHeight,
+} = {}) {
+  if (!main || !messages || !header || !inputArea) {
+    return {
+      topInset: BASE_TOP_INSET,
+      bottomInset: BASE_BOTTOM_INSET,
+      workspaceHeaderOffset: 0,
+    };
+  }
+
+  const headerHeight = measureHeight(header);
+  const topInset = Math.max(BASE_TOP_INSET, headerHeight + CHROME_GAP);
+  const bottomInset = Math.max(BASE_BOTTOM_INSET, measureHeight(inputArea) + CHROME_GAP);
+  const workspaceHeaderOffset = Math.max(0, headerHeight);
+
+  main.style.setProperty("--messages-top-inset", `${topInset}px`);
+  main.style.setProperty("--messages-bottom-inset", `${bottomInset}px`);
+  messages.style.setProperty("scroll-padding-top", `${topInset}px`);
+  messages.style.setProperty("scroll-padding-bottom", `${bottomInset}px`);
+  workspaceContent?.style.setProperty("--workspace-header-offset", `${workspaceHeaderOffset}px`);
+
+  return { topInset, bottomInset, workspaceHeaderOffset };
+}
+
+export function setupMessagesInsets({ main, messages, header, inputArea, workspaceContent } = {}) {
+  let frameId = 0;
+
+  const sync = () => {
+    frameId = 0;
+    syncMessagesInsets({ main, messages, header, inputArea, workspaceContent });
+  };
+
+  const scheduleSync = () => {
+    if (frameId) return;
+    frameId = requestAnimationFrame(sync);
+  };
+
+  scheduleSync();
+
+  const observer =
+    typeof ResizeObserver === "function"
+      ? new ResizeObserver(() => {
+          scheduleSync();
+        })
+      : null;
+
+  observer?.observe(header);
+  observer?.observe(inputArea);
+  observer?.observe(main);
+
+  window.addEventListener("resize", scheduleSync);
+  window.visualViewport?.addEventListener("resize", scheduleSync);
+
+  return () => {
+    if (frameId) cancelAnimationFrame(frameId);
+    observer?.disconnect();
+    window.removeEventListener("resize", scheduleSync);
+    window.visualViewport?.removeEventListener("resize", scheduleSync);
+  };
+}

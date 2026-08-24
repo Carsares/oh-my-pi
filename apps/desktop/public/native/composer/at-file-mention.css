@@ -1,0 +1,52 @@
+/* @-file mention menu (public/ui/at-file-mention.js) */
+
+.at-file-mention-menu {
+  position: absolute;
+  z-index: 41;
+  right: 0;
+  bottom: calc(100% + 10px);
+  left: 0;
+  max-height: min(52vh, 520px);
+  padding: var(--space-2);
+  overflow-y: auto;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-solid) 94%, transparent);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(calc(var(--blur) * 1.5));
+  -webkit-backdrop-filter: blur(calc(var(--blur) * 1.5));
+}
+
+.at-file-mention-option {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  width: 100%;
+  min-height: var(--control-height-lg);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.at-file-mention-option.selected {
+  background: var(--bg-glass-hover);
+}
+
+.at-file-mention-name {
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.at-file-mention-description {
+  overflow: hidden;
+  font-size: var(--font-size-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

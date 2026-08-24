@@ -1,0 +1,378 @@
+/* ══════════════════════════════════════════════════════
+   Super Agent — Runtime panel (right column)
+   ══════════════════════════════════════════════════════ */
+
+.super-agent-runtime {
+  flex-direction: column;
+}
+
+/* Specificity note: `.app-side-panel` (shared with the file browser) also
+   sets `display: flex` at equal specificity (0,1,0) but later in the
+   cascade (style.css body, after this @import'd file), so it would always
+   win over a plain `.super-agent-runtime { display: none }` rule. Scope the
+   hidden state to `body:not(.super-agent-active)` (specificity 0,2,0) so it
+   reliably beats `.app-side-panel` regardless of import order. */
+body:not(.super-agent-active) .super-agent-runtime {
+  display: none;
+}
+
+body.super-agent-active .super-agent-runtime {
+  display: flex;
+}
+
+body.super-agent-active .super-agent-runtime.collapsed {
+  margin-right: calc(var(--panel-width) * -1);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* When SA is active, keep the regular session header measurable for live insets,
+   but let the Super Agent header provide the visible controls. */
+body.super-agent-active .session-header {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body.super-agent-active .file-sidebar {
+  display: none;
+}
+
+.super-agent-chat-header {
+  z-index: 11;
+}
+
+.runtime-header {
+  gap: var(--space-2);
+  cursor: default;
+  user-select: none;
+}
+
+.runtime-title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.runtime-filters {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  flex-shrink: 0;
+}
+
+.runtime-filter {
+  flex: 1;
+  padding: var(--space-1) var(--space-1-5);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+  white-space: nowrap;
+}
+
+.runtime-filter:hover {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+}
+
+.runtime-filter.active {
+  background: var(--bg-glass-active);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.runtime-task-list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.runtime-task-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.runtime-task-list::-webkit-scrollbar-thumb {
+  background: var(--text-secondary);
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+  background-clip: padding-box;
+}
+
+/* ── Runtime task cards ──────────────────────────────── */
+
+.runtime-task-card {
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  cursor: pointer;
+}
+
+.runtime-task-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.runtime-task-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  position: relative;
+}
+
+.runtime-quick-actions {
+  display: none;
+  align-items: center;
+  gap: var(--space-1);
+  position: absolute;
+  right: 18px;
+  background: var(--bg-solid);
+}
+
+.runtime-task-card:hover .runtime-quick-actions,
+.runtime-task-card:focus-within .runtime-quick-actions {
+  display: inline-flex;
+}
+
+.runtime-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.runtime-task-card.status-done .runtime-status-dot {
+  background: #34d399;
+}
+.runtime-task-card.status-running .runtime-status-dot {
+  background: #fb923c;
+  animation: sa-pulse 1.2s ease-in-out infinite;
+}
+.runtime-task-card.status-pending .runtime-status-dot {
+  background: var(--text-secondary);
+}
+.runtime-task-card.status-failed .runtime-status-dot {
+  background: #f87171;
+}
+
+.runtime-task-title {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-task-expand-icon {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  display: block;
+  transform: rotate(-45deg);
+  transition: transform 0.12s ease;
+}
+
+.runtime-task-card.is-expanded .runtime-task-expand-icon {
+  transform: rotate(45deg);
+}
+
+.runtime-task-desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  cursor: text;
+  word-break: break-word;
+}
+
+.runtime-task-section-title {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+.runtime-task-section-title:first-child {
+  margin-top: 0;
+}
+
+.runtime-task-paragraph {
+  color: var(--text-secondary);
+}
+
+.runtime-task-list-item {
+  color: var(--text-secondary);
+  padding-left: var(--space-3);
+  position: relative;
+}
+
+.runtime-task-list-item::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  position: absolute;
+  left: 2px;
+  top: 0.7em;
+}
+
+.runtime-task-desc strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.runtime-task-target {
+  font-size: var(--font-size-sm);
+}
+
+.runtime-task-target strong {
+  color: var(--text-secondary);
+}
+
+.runtime-task-missing-target {
+  font-size: var(--font-size-sm);
+  background: var(--bg-glass-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: var(--space-1) var(--space-2);
+}
+
+.runtime-project-picker {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+
+.runtime-project-select {
+  width: 100%;
+}
+
+.runtime-task-error {
+  font-size: var(--font-size-sm);
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.08);
+  border-radius: var(--radius-xs);
+  padding: var(--space-1) var(--space-2);
+  word-break: break-word;
+}
+
+.runtime-task-history {
+  display: grid;
+  gap: var(--space-1-5);
+}
+
+.runtime-task-history-list {
+  display: grid;
+  gap: var(--space-1-5);
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-2);
+}
+
+.runtime-task-history-item {
+  display: grid;
+  gap: var(--space-0-5);
+  font-size: var(--font-size-sm);
+}
+
+.runtime-task-history-item strong {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+}
+
+.runtime-task-history-item p {
+  margin: 0;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.runtime-approve-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-top: 2px;
+}
+
+@keyframes sa-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.sa-btn {
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: opacity var(--duration) var(--ease);
+  white-space: nowrap;
+}
+
+.sa-btn:hover {
+  opacity: 0.8;
+}
+
+.runtime-quick-actions .sa-btn {
+  padding: var(--space-0-5) var(--space-1-5);
+  font-size: var(--font-size-sm);
+}
+
+.runtime-task-history > .sa-btn {
+  justify-self: flex-start;
+}
+
+.runtime-bulk-actions {
+  display: flex;
+  gap: var(--space-1-5);
+  padding: 0 var(--space-3) var(--space-2);
+  flex-shrink: 0;
+}
+
+.runtime-bulk-actions .sa-btn {
+  flex: 1;
+}
+
+.runtime-bulk-actions .sa-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sa-btn-approve {
+  background: var(--accent);
+  color: var(--bg-solid, #212121);
+  border-color: var(--accent);
+}
+
+.sa-btn-dismiss {
+  background: var(--bg-glass-active);
+  color: var(--text-secondary);
+  border-color: var(--border, rgba(128, 128, 128, 0.25));
+}

@@ -1,0 +1,70 @@
+[package]
+name = "picot"
+version = "0.4.2"
+description = "Pi Agent Desktop - session manager for pi coding agent"
+authors = ["Pi Desktop"]
+edition = "2021"
+
+[[bin]]
+name = "picot"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [
+  "image-png",
+  "devtools",
+  "macos-private-api",
+] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-log = "2"
+tauri-plugin-notification = "2"
+notify-rust = "4.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+dirs = "5"
+log = "0.4"
+fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
+futures-util = "0.3"
+tokio-tungstenite = "0.24"
+percent-encoding = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+uuid = { version = "1", features = ["v4"] }
+axum = { version = "0.8", features = ["ws"] }
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "set-header"] }
+base64 = "0.22"
+rand = "0.8"
+subtle = "2"
+tempfile = "3"
+portable-pty = "0.9"
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+  "Win32_Foundation",
+  "Win32_Security",
+] }
+
+[profile.dev]
+incremental = true
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

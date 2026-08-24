@@ -1,0 +1,76 @@
+/* ══════════════════════════════════════════════════════
+   Super Agent — chat header (replaces normal header content)
+   Reuses .header-left / .header-right / .pill / .icon-btn
+   from the regular header; only SA-specific overrides here.
+   ══════════════════════════════════════════════════════ */
+
+/* Service channel pills — extend the base .pill style */
+.sa-service-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm); /* override .pill's 10px monospace */
+  transition:
+    background 0.15s,
+    color 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.sa-service-pill:hover {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+}
+
+.sa-service-pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sa-service-pill:disabled:hover {
+  background: var(--bg-glass);
+}
+
+.sa-service-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sa-service-pill:not(.connected) .sa-service-dot {
+  background: var(--text-secondary);
+  opacity: 0.55;
+}
+
+.sa-dot-telegram {
+  background: #26a8ea;
+}
+
+.sa-runtime-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  flex-shrink: 0;
+  transition:
+    color 0.15s,
+    background 0.15s;
+  -webkit-app-region: no-drag;
+}
+.sa-runtime-toggle:hover {
+  color: var(--text-primary);
+  background: var(--btn-hover-bg, rgba(0, 0, 0, 0.06));
+}
+.sa-runtime-toggle.active {
+  color: var(--accent, #a855f7);
+}

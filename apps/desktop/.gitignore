@@ -1,0 +1,33 @@
+node_modules/
+coverage/
+.npm-cache/
+.worktrees/
+# npm lock file (this project uses bun exclusively; see AGENTS.md)
+package-lock.json
+.DS_Store
+
+# Tauri build artifacts
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# Pi extension bundles (produced by scripts/build-extensions.js)
+extensions/dist/
+
+# Embedded pi binary tree (produced by scripts/fetch-pi-binary.js)
+src-tauri/resources/pi/
+.cache/pi-binaries/
+.cache/terminal-fonts/
+.cache/cjk-fonts/
+
+# Vendored font assets live under public/fonts/.
+# Use scripts/fetch-terminal-font.js and scripts/fetch-cjk-font.js to update them.
+
+# husky internal scripts (managed by `bun run prepare`)
+.husky/_/
+
+# Frontend vendor bundles (produced by scripts/build-frontend.js)
+public/vendor/
+
+# Zed editor
+.zed/

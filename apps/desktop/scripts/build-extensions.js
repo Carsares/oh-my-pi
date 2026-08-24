@@ -36,6 +36,7 @@ const ENTRIES = [["picot-bridge.ts"], ["chat-inbox/extension-entry.ts", "pi-chat
 
 const EXTERNAL = [
   "@oh-my-pi/pi-coding-agent",
+  "@oh-my-pi/pi-utils",
   "@earendil-works/pi-coding-agent",
   "@earendil-works/pi-ai",
   "@earendil-works/pi-tui",

@@ -1,7 +1,8 @@
 // ABOUTME: Rust port of extensions/skill-discovery.ts + skill-installation.ts.
 // ABOUTME: Scans a chosen directory for SKILL.md candidates, builds an opaque
 // ABOUTME: candidate tree keyed by the install secret, and links selected
-// ABOUTME: candidates into Pi's settings.json under a cross-process lock.
+// ABOUTME: candidates into OMP's skills.customDirectories under a cross-process
+// lock.
 //
 // This mirrors the feature-v3 TypeScript implementation so the host can run
 // scan/install synchronously without forwarding through pi's async
@@ -11,12 +12,13 @@
 
 use crate::skill_source_registry::SkillSourceBinding;
 use base64::Engine;
+use fs2::FileExt;
 use hmac::{Hmac, Mac};
 use serde::Serialize;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 
 type HmacSha256 = Hmac<Sha256>;
@@ -24,9 +26,8 @@ type HmacSha256 = Hmac<Sha256>;
 const IGNORE_FILE_NAMES: &[&str] = &[".gitignore", ".ignore", ".fdignore"];
 const MAX_NAME_LENGTH: usize = 64;
 const MAX_DESCRIPTION_LENGTH: usize = 1024;
-const SETTINGS_LOCK_STALE_MS: u64 = 10_000;
-const SETTINGS_LOCK_RETRY_DELAY_MS: u64 = 20;
-const SETTINGS_LOCK_MAX_ATTEMPTS: usize = 750; // ~15s ceiling
+const SETTINGS_LOCK_RETRY_DELAY_MS: u64 = 100;
+const SETTINGS_LOCK_MAX_ATTEMPTS: usize = 150; // ~15s ceiling
 
 // ── Public types (serde shapes match the TS originals for the frontend) ──
 
@@ -96,7 +97,7 @@ pub struct SkillInstallResult {
 /// operation needs plus the install secret that keys opaque candidate IDs.
 #[derive(Clone, Debug)]
 pub struct InstallContext {
-    /// Pi agent dir (~/.pi/agent), the global settings base.
+    /// OMP agent dir (~/.omp/agent), the global settings base.
     pub agent_dir: PathBuf,
     /// Current workspace cwd, the project settings base parent.
     pub cwd: PathBuf,
@@ -110,7 +111,7 @@ impl InstallContext {
         if scope == "global" {
             self.agent_dir.clone()
         } else {
-            self.cwd.join(".pi")
+            self.cwd.join(".omp")
         }
     }
 }
@@ -775,118 +776,70 @@ pub fn scan_install_source(
 
 // ── Settings lock + read/write ────────────────────────────────────────
 
-fn settings_lock_dir(settings_path: &Path) -> PathBuf {
+fn settings_lock_path(settings_path: &Path) -> PathBuf {
     let mut s = settings_path.as_os_str().to_string_lossy().into_owned();
     s.push_str(".lock");
     PathBuf::from(s)
 }
 
-/// Cross-process settings lock compatible with Pi's proper-lockfile mkdir
-/// strategy. Acquires an empty directory at `<settings>.lock`, clearing
-/// stale holders (mtime older than 10s) like Pi does.
+/// Cross-process advisory lock compatible with OMP's Unix flock lock path.
 fn with_settings_lock<R>(settings_path: &Path, critical: impl FnOnce() -> R) -> Result<R, String> {
-    let lock_dir = settings_lock_dir(settings_path);
+    let lock_path = settings_lock_path(settings_path);
     if let Some(parent) = settings_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("Cannot create settings dir: {e}"))?;
     }
-    for _ in 0..SETTINGS_LOCK_MAX_ATTEMPTS {
-        match fs::create_dir(&lock_dir) {
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .map_err(|error| format!("Cannot open settings lock: {error}"))?;
+    for attempt in 0..SETTINGS_LOCK_MAX_ATTEMPTS {
+        match lock.try_lock_exclusive() {
             Ok(()) => {
                 let result = critical();
-                let _ = fs::remove_dir(&lock_dir);
+                let _ = FileExt::unlock(&lock);
                 return Ok(result);
             }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                // Staleness check.
-                match fs::metadata(&lock_dir) {
-                    Ok(meta) => {
-                        let mtime = meta
-                            .modified()
-                            .ok()
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_millis() as u64)
-                            .unwrap_or(0);
-                        let now = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .map(|d| d.as_millis() as u64)
-                            .unwrap_or(0);
-                        if now.saturating_sub(mtime) > SETTINGS_LOCK_STALE_MS {
-                            let _ = fs::remove_dir(&lock_dir);
-                            continue;
-                        }
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                    Err(error) => return Err(format!("Settings lock stat failed: {error}")),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                if attempt + 1 < SETTINGS_LOCK_MAX_ATTEMPTS {
+                    std::thread::sleep(std::time::Duration::from_millis(
+                        SETTINGS_LOCK_RETRY_DELAY_MS,
+                    ));
                 }
-                std::thread::sleep(std::time::Duration::from_millis(
-                    SETTINGS_LOCK_RETRY_DELAY_MS,
-                ));
             }
             Err(error) => return Err(format!("Cannot acquire settings lock: {error}")),
         }
     }
     Err(format!(
         "Timed out waiting for settings lock: {}",
-        lock_dir.display()
+        lock_path.display()
     ))
 }
 
-/// Read Pi settings as a JSON object, migrating the legacy
-/// `{ skills: { enableSkillCommands, customDirectories } }` shape (mirrors
-/// migrateLegacySkills in skill-inventory.ts).
+/// Read OMP config.yml as a JSON-compatible object so unrelated YAML fields
+/// survive.
 fn read_settings_object(settings_path: &Path) -> Result<Map<String, Value>, String> {
     if !settings_path.exists() {
         return Ok(Map::new());
     }
     let text = fs::read_to_string(settings_path)
         .map_err(|e| format!("Cannot read settings {}: {e}", settings_path.display()))?;
-    let parsed: Value = serde_json::from_str(&text).map_err(|e| {
+    let parsed: Value = serde_yaml::from_str(&text).map_err(|e| {
         format!(
-            "Pi settings at {} must be valid JSON: {e}",
+            "OMP config at {} must be valid YAML: {e}",
             settings_path.display()
         )
     })?;
-    let mut obj = match parsed {
-        Value::Object(map) => map,
+    match parsed {
+        Value::Object(map) => Ok(map),
         _ => {
-            return Err(format!(
-                "Pi settings must be a JSON object: {}",
+            Err(format!(
+                "OMP config must be a YAML object: {}",
                 settings_path.display()
             ))
         }
-    };
-    migrate_legacy_skills(&mut obj);
-    Ok(obj)
-}
-
-fn migrate_legacy_skills(settings: &mut Map<String, Value>) {
-    let Some(skills) = settings.get("skills").cloned() else {
-        return;
-    };
-    let Some(skills_obj) = skills.as_object() else {
-        return;
-    };
-    if let Some(enable) = skills_obj.get("enableSkillCommands") {
-        if !settings.contains_key("enableSkillCommands") {
-            settings.insert("enableSkillCommands".into(), enable.clone());
-        }
-    }
-    if let Some(custom) = skills_obj
-        .get("customDirectories")
-        .and_then(|v| v.as_array())
-    {
-        let dirs: Vec<Value> = custom
-            .iter()
-            .filter(|v| v.as_str().is_some())
-            .cloned()
-            .collect();
-        if dirs.is_empty() {
-            settings.remove("skills");
-        } else {
-            settings.insert("skills".into(), Value::Array(dirs));
-        }
-    } else {
-        settings.remove("skills");
     }
 }
 
@@ -897,8 +850,8 @@ fn write_settings_atomically(settings_path: &Path, next: &Value) -> Result<(), S
         ".picot-skills-{}.tmp",
         uuid::Uuid::new_v4().simple()
     ));
-    let pretty = serde_json::to_string_pretty(next).map_err(|e| e.to_string())?;
-    if let Err(error) = fs::write(&tmp, format!("{pretty}\n")) {
+    let yaml = serde_yaml::to_string(next).map_err(|e| e.to_string())?;
+    if let Err(error) = fs::write(&tmp, yaml) {
         let _ = fs::remove_file(&tmp);
         return Err(format!("Cannot write settings: {error}"));
     }
@@ -912,10 +865,14 @@ fn write_settings_atomically(settings_path: &Path, next: &Value) -> Result<(), S
     Ok(())
 }
 
-fn settings_skills(settings_path: &Path, _base_dir: &Path) -> Result<Vec<String>, String> {
+fn settings_custom_directories(settings_path: &Path) -> Result<Vec<String>, String> {
     let obj = read_settings_object(settings_path)?;
-    let skills = obj.get("skills").and_then(|v| v.as_array());
-    Ok(skills
+    let custom_directories = obj
+        .get("skills")
+        .and_then(Value::as_object)
+        .and_then(|skills| skills.get("customDirectories"))
+        .and_then(Value::as_array);
+    Ok(custom_directories
         .map(|arr| {
             arr.iter()
                 .filter_map(|v| v.as_str().map(String::from))
@@ -925,7 +882,12 @@ fn settings_skills(settings_path: &Path, _base_dir: &Path) -> Result<Vec<String>
 }
 
 fn existing_canonical_path(entry: &str, base_dir: &Path) -> PathBuf {
-    let target = base_dir.join(entry);
+    let entry_path = Path::new(entry);
+    let target = if entry_path.is_absolute() {
+        entry_path.to_path_buf()
+    } else {
+        base_dir.join(entry_path)
+    };
     canonicalize_existing(&target)
 }
 
@@ -956,34 +918,6 @@ fn node_by_id(tree: &[SkillTreeNode]) -> HashMap<String, &SkillTreeNode> {
     nodes
 }
 
-fn common_directory(paths: &[PathBuf]) -> Result<PathBuf, String> {
-    if paths.is_empty() {
-        return Err("Invalid skill install selection".into());
-    }
-    if paths.len() == 1 {
-        return Ok(paths[0].clone());
-    }
-    let first = &paths[0];
-    let components: Vec<Vec<_>> = paths
-        .iter()
-        .map(|p| p.components().collect::<Vec<_>>())
-        .collect();
-    let mut common: Vec<_> = Vec::new();
-    for index in 0.. {
-        let next = components[0].get(index);
-        if next.is_none() || components.iter().any(|c| c.get(index) != next) {
-            break;
-        }
-        common.push(next.unwrap());
-    }
-    let result: PathBuf = common.iter().collect();
-    if result.as_os_str().is_empty() {
-        Ok(first.clone())
-    } else {
-        Ok(result)
-    }
-}
-
 /// Build the additions/skipped preview from a scan + selection. Mirrors
 /// buildSkillInstallPreview in skill-installation.ts.
 fn build_install_preview(
@@ -991,26 +925,14 @@ fn build_install_preview(
     _scope: &str,
     selection: &[InstallCandidateSelection],
     base_dir: &Path,
+    cwd: &Path,
 ) -> Result<(Vec<String>, Vec<String>), String> {
     let nodes = node_by_id(&scan.tree);
-    let mut selected_paths: BTreeSet<PathBuf> = BTreeSet::new();
+    let mut selected_candidates: BTreeSet<PathBuf> = BTreeSet::new();
     for item in selection {
         let node = nodes
             .get(&item.id)
             .ok_or_else(|| "Invalid skill install selection".to_string())?;
-        match node {
-            SkillTreeNode::Candidate(c) => {
-                selected_paths.insert(PathBuf::from(&c.display_canonical_path));
-            }
-            SkillTreeNode::Group(_g) => {
-                let paths: Vec<PathBuf> = flatten_candidates(node)
-                    .iter()
-                    .map(|c| PathBuf::from(&c.display_canonical_path))
-                    .collect();
-                selected_paths.insert(common_directory(&paths)?);
-            }
-        }
-        // Validate kind matches (TS: node.kind !== item.kind).
         let kind = match node {
             SkillTreeNode::Candidate(_) => "skill",
             SkillTreeNode::Group(_) => "group",
@@ -1018,13 +940,51 @@ fn build_install_preview(
         if kind != item.kind {
             return Err("Invalid skill install selection".into());
         }
+        for candidate in flatten_candidates(node) {
+            selected_candidates.insert(PathBuf::from(&candidate.display_canonical_path));
+        }
     }
-    let settings_path = base_dir.join("settings.json");
-    let existing = settings_skills(&settings_path, base_dir)?;
+    if selected_candidates.is_empty() {
+        return Err("Invalid skill install selection".into());
+    }
+    let all_candidates: Vec<PathBuf> = nodes
+        .values()
+        .filter_map(|node| match node {
+            SkillTreeNode::Candidate(candidate) => {
+                Some(PathBuf::from(&candidate.display_canonical_path))
+            }
+            SkillTreeNode::Group(_) => None,
+        })
+        .collect();
+    let source_path = Path::new(&scan.display_canonical_source_path);
+    let mut selected_paths: BTreeSet<PathBuf> = BTreeSet::new();
+    for candidate in &selected_candidates {
+        if candidate == source_path {
+            return Err(
+                "OMP custom directories load direct child skills; select the parent directory instead"
+                    .into(),
+            );
+        }
+        let root = candidate
+            .parent()
+            .ok_or_else(|| "Invalid skill install selection".to_string())?
+            .to_path_buf();
+        if all_candidates.iter().any(|sibling| {
+            sibling.parent() == Some(root.as_path()) && !selected_candidates.contains(sibling)
+        }) {
+            return Err(
+                "OMP custom directories load every direct child skill; select all sibling skills \
+                 under the directory"
+                    .into(),
+            );
+        }
+        selected_paths.insert(root);
+    }
+    let settings_path = base_dir.join("config.yml");
+    let existing = settings_custom_directories(&settings_path)?;
     let configured: HashSet<PathBuf> = existing
         .iter()
-        .filter(|e| !e.starts_with('!') && !e.starts_with('+') && !e.starts_with('-'))
-        .map(|e| existing_canonical_path(e, base_dir))
+        .map(|entry| existing_canonical_path(entry, cwd))
         .collect();
 
     let mut additions = Vec::new();
@@ -1034,26 +994,12 @@ fn build_install_preview(
             skipped.push(path.to_string_lossy().into_owned());
             continue;
         }
-        let encoded = to_posix(
-            &path
-                .strip_prefix(base_dir)
-                .unwrap_or(path)
-                .to_string_lossy(),
-        );
-        if encoded.is_empty() || encoded.starts_with("../") || encoded == ".." {
-            additions.push(if encoded.is_empty() {
-                path.to_string_lossy().into_owned()
-            } else {
-                encoded
-            });
-        } else {
-            additions.push(format!("./{encoded}"));
-        }
+        additions.push(path.to_string_lossy().into_owned());
     }
     Ok((additions, skipped))
 }
 
-/// Install selected skill links into Pi's settings.json. Mirrors
+/// Install selected skill roots into OMP's config.yml. Mirrors
 /// installSkillLinks in skill-installation.ts: rescans to verify the
 /// revision is fresh, takes the cross-process settings lock, builds the
 /// preview, appends missing entries atomically.
@@ -1065,7 +1011,7 @@ pub fn install_links(
     context: &InstallContext,
 ) -> Result<SkillInstallResult, String> {
     let base_dir = context.base_dir(scope);
-    let settings_path = base_dir.join("settings.json");
+    let settings_path = base_dir.join("config.yml");
 
     // Rescan OUTSIDE the lock to verify freshness.
     let fresh_scan = scan_install_source(binding, context);
@@ -1074,25 +1020,33 @@ pub fn install_links(
     }
 
     with_settings_lock(&settings_path, || -> Result<SkillInstallResult, String> {
-        let (additions, skipped) = build_install_preview(&fresh_scan, scope, selection, &base_dir)?;
+        let (additions, skipped) =
+            build_install_preview(&fresh_scan, scope, selection, &base_dir, &context.cwd)?;
         let original = read_settings_object(&settings_path)?;
-        let current_skills: Vec<Value> = original
+        let mut skills = original
             .get("skills")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter(|v| v.as_str().is_some())
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        let current_directories: Vec<Value> = skills
+            .get("customDirectories")
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter(|value| value.as_str().is_some())
                     .cloned()
                     .collect()
             })
             .unwrap_or_default();
         if !additions.is_empty() {
             let mut next = original;
-            let mut merged = current_skills;
+            let mut merged = current_directories;
             for addition in &additions {
                 merged.push(Value::String(addition.clone()));
             }
-            next.insert("skills".into(), Value::Array(merged));
+            skills.insert("customDirectories".into(), Value::Array(merged));
+            next.insert("skills".into(), Value::Object(skills));
             write_settings_atomically(&settings_path, &Value::Object(next))?;
         }
         Ok(SkillInstallResult {
@@ -1215,20 +1169,19 @@ mod tests {
     }
 
     #[test]
-    fn install_appends_relative_entries_and_skips_existing() {
+    fn install_skips_an_existing_omp_custom_root() {
         let tmp = tempdir().unwrap();
         let agent = tmp.path().join("agent");
         let source = tmp.path().join("source");
         write_skill(&source.join("notes"), "release-notes", "Cut a release");
 
-        // Pre-seed global settings with the skill already configured so the
-        // install must skip it.
+        // Pre-seed global config with the direct-child root already configured.
         fs::create_dir_all(&agent).unwrap();
         fs::write(
-            agent.join("settings.json"),
+            agent.join("config.yml"),
             format!(
-                "{{\"skills\":[\"{}\"]}}\n",
-                source.join("notes").to_string_lossy().replace('\\', "/")
+                "skills:\n  customDirectories:\n    - {}\n",
+                source.to_string_lossy().replace('\\', "/")
             ),
         )
         .unwrap();
@@ -1300,12 +1253,51 @@ mod tests {
         .expect("install should succeed");
         assert!(!result.added_entries.is_empty());
         assert!(result.settings_changed);
-        // settings.json now contains a skills array with at least one entry.
+        // config.yml now contains the source root under skills.customDirectories.
         let written: Value =
-            serde_json::from_str(&fs::read_to_string(agent.join("settings.json")).unwrap())
-                .unwrap();
-        let skills = written.get("skills").and_then(|v| v.as_array()).unwrap();
-        assert!(skills.iter().any(|v| v.as_str().unwrap().contains("fresh")));
+            serde_yaml::from_str(&fs::read_to_string(agent.join("config.yml")).unwrap()).unwrap();
+        let custom_directories = written
+            .get("skills")
+            .and_then(Value::as_object)
+            .and_then(|skills| skills.get("customDirectories"))
+            .and_then(Value::as_array)
+            .unwrap();
+        assert!(
+            custom_directories.iter().any(|value| value.as_str()
+                == Some(canonicalize_existing(&source).to_string_lossy().as_ref()))
+        );
+    }
+
+    #[test]
+    fn install_rejects_partial_direct_sibling_selection() {
+        let tmp = tempdir().unwrap();
+        let source = tmp.path().join("source");
+        write_skill(&source.join("first"), "first", "First skill");
+        write_skill(&source.join("second"), "second", "Second skill");
+        let (binding, mut context) = binding(&source, "secret");
+        context.agent_dir = tmp.path().join("agent");
+        let scan = scan_install_source(&binding, &context);
+        let result = install_links(
+            &binding,
+            "global",
+            &scan.scan_revision,
+            &scan.default_selection[..1],
+            &context,
+        );
+        assert!(result.unwrap_err().contains("all sibling skills"));
+    }
+
+    #[test]
+    fn install_rejects_a_source_that_is_itself_a_skill() {
+        let tmp = tempdir().unwrap();
+        let source = tmp.path().join("single");
+        write_skill(&source, "single", "Single skill");
+        let (binding, mut context) = binding(&source, "secret");
+        context.agent_dir = tmp.path().join("agent");
+        let scan = scan_install_source(&binding, &context);
+        let result =
+            install_links(&binding, "global", &scan.scan_revision, &scan.default_selection, &context);
+        assert!(result.unwrap_err().contains("parent directory"));
     }
 
     #[test]

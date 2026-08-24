@@ -1839,10 +1839,8 @@ async fn dispatch_host_operation(
             .await
             .map_err(|error| ("host_operation_failed", error.to_string()))?
             .map_err(|message| ("skill_scan_failed", message))?;
-            let agent_dir = dirs::home_dir()
-                .unwrap_or_else(std::env::temp_dir)
-                .join(".pi")
-                .join("agent");
+            let agent_dir = crate::omp_paths::agent_dir()
+                .map_err(|message| ("skill_scan_failed", message))?;
             let install_secret = state.install_secret.clone();
             let context = crate::skill_install::InstallContext {
                 agent_dir,
@@ -1945,10 +1943,8 @@ async fn dispatch_host_operation(
             .map_err(|message| ("skill_install_failed", message))?;
             // On success, consume the sourceId so it cannot be reused — the
             // design contract makes a successful install consume the handle.
-            let agent_dir = dirs::home_dir()
-                .unwrap_or_else(std::env::temp_dir)
-                .join(".pi")
-                .join("agent");
+            let agent_dir = crate::omp_paths::agent_dir()
+                .map_err(|message| ("skill_install_failed", message))?;
             let install_secret = state.install_secret.clone();
             let context = crate::skill_install::InstallContext {
                 agent_dir,

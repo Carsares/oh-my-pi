@@ -230,6 +230,7 @@ function skillInventoryOptions(scope: SkillScope, ctx: ConfigContext) {
     agentDir: OMP_AGENT_ROOT,
     homeDir: HOME_DIR,
     projectTrusted: Boolean(ctx.isProjectTrusted?.()),
+    settingsRuntime: settings,
   };
 }
 
@@ -823,7 +824,7 @@ export async function handlePicotConfig(
 
       case "list_skill_inventory": {
         const scope = parseSkillScope(params.scope);
-        return { ok: true, data: buildSkillInventory(skillInventoryOptions(scope, ctx)) };
+        return { ok: true, data: await buildSkillInventory(skillInventoryOptions(scope, ctx)) };
       }
 
       case "set_skill_enabled": {

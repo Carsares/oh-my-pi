@@ -10,7 +10,19 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+
+vi.mock("@oh-my-pi/pi-utils/file-lock", () => ({
+  withFileLock: async (_path, critical) => await critical(),
+}));
+vi.mock("@oh-my-pi/pi-coding-agent/discovery", () => ({
+  loadCapability: vi.fn(async () => ({ items: [], all: [], warnings: [], providers: [] })),
+}));
+vi.mock("@oh-my-pi/pi-coding-agent/discovery/helpers", () => ({
+  scanSkillsFromDir: vi.fn(async () => ({ items: [], warnings: [] })),
+}));
+
 import {
   buildSkillInstallPreview,
   type InstallHostSource,
@@ -41,13 +53,7 @@ function source(root: string): InstallHostSource {
 }
 
 function options(root: string) {
-  return { cwd: root, agentDir: join(root, ".pi", "agent"), projectTrusted: true };
-}
-
-function firstGroupId(scan: ReturnType<typeof scanSkillInstallSource>): string {
-  const group = scan.tree.find((node) => node.kind === "group");
-  if (group?.kind !== "group") throw new Error("expected group");
-  return group.id;
+  return { cwd: root, agentDir: join(root, ".omp", "agent"), projectTrusted: true };
 }
 
 describe("scanSkillInstallSource", () => {
@@ -113,8 +119,11 @@ describe("installSkillLinks", () => {
       context,
     });
     expect(result.settingsChanged).toBe(true);
-    expect(result.addedEntries).toHaveLength(2);
-    const settingsPath = join(root, ".pi", "agent", "settings.json");
+    expect(result.addedEntries).toHaveLength(1);
+    const settingsPath = join(root, ".omp", "agent", "config.yml");
+    expect(parseYaml(readFileSync(settingsPath, "utf8"))).toEqual({
+      skills: { customDirectories: [realpathSync(root)] },
+    });
     const firstText = readFileSync(settingsPath, "utf8");
     const repeated = await installSkillLinks({
       source: source(root),
@@ -144,33 +153,27 @@ describe("installSkillLinks", () => {
         context,
       }),
     ).rejects.toThrow(/rescan/);
-    expect(() => readFileSync(join(root, ".pi", "agent", "settings.json"))).toThrow();
+    expect(() => readFileSync(join(root, ".omp", "agent", "config.yml"))).toThrow();
   });
 });
 
 describe("buildSkillInstallPreview", () => {
-  it("reduces a selected group to one relative directory entry", () => {
+  it("reduces a complete direct-sibling selection to one absolute OMP custom root", () => {
     const root = fixture();
     const scan = scanSkillInstallSource(source(root), options(root));
-    const preview = buildSkillInstallPreview(
-      scan,
-      "global",
-      [{ kind: "group", id: firstGroupId(scan) }],
-      options(root),
-    );
-    expect(preview.additions).toEqual(["../../review"]);
-    expect(preview.settingsPath).toBe(join(realpathSync(root), ".pi", "agent", "settings.json"));
+    const preview = buildSkillInstallPreview(scan, "global", scan.defaultSelection, options(root));
+    expect(preview.additions).toEqual([realpathSync(root)]);
+    expect(preview.settingsPath).toBe(join(realpathSync(root), ".omp", "agent", "config.yml"));
   });
 
-  it("serializes a selected skill relative to the project settings base", () => {
+  it("rejects partial direct-sibling selection because OMP would load unselected siblings", () => {
     const root = fixture();
     const scan = scanSkillInstallSource(source(root), options(root));
     const selected = scan.defaultSelection.find((item) => item.kind === "skill");
     if (!selected) throw new Error("expected skill");
-    const preview = buildSkillInstallPreview(scan, "project", [selected], options(root));
-    expect(preview.additions).toHaveLength(1);
-    expect(preview.additions[0]).toMatch(/^\.\.\//);
-    expect(preview.settingsPath).toBe(join(realpathSync(root), ".pi", "settings.json"));
+    expect(() => buildSkillInstallPreview(scan, "project", [selected], options(root))).toThrow(
+      /all sibling skills/,
+    );
   });
 
   it("rejects unknown selections and untrusted project preview", () => {
@@ -187,28 +190,27 @@ describe("buildSkillInstallPreview", () => {
     ).toThrow(/trusted/);
   });
 
-  it("treats legacy skills.customDirectories as already-configured paths", () => {
-    // Pi and Picot migrate legacy { skills: { enableSkillCommands, customDirectories } }
-    // into skills: string[]. The preview must see the same migrated list, so a
-    // source skill directory already listed in customDirectories is reported as
-    // skipped, not added. Build the fixture under a realpath-canonical base so
-    // macOS /var→/private/var symlink redirection does not desync additions
-    // from dedup.
+  it("treats OMP skills.customDirectories as already configured", () => {
     const root = realpathSync(fixture());
-    const opts = { cwd: root, agentDir: join(root, ".pi", "agent"), projectTrusted: true };
-    const settingsPath = join(opts.agentDir, "settings.json");
+    const opts = { cwd: root, agentDir: join(root, ".omp", "agent"), projectTrusted: true };
+    const settingsPath = join(opts.agentDir, "config.yml");
     mkdirSync(opts.agentDir, { recursive: true });
     writeFileSync(
       settingsPath,
-      JSON.stringify({
-        skills: { enableSkillCommands: false, customDirectories: ["../../review"] },
-      }),
+      stringifyYaml({ skills: { enableSkillCommands: false, customDirectories: [root] } }),
     );
     const scan = scanSkillInstallSource(source(root), opts);
-    const selected = scan.defaultSelection.find((item) => item.kind === "skill");
-    if (!selected) throw new Error("expected skill");
-    const preview = buildSkillInstallPreview(scan, "global", [selected], opts);
+    const preview = buildSkillInstallPreview(scan, "global", scan.defaultSelection, opts);
     expect(preview.additions).toEqual([]);
     expect(preview.skippedEntries).toHaveLength(1);
+  });
+
+  it("rejects selecting a source that is itself a skill", () => {
+    const root = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "picot-single-"));
+    writeFileSync(join(root, "SKILL.md"), "---\nname: single\ndescription: one\n---\nbody\n");
+    const scan = scanSkillInstallSource(source(root), options(root));
+    expect(() =>
+      buildSkillInstallPreview(scan, "global", scan.defaultSelection, options(root)),
+    ).toThrow(/parent directory/);
   });
 });

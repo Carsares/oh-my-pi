@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -15,6 +16,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 const ompSettings = vi.hoisted(() => ({
+  get: vi.fn(() => []),
+  getGroup: vi.fn(() => ({})),
   flush: vi.fn(async () => undefined),
   reloadFromDisk: vi.fn(async () => undefined),
 }));
@@ -24,6 +27,41 @@ vi.mock("@oh-my-pi/pi-coding-agent", () => ({
   ModelRuntime: { create: vi.fn() },
   SessionManager: { inMemory: vi.fn(), listAll: vi.fn(), open: vi.fn() },
   settings: ompSettings,
+}));
+vi.mock("@oh-my-pi/pi-utils/file-lock", () => ({
+  withFileLock: async (_path, critical) => await critical(),
+}));
+vi.mock("@oh-my-pi/pi-coding-agent/discovery", () => ({
+  loadCapability: vi.fn(async () => {
+    const agentDir = process.env.PI_CODING_AGENT_DIR || "";
+    const skillRoot = join(agentDir, "skills");
+    const items = existsSync(skillRoot)
+      ? readdirSync(skillRoot, { withFileTypes: true })
+          .filter(
+            (entry) => entry.isDirectory() && existsSync(join(skillRoot, entry.name, "SKILL.md")),
+          )
+          .map((entry) => {
+            const skillPath = join(skillRoot, entry.name, "SKILL.md");
+            return {
+              name: entry.name,
+              path: skillPath,
+              content: "",
+              frontmatter: { name: entry.name, description: "Demo skill" },
+              level: "user",
+              _source: {
+                provider: "native",
+                providerName: "OMP",
+                path: skillPath,
+                level: "user",
+              },
+            };
+          })
+      : [];
+    return { items, all: items, warnings: [], providers: ["native"] };
+  }),
+}));
+vi.mock("@oh-my-pi/pi-coding-agent/discovery/helpers", () => ({
+  scanSkillsFromDir: vi.fn(async () => ({ items: [], warnings: [] })),
 }));
 vi.mock("./session-title", () => ({
   generateTitleForSession: vi.fn().mockResolvedValue("Generated title"),
@@ -35,6 +73,8 @@ async function loadConfigWithTempHome() {
   const home = mkdtempSync(join(tmpdir(), "picot-config-auth-"));
   tempHomes.push(home);
   vi.resetModules();
+  const titleModule = await import("./session-title.ts");
+  vi.spyOn(titleModule, "generateTitleForSession").mockResolvedValue("Generated title");
   process.env.HOME = home;
   const agentDir = join(home, "relocated-omp-agent");
   vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
@@ -223,8 +263,8 @@ describe("picot config skills operations", () => {
       ),
     ).resolves.toMatchObject({ ok: true });
 
-    expect(JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8"))).toEqual({
-      skills: ["-skills/demo-skill"],
+    expect(parseYaml(readFileSync(join(agentDir, "config.yml"), "utf8"))).toEqual({
+      disabledExtensions: ["skill:demo-skill"],
     });
   });
 });

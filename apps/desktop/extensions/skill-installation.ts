@@ -1,9 +1,10 @@
-// ABOUTME: Scans authenticated local directories for skills available to link into Pi.
-// ABOUTME: Produces opaque candidate/group IDs and a content-sensitive confirmation revision.
+// ABOUTME: Scans authenticated local directories for skills available to OMP.
+// ABOUTME: Adds compatible direct-child roots to skills.customDirectories after confirmation.
 
 import { createHash, createHmac } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, type Stats, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { parse as parseYaml } from "yaml";
 import {
   canonicalizeExistingPath,
   type DiscoveredSkill,
@@ -11,12 +12,7 @@ import {
   type SkillDiagnostic,
   toPosixPath,
 } from "./skill-discovery.ts";
-import {
-  migrateLegacySkills,
-  readSettingsObject,
-  withSettingsLock,
-  writeSettingsAtomically,
-} from "./skill-inventory.ts";
+import { updateYamlConfig } from "./skill-inventory.ts";
 
 export type InstallCandidateSelection = { kind: "group" | "skill"; id: string };
 export type InstallHostSource = {
@@ -173,7 +169,7 @@ export function scanSkillInstallSource(
       diagnostics,
     };
   }
-  if (!sourceStat.isDirectory) {
+  if (!sourceStat.isDirectory()) {
     diagnostics.push({ path: canonicalSource, message: "source is not a directory" });
     return {
       sourceId: source.sourceId,
@@ -292,23 +288,7 @@ function nodeById(scan: SkillInstallScan): Map<string, SkillInstallGroup | Skill
   return nodes;
 }
 
-function commonDirectory(paths: string[]): string {
-  if (paths.length === 0) throw new Error("Invalid skill install selection");
-  const resolved = paths.map((value) => resolve(value));
-  if (resolved.length === 1) return resolved[0];
-  const first = resolved[0];
-  const prefix = first.startsWith("/") ? "/" : "";
-  const parts = resolved.map((value) => value.slice(prefix.length).split(/[\\/]+/));
-  const common: string[] = [];
-  for (let index = 0; ; index += 1) {
-    const next = parts[0][index];
-    if (next === undefined || parts.some((pathParts) => pathParts[index] !== next)) break;
-    common.push(next);
-  }
-  return `${prefix}${common.join("/")}` || prefix;
-}
-
-function settingsSkills(settingsPath: string): string[] {
+function settingsCustomDirectories(settingsPath: string): string[] {
   if (!existsSync(settingsPath)) return [];
   let text: string;
   try {
@@ -318,29 +298,72 @@ function settingsSkills(settingsPath: string): string[] {
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    parsed = parseYaml(text);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "invalid JSON";
-    throw new Error(`Pi settings must be valid JSON: ${message}`);
+    const message = error instanceof Error ? error.message : "invalid YAML";
+    throw new Error(`OMP config must be valid YAML: ${message}`);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Pi settings must be a JSON object");
+    throw new Error("OMP config must be a YAML object");
   }
-  // Migrate legacy { skills: { enableSkillCommands, customDirectories } }
-  // before reading, so preview dedup sees the same effective source list as
-  // the actual mutation write (which goes through readSettingsObject).
-  const migrated = migrateLegacySkills({ ...(parsed as Record<string, unknown>) });
-  const skills = (migrated as { skills?: unknown }).skills;
-  return Array.isArray(skills)
-    ? skills.filter((item): item is string => typeof item === "string")
+  const skills = (parsed as { skills?: unknown }).skills;
+  const customDirectories =
+    skills && typeof skills === "object" && !Array.isArray(skills)
+      ? (skills as { customDirectories?: unknown }).customDirectories
+      : undefined;
+  return Array.isArray(customDirectories)
+    ? customDirectories.filter((item): item is string => typeof item === "string")
     : [];
 }
 
+function selectedCandidates(
+  scan: SkillInstallScan,
+  selection: InstallCandidateSelection[],
+): SkillInstallCandidate[] {
+  const nodes = nodeById(scan);
+  const selected = new Map<string, SkillInstallCandidate>();
+  for (const item of selection) {
+    const node = nodes.get(item.id);
+    if (!node || node.kind !== item.kind) throw new Error("Invalid skill install selection");
+    for (const candidate of flattenCandidates(node)) {
+      selected.set(candidate.displayCanonicalPath, candidate);
+    }
+  }
+  return [...selected.values()];
+}
+
+function customRootsForSelection(
+  scan: SkillInstallScan,
+  selection: InstallCandidateSelection[],
+): string[] {
+  const candidates = selectedCandidates(scan, selection);
+  const selectedPaths = new Set(candidates.map((candidate) => candidate.displayCanonicalPath));
+  const allCandidates = [...nodeById(scan).values()].filter(
+    (node): node is SkillInstallCandidate => node.kind === "skill",
+  );
+  const roots = new Set<string>();
+  for (const candidate of candidates) {
+    if (candidate.displayCanonicalPath === scan.displayCanonicalSourcePath) {
+      throw new Error(
+        "OMP custom directories load direct child skills; select the parent directory instead",
+      );
+    }
+    const root = dirname(candidate.displayCanonicalPath);
+    const siblings = allCandidates.filter((other) => dirname(other.displayCanonicalPath) === root);
+    if (siblings.some((sibling) => !selectedPaths.has(sibling.displayCanonicalPath))) {
+      throw new Error(
+        "OMP custom directories load every direct child skill; select all sibling skills under the directory",
+      );
+    }
+    roots.add(root);
+  }
+  return [...roots].sort();
+}
+
 /**
- * Build an authority-free preview from the server-issued scan. Group selections
- * serialize their full descendant set as the narrowest common directory;
- * individual selections serialize their own skill directories. Existing plain
- * paths are compared canonically and are never rewritten or reordered.
+ * Convert the selected candidates to OMP custom roots. OMP scans only direct
+ * child directories, so partial sibling selections are rejected instead of
+ * silently authorizing unselected siblings.
  */
 export function buildSkillInstallPreview(
   scan: SkillInstallScan,
@@ -355,38 +378,23 @@ export function buildSkillInstallPreview(
     throw new Error("Invalid skill install selection");
   }
   const baseDir = canonicalizePath(
-    scope === "global" ? context.agentDir : join(context.cwd, ".pi"),
+    scope === "global" ? context.agentDir : join(context.cwd, ".omp"),
   );
-  const settingsPath = join(baseDir, "settings.json");
-  const nodes = nodeById(scan);
-  const selectedPaths = new Set<string>();
-  for (const item of selection) {
-    const node = nodes.get(item.id);
-    if (!node || node.kind !== item.kind) throw new Error("Invalid skill install selection");
-    if (node.kind === "skill") selectedPaths.add(node.displayCanonicalPath);
-    else
-      selectedPaths.add(
-        commonDirectory(flattenCandidates(node).map((candidate) => candidate.displayCanonicalPath)),
-      );
-  }
-  const existing = settingsSkills(settingsPath);
+  const settingsPath = join(baseDir, "config.yml");
+  const selectedPaths = customRootsForSelection(scan, selection);
+  const existing = settingsCustomDirectories(settingsPath);
   const configuredCanonicalPaths = new Set(
-    existing
-      .filter((entry) => !entry.startsWith("!") && !entry.startsWith("+") && !entry.startsWith("-"))
-      .map((entry) => existingCanonicalPath(entry, baseDir)),
+    existing.map((entry) => existingCanonicalPath(entry, context.cwd)),
   );
   const additions: string[] = [];
   const skippedEntries: string[] = [];
   for (const selectedPath of [...selectedPaths].sort()) {
-    const canonical = existingCanonicalPath(selectedPath, baseDir);
+    const canonical = existingCanonicalPath(selectedPath, context.cwd);
     if (configuredCanonicalPaths.has(canonical)) {
       skippedEntries.push(selectedPath);
       continue;
     }
-    const encoded = toPosixPath(relative(baseDir, selectedPath));
-    if (!encoded || encoded.startsWith("../") || encoded === "..")
-      additions.push(encoded || selectedPath);
-    else additions.push(`./${encoded}`);
+    additions.push(selectedPath);
   }
   return { scope, settingsPath, additions, skippedEntries };
 }
@@ -408,9 +416,9 @@ export async function installSkillLinks(options: {
     throw new Error("Project is not trusted");
   }
   const baseDir = canonicalizePath(
-    scope === "global" ? context.agentDir : join(context.cwd, ".pi"),
+    scope === "global" ? context.agentDir : join(context.cwd, ".omp"),
   );
-  const settingsPath = join(baseDir, "settings.json");
+  const settingsPath = join(baseDir, "config.yml");
   // The expensive rescan (recursive directory walk + per-skill content hash)
   // runs OUTSIDE the settings lock so it cannot keep the lock held long
   // enough for a stale-lock takeover to delete a still-live lock. The
@@ -421,24 +429,25 @@ export async function installSkillLinks(options: {
   if (freshScan.scanRevision !== scanRevision || freshScan.sourceId !== source.sourceId) {
     throw new Error("Skill install source changed; rescan and confirm again");
   }
-  return await withSettingsLock(settingsPath, () => {
-    const preview = buildSkillInstallPreview(freshScan, scope, selection, context);
-    const original = readSettingsObject(settingsPath);
-    const currentSkills = Array.isArray(original.skills)
-      ? original.skills.filter((entry): entry is string => typeof entry === "string")
-      : [];
-    if (preview.additions.length > 0) {
-      writeSettingsAtomically(settingsPath, {
-        ...original,
-        skills: [...currentSkills, ...preview.additions],
-      });
-    }
-    return {
-      scan: freshScan,
-      addedEntries: preview.additions,
-      skippedEntries: preview.skippedEntries,
-      settingsChanged: preview.additions.length > 0,
-      runtimeRestartRequired: true,
-    };
-  });
+  const preview = buildSkillInstallPreview(freshScan, scope, selection, context);
+  if (preview.additions.length > 0) {
+    await updateYamlConfig(settingsPath, (config) => {
+      const skills =
+        config.skills && typeof config.skills === "object" && !Array.isArray(config.skills)
+          ? (config.skills as Record<string, unknown>)
+          : {};
+      const current = Array.isArray(skills.customDirectories)
+        ? skills.customDirectories.filter((entry): entry is string => typeof entry === "string")
+        : [];
+      skills.customDirectories = [...current, ...preview.additions];
+      config.skills = skills;
+    });
+  }
+  return {
+    scan: freshScan,
+    addedEntries: preview.additions,
+    skippedEntries: preview.skippedEntries,
+    settingsChanged: preview.additions.length > 0,
+    runtimeRestartRequired: true,
+  };
 }

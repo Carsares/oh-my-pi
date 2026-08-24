@@ -115,36 +115,6 @@ install_deps() {
     bun install --frozen-lockfile
 }
 
-# Mirrors tauri.conf.json's beforeBuildCommand. Run explicitly so the
-# pre-build hooks also fire when the script shells out to `tauri build`
-# (Tauri fires beforeBuildCommand only on direct `tauri` CLI invocations).
-run_picot_prebuild() {
-    log_info "Fetching embedded pi binary..."
-    bun run "$PROJECT_ROOT/scripts/fetch-pi-binary.js"
-    log_info "Fetching bundled terminal font..."
-    bun run "$PROJECT_ROOT/scripts/fetch-terminal-font.js"
-    log_info "Fetching bundled CJK font..."
-    bun run "$PROJECT_ROOT/scripts/fetch-cjk-font.js"
-    log_info "Building extensions bundle..."
-    bun run "$PROJECT_ROOT/scripts/build-extensions.js"
-}
-
-# Pre-signs the pi runtime's nested Mach-O binaries so notarization doesn't
-# reject them (Tauri's macOS bundler only signs the outer .app, not
-# arbitrary files pulled in via tauri.conf.json's `bundle.resources` map).
-# No-op when APPLE_SIGNING_IDENTITY is unset or ad-hoc ("-"). See
-# scripts/sign-pi-resources.sh for the full explanation; that same script
-# also runs as part of tauri.conf.json's beforeBuildCommand, so this call
-# is a belt-and-suspenders duplicate for the direct `tauri build`
-# invocations below (see the comment on run_picot_prebuild for why this
-# repo doesn't rely solely on the hook).
-sign_pi_resources() {
-    if [ -n "${APPLE_SIGNING_IDENTITY:-}" ] && [ "${APPLE_SIGNING_IDENTITY}" != "-" ]; then
-        log_info "Signing embedded pi native binaries for notarization..."
-    fi
-    bash "$PROJECT_ROOT/scripts/sign-pi-resources.sh"
-}
-
 # ---------- Builders ----------
 
 # Copy the most recently built DMG from a builder's bundle dir to
@@ -225,46 +195,15 @@ build_windows() {
     local target="x86_64-pc-windows-gnu"
     log_info "Building for Windows ($target) via MinGW..."
 
-    # The pi binary in resources/pi/ is host-platform. We need the
-    # Windows pi binary for a Windows build. The .version marker
-    # fetch-pi-binary.js uses for idempotency does not encode the
-    # platform, so we must clear the directory before re-fetching
-    # with PI_TARGET_PLATFORM=windows-x64 — otherwise the script
-    # sees a matching version marker and skips, leaving the macOS
-    # pi binary in place.
-    # Tauri's beforeBuildCommand runs `bun run fetch:pi` without an env
-    # override, which would re-fetch the host (mac) pi and clobber the
-    # Windows binary we want. Exporting PI_TARGET_PLATFORM makes the
-    # sub-process fetch honor our target. The fetch also runs once up
-    # front (after clearing the stale host tree) so the very first
-    # build gets the right binary even if Tauri's hook is a no-op.
-    export PI_TARGET_PLATFORM=windows-x64
-    log_info "Fetching Windows pi binary..."
-    rm -rf "$PROJECT_ROOT/src-tauri/resources/pi"
-    bun run "$PROJECT_ROOT/scripts/fetch-pi-binary.js"
-
     rustup target add "$target" 2>/dev/null || true
     export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="x86_64-w64-mingw32-gcc"
-    # Workaround: src-tauri/build.rs uses cfg!(target_os = "windows")
-    # to decide whether to look for `pi.exe` (Windows) or `pi` (host).
-    # In a build.rs, cfg! reflects the HOST cfg, not the target — so
-    # cross-compiling from macOS to Windows always evaluates to false,
-    # and the panic guard looks for `pi` (which is the macOS binary).
-    # We bypass the guard for the local cross-build: the script
-    # explicitly fetches the Windows pi binary above and copies it
-    # into the resource dir via Tauri's resource map, so we know it's
-    # there. The guard's raison d'être (preventing developers from
-    # forgetting `bun run fetch:pi`) doesn't apply to a script-driven
-    # build. The proper fix is to read CARGO_CFG_TARGET_OS in
-    # build.rs, which is a separate change.
-    export PI_STUDIO_SKIP_BIN_CHECK=1
     # --no-bundle: NSIS/MSI bundlers require Windows host tools. Cross-
     # compiling from macOS only produces the bare .exe + side files.
     PATH="$HOME/.cargo/bin:$PATH" tauri build --target "$target" --no-bundle
     local release_dir="src-tauri/target/$target/release"
 
     # Verify the Windows pi binary made it into the build output. Tauri
-    # copies src-tauri/resources/pi/ into the target's resource dir during
+    # copies src-tauri/resources/omp/ into the target's resource dir during
     # the build. If the file is a Mach-O (or anything other than a Windows
     # PE), something went wrong with the cross-platform fetch above.
     if [ ! -f "$release_dir/Picot.exe" ]; then
@@ -286,7 +225,7 @@ build_windows() {
     (cd "$release_dir" && zip -r "$PROJECT_ROOT/$zip_name" \
         Picot.exe \
         WebView2Loader.dll \
-        pi \
+        omp \
         extensions \
         public \
         -x '*.DS_Store' \
@@ -294,7 +233,7 @@ build_windows() {
 
     log_info "Windows build completed."
     log_info "  Zip: $PROJECT_ROOT/$zip_name"
-    log_info "  Contents: Picot.exe + bundled DLLs + embedded pi tree + extensions"
+    log_info "  Contents: Picot.exe + bundled DLLs + embedded OMP runtime + extensions"
     log_info "Note: no MSI. Testers unzip and run Picot.exe directly."
 }
 
@@ -373,9 +312,13 @@ main() {
     fi
 
     check_requirements
+    case "$BUILD_PLATFORM" in
+        mac-arm)         export CROSS_TARGET=darwin-arm64 ;;
+        mac-intel)       export CROSS_TARGET=darwin-x64 ;;
+        mac-universal)   export CROSS_TARGET=darwin-universal ;;
+        windows)         export CROSS_TARGET=windows-x64 ;;
+    esac
     install_deps
-    run_picot_prebuild
-    sign_pi_resources
 
     case "$BUILD_PLATFORM" in
         mac-arm)         build_mac_arm ;;

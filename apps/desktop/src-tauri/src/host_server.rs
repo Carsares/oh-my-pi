@@ -373,7 +373,7 @@ async fn health(State(state): State<Arc<HostState>>) -> Json<Value> {
     Json(json!({
         "status": "ok",
         "protocolVersion": PROTOCOL_VERSION,
-        "piVersion": crate::pi_launch::locked_pi_version(),
+        "ompVersion": crate::pi_launch::bundled_omp_version(),
         "lanUrl": local_lan_url_with_port(state.port).unwrap_or_default(),
         "runtimeCount": runtime_count,
     }))
@@ -2348,7 +2348,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(health["protocolVersion"], 2);
-        assert_eq!(health["piVersion"], env!("PI_STUDIO_PI_VERSION_BUNDLED"));
+        assert_eq!(health["ompVersion"], env!("PICOT_OMP_VERSION_BUNDLED"));
         let index = reqwest::get(format!("{}/app/settings", host.origin()))
             .await
             .unwrap()

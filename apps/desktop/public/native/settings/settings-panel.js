@@ -231,7 +231,7 @@ export function setupSettingsPanel({
       const response = await fetch("/health");
       const health = await response.json();
       clearLoadingPlaceholder(piVersionValue);
-      piVersionValue.textContent = health?.piVersion || "Unavailable";
+      piVersionValue.textContent = health?.ompVersion || "Unavailable";
     } catch {
       clearLoadingPlaceholder(piVersionValue);
       piVersionValue.textContent = t("sidebar.unavailable");

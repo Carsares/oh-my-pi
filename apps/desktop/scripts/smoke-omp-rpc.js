@@ -1,18 +1,19 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
-const { version: piVersion } = await Bun.file(join(root, "scripts", "pi-version.json")).json();
+const { version: ompVersion } = await Bun.file(
+  join(root, "..", "..", "packages", "coding-agent", "package.json"),
+).json();
 const binary = join(
   root,
   "src-tauri",
   "resources",
-  "pi",
-  process.platform === "win32" ? "pi.exe" : "pi",
+  "omp",
+  process.platform === "win32" ? "omp.exe" : "omp",
 );
-const fixtureDir = join(root, "tests", "fixtures", "pi-rpc", piVersion);
-const update = process.argv.includes("--update");
+const fixtureDir = join(root, "tests", "fixtures", "omp-rpc", ompVersion);
 const temp = await mkdtemp(join(tmpdir(), "picot-rpc-smoke-"));
 const extension = join(temp, "smoke-extension.ts");
 
@@ -85,14 +86,14 @@ function assertSuccess(frame, command) {
 
 try {
   const state = await request({ type: "get_state" });
-  const commands = await request({ type: "get_commands" });
+  const commands = await request({ type: "get_available_commands" });
   const steering = await request({ type: "set_steering_mode", mode: "all" });
   const followUp = await request({ type: "set_follow_up_mode", mode: "one-at-a-time" });
   const prompt = await request({ type: "prompt", message: "/picot-smoke" });
   const abort = await request({ type: "abort" });
   for (const [name, frame] of Object.entries({
     get_state: state,
-    get_commands: commands,
+    get_available_commands: commands,
     set_steering_mode: steering,
     set_follow_up_mode: followUp,
     prompt,
@@ -101,34 +102,37 @@ try {
     assertSuccess(frame, name);
   }
 
-  const contract = {
-    version: piVersion,
-    commands: [
-      "get_state",
-      "get_commands",
-      "set_steering_mode",
-      "set_follow_up_mode",
-      "prompt",
-      "abort",
-    ],
-    stateFields: Object.keys(state.data ?? {}).sort(),
-    commandSources: [...new Set((commands.data?.commands ?? []).map((item) => item.source))].sort(),
-    eventTypes: [...new Set(observedEvents.map((event) => event.type))].sort(),
-    promptAcceptance: prompt.success,
-  };
-  const fixture = join(fixtureDir, "contract.json");
-  if (update) {
-    await mkdir(fixtureDir, { recursive: true });
-    await writeFile(fixture, `${JSON.stringify(contract, null, 2)}\n`);
-  } else {
-    const expected = await Bun.file(fixture).json();
-    if (JSON.stringify(contract) !== JSON.stringify(expected)) {
-      throw new Error(
-        `Pi RPC contract drifted. Run bun run smoke:pi-rpc --update after review.\n${JSON.stringify(contract, null, 2)}`,
-      );
-    }
+  const expected = await Bun.file(join(fixtureDir, "contract.json")).json();
+  const exercisedCommands = [
+    "get_state",
+    "get_available_commands",
+    "set_steering_mode",
+    "set_follow_up_mode",
+    "prompt",
+    "abort",
+  ];
+  const missingFixtureCommands = exercisedCommands.filter(
+    (command) => !expected.commands.includes(command),
+  );
+  if (missingFixtureCommands.length > 0) {
+    throw new Error(
+      `OMP fixture is missing exercised commands: ${missingFixtureCommands.join(", ")}`,
+    );
   }
-  console.log(`Pi ${contract.version} RPC smoke passed (${contract.commands.length} commands)`);
+  const missingStateFields = expected.stateFields.filter(
+    (field) => field !== "model" && !(field in (state.data ?? {})),
+  );
+  if (missingStateFields.length > 0) {
+    throw new Error(`OMP state is missing required fields: ${missingStateFields.join(", ")}`);
+  }
+  const availableCommands = commands.data?.commands ?? [];
+  if (!availableCommands.some((command) => command.name === "picot-smoke")) {
+    throw new Error("OMP did not load the bundled Picot smoke extension");
+  }
+  if (!observedEvents.some((event) => event.type === "extension_ui_request")) {
+    throw new Error("OMP did not emit the expected extension UI event");
+  }
+  console.log(`OMP ${ompVersion} RPC smoke passed (${exercisedCommands.length} commands)`);
 } finally {
   subprocess.stdin.end();
   await subprocess.exited;

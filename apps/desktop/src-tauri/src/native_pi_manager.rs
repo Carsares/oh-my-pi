@@ -23,7 +23,7 @@ pub struct NativeLaunchSpec {
     pub cwd: PathBuf,
     pub session_path: Option<PathBuf>,
     pub extensions: Vec<PathBuf>,
-    pub pi_version: String,
+    pub omp_version: String,
     pub path_env: String,
     /// When true, spawn `pi --approve`: the desktop owner trusts the chosen
     /// workspace's project-local resources (.pi/settings.json, .agents/skills,
@@ -58,7 +58,7 @@ impl NativeLaunchSpec {
         }
         let environment = BTreeMap::from([
             ("PATH".into(), self.path_env.clone()),
-            ("PI_STUDIO_PI_VERSION".into(), self.pi_version.clone()),
+            ("PICOT_OMP_VERSION".into(), self.omp_version.clone()),
         ]);
         LaunchDescription {
             program: self.binary.clone(),
@@ -125,7 +125,7 @@ impl NativePiManager {
             .stderr(Stdio::piped());
         let child = command
             .spawn()
-            .map_err(|error| format!("Cannot start embedded Pi native RPC process: {error}"))?;
+            .map_err(|error| format!("Cannot start embedded OMP RPC process: {error}"))?;
         let (bridge, mut process) = PiRpcBridge::attach(child, MAX_RPC_FRAME_BYTES)?;
         if let Err(error) = self
             .inner
@@ -135,7 +135,7 @@ impl NativePiManager {
             .register(target.clone(), RuntimeState::Starting)
         {
             let _ = process.kill();
-            return Err(format!("Cannot register Pi runtime: {error:?}"));
+            return Err(format!("Cannot register OMP runtime: {error:?}"));
         }
         self.inner
             .runtimes
@@ -640,7 +640,7 @@ mod tests {
             cwd: PathBuf::from("/workspace"),
             session_path: Some(PathBuf::from("/sessions/a.jsonl")),
             extensions: vec![PathBuf::from("/extensions/picot-bridge.mjs")],
-            pi_version: env!("PI_STUDIO_PI_VERSION_BUNDLED").into(),
+            omp_version: env!("PICOT_OMP_VERSION_BUNDLED").into(),
             path_env: "/usr/bin".into(),
             approve: false,
         };
@@ -665,7 +665,7 @@ mod tests {
             cwd: PathBuf::from("/workspace"),
             session_path: None,
             extensions: vec![],
-            pi_version: env!("PI_STUDIO_PI_VERSION_BUNDLED").into(),
+            omp_version: env!("PICOT_OMP_VERSION_BUNDLED").into(),
             path_env: "/usr/bin".into(),
             approve: true,
         };

@@ -20,6 +20,14 @@ function desktopBinaryName(crossTarget: string | undefined): string {
 	return targetPlatform === "windows" || targetPlatform === "win32" ? "omp.exe" : "omp";
 }
 
+function crossTargetMatchesHost(crossTarget: string | undefined): boolean {
+	if (!crossTarget) return true;
+	const [platform, arch] = crossTarget.split("-");
+	const hostPlatform = process.platform === "win32" ? "windows" : process.platform;
+	const targetPlatform = platform === "win32" ? "windows" : platform;
+	return targetPlatform === hostPlatform && arch === process.arch;
+}
+
 function nativeBuildTarget(crossTarget: string | undefined): string {
 	switch (crossTarget) {
 		case undefined:
@@ -55,13 +63,23 @@ async function existingBuildOutput(baseName: string): Promise<string> {
 	throw new Error(`OMP build did not produce ${candidates.join(" or ")}`);
 }
 
-async function main(): Promise<void> {
-	const manifest = (await Bun.file(path.join(codingAgentDir, "package.json")).json()) as CodingAgentManifest;
-	if (!manifest.version) throw new Error("coding-agent package has no version");
-	const crossTarget = Bun.env.CROSS_TARGET || undefined;
-	const nativeTarget = nativeBuildTarget(crossTarget);
+async function run(command: string[], env: Record<string, string | undefined>, label: string): Promise<void> {
+	const process = Bun.spawn(command, {
+		cwd: repositoryRoot,
+		env,
+		stdout: "inherit",
+		stderr: "inherit",
+	});
+	const exitCode = await process.exited;
+	if (exitCode !== 0) throw new Error(`${label} failed with exit code ${exitCode}`);
+}
 
-	const nativeBuild = Bun.spawn(
+async function buildOmp(crossTarget: string | undefined): Promise<string> {
+	const env = { ...Bun.env };
+	if (crossTarget) env.CROSS_TARGET = crossTarget;
+	else delete env.CROSS_TARGET;
+	const nativeTarget = crossTargetMatchesHost(crossTarget) ? "host" : nativeBuildTarget(crossTarget);
+	await run(
 		[
 			"bun",
 			path.join(repositoryRoot, "scripts", "bazel-natives.ts"),
@@ -69,30 +87,27 @@ async function main(): Promise<void> {
 			"--dest",
 			path.join(repositoryRoot, "packages", "natives", "native"),
 		],
-		{
-			cwd: repositoryRoot,
-			env: Bun.env,
-			stdout: "inherit",
-			stderr: "inherit",
-		},
+		env,
+		"OMP native addon build",
 	);
-	const nativeExitCode = await nativeBuild.exited;
-	if (nativeExitCode !== 0) throw new Error(`OMP native addon build failed with exit code ${nativeExitCode}`);
+	await run(["bun", path.join(codingAgentDir, "scripts", "build-binary.ts")], env, "OMP binary build");
+	return existingBuildOutput(crossTargetOutputName(crossTarget));
+}
 
-	const build = Bun.spawn(["bun", path.join(codingAgentDir, "scripts", "build-binary.ts")], {
-		cwd: repositoryRoot,
-		env: Bun.env,
-		stdout: "inherit",
-		stderr: "inherit",
-	});
-	const exitCode = await build.exited;
-	if (exitCode !== 0) throw new Error(`OMP binary build failed with exit code ${exitCode}`);
-
-	const source = await existingBuildOutput(crossTargetOutputName(crossTarget));
+async function main(): Promise<void> {
+	const manifest = (await Bun.file(path.join(codingAgentDir, "package.json")).json()) as CodingAgentManifest;
+	if (!manifest.version) throw new Error("coding-agent package has no version");
+	const crossTarget = Bun.env.CROSS_TARGET || undefined;
 	const destination = path.join(desktopResourceDir, desktopBinaryName(crossTarget));
 	await fs.rm(desktopResourceDir, { recursive: true, force: true });
 	await fs.mkdir(desktopResourceDir, { recursive: true });
-	await fs.copyFile(source, destination);
+	if (crossTarget === "darwin-universal") {
+		const arm64 = await buildOmp("darwin-arm64");
+		const x64 = await buildOmp("darwin-x64");
+		await run(["lipo", "-create", "-output", destination, arm64, x64], Bun.env, "Universal OMP merge");
+	} else {
+		await fs.copyFile(await buildOmp(crossTarget), destination);
+	}
 	if (process.platform !== "win32") await fs.chmod(destination, 0o755);
 	await Bun.write(path.join(desktopResourceDir, ".version"), `${manifest.version}\n`);
 

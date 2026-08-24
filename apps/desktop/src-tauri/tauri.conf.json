@@ -5,8 +5,8 @@
   "version": "0.4.2",
   "build": {
     "frontendDist": "../public",
-    "beforeDevCommand": "bun run fetch:pi && bun run fetch:terminal-font && bun run fetch:cjk-font && bun run build:extensions && bun run build:frontend",
-    "beforeBuildCommand": "bun run fetch:pi && bun run fetch:terminal-font && bun run fetch:cjk-font && bun run build:extensions && bun run build:frontend && bun run sign:pi"
+    "beforeDevCommand": "bun run stage:omp && bun run fetch:terminal-font && bun run fetch:cjk-font && bun run build:extensions && bun run build:frontend",
+    "beforeBuildCommand": "bun run stage:omp && bun run fetch:terminal-font && bun run fetch:cjk-font && bun run build:extensions && bun run build:frontend && bun run sign:omp"
   },
   "app": {
     "withGlobalTauri": true,
@@ -38,7 +38,7 @@
     "resources": {
       "../public": "public",
       "../extensions/dist": "extensions",
-      "./resources/pi": "pi"
+      "./resources/omp": "omp"
     }
   },
   "plugins": {

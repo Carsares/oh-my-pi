@@ -3,13 +3,10 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
 
 mod extensions;
 
 use extensions::resolve_bundled_extensions;
-
-const PI_VERSION_JSON: &str = include_str!("../../scripts/pi-version.json");
 
 /// A single configured pi package source with its resolved install path.
 /// `scope` is "global" (user) or "project" (local to a workspace).
@@ -76,28 +73,8 @@ pub struct ResourceEntry {
     pub relative_path: String,
 }
 
-pub fn locked_pi_version() -> &'static str {
-    static CACHED: OnceLock<String> = OnceLock::new();
-    CACHED.get_or_init(|| {
-        let needle = "\"version\"";
-        let bytes = PI_VERSION_JSON;
-        let start = bytes
-            .find(needle)
-            .expect("pi-version.json: missing \"version\" key");
-        let after_key = &bytes[start + needle.len()..];
-        let colon = after_key
-            .find(':')
-            .expect("pi-version.json: malformed \"version\" entry");
-        let after_colon = &after_key[colon + 1..];
-        let first_quote = after_colon
-            .find('"')
-            .expect("pi-version.json: \"version\" value not quoted");
-        let rest = &after_colon[first_quote + 1..];
-        let end_quote = rest
-            .find('"')
-            .expect("pi-version.json: unterminated \"version\" value");
-        rest[..end_quote].to_string()
-    })
+pub fn bundled_omp_version() -> &'static str {
+    env!("PICOT_OMP_VERSION_BUNDLED")
 }
 
 #[derive(Clone)]
@@ -123,7 +100,7 @@ impl PiLaunchResolver {
             cwd: PathBuf::from(strip_verbatim_prefix(cwd)),
             session_path: session_path.map(|path| PathBuf::from(strip_verbatim_prefix(path))),
             extensions,
-            pi_version: locked_pi_version().to_owned(),
+            omp_version: bundled_omp_version().to_owned(),
             path_env: build_augmented_path(),
             // Picot workspaces are opened via the OS folder picker, so the user
             // has already opted in; trust project-local resources for every
@@ -279,12 +256,12 @@ impl PiLaunchResolver {
 
     fn resolve_bundled_pi(&self) -> Result<PathBuf, String> {
         let bin_name = if cfg!(target_os = "windows") {
-            "pi.exe"
+            "omp.exe"
         } else {
-            "pi"
+            "omp"
         };
 
-        if let Ok(explicit) = std::env::var("PI_BIN") {
+        if let Ok(explicit) = std::env::var("OMP_BIN") {
             let candidate = PathBuf::from(explicit.trim());
             if candidate.is_file() {
                 return Ok(candidate);
@@ -295,7 +272,7 @@ impl PiLaunchResolver {
         if let Some(candidate) = self
             .static_dir
             .parent()
-            .map(|parent| parent.join("pi").join(bin_name))
+            .map(|parent| parent.join("omp").join(bin_name))
         {
             if candidate.is_file() {
                 return Ok(candidate);
@@ -306,7 +283,7 @@ impl PiLaunchResolver {
         if cfg!(debug_assertions) {
             let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("resources")
-                .join("pi")
+                .join("omp")
                 .join(bin_name);
             if dev_path.is_file() {
                 return Ok(dev_path);
@@ -315,9 +292,9 @@ impl PiLaunchResolver {
         }
 
         Err(format!(
-            "Could not find embedded pi binary. Tried:\n{}\n\n\
-             For dev: run `bun run fetch:pi` from the repo root.\n\
-             For release: the .app bundle is missing `resources/pi/{bin_name}`. \
+            "Could not find embedded OMP binary. Tried:\n{}\n\n\
+             For dev: run `bun run stage:omp` from apps/desktop.\n\
+             For release: the app bundle is missing `resources/omp/{bin_name}`. \
              Reinstall Picot.",
             tried
                 .iter()

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Signs the Mach-O binaries embedded under src-tauri/resources/pi/ (the pi
-# runtime binary + its native .node addons) with a Developer ID identity.
+# Signs the Mach-O binaries embedded under src-tauri/resources/omp/ with a
+# Developer ID identity.
 #
 # Tauri's macOS bundler code-signs the .app bundle itself but does not
 # deep-sign arbitrary files copied in via tauri.conf.json's `bundle.resources`
@@ -33,8 +33,8 @@ if [ -z "$IDENTITY" ] || [ "$IDENTITY" = "-" ]; then
     exit 0
 fi
 
-PI_DIR="$PROJECT_ROOT/src-tauri/resources/pi"
-if [ ! -d "$PI_DIR" ]; then
+OMP_DIR="$PROJECT_ROOT/src-tauri/resources/omp"
+if [ ! -d "$OMP_DIR" ]; then
     exit 0
 fi
 
@@ -44,16 +44,16 @@ fi
 # below instead of trying to run "security".
 if [ "$(uname)" = "Darwin" ] && ! security find-identity -v -p codesigning | grep -qF "$IDENTITY"; then
     if [ -z "${APPLE_CERTIFICATE:-}" ]; then
-        echo "[sign-pi-resources] ERROR: identity '$IDENTITY' not found in any keychain, and APPLE_CERTIFICATE is not set to import it" >&2
+        echo "[sign-omp-resources] ERROR: identity '$IDENTITY' not found in any keychain, and APPLE_CERTIFICATE is not set to import it" >&2
         exit 1
     fi
 
-    echo "[sign-pi-resources] Identity not in any keychain yet; importing APPLE_CERTIFICATE into a temporary keychain"
+    echo "[sign-omp-resources] Identity not in any keychain yet; importing APPLE_CERTIFICATE into a temporary keychain"
 
     TMP_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
-    KEYCHAIN_PATH="$TMP_DIR/sign-pi-resources.keychain-db"
+    KEYCHAIN_PATH="$TMP_DIR/sign-omp-resources.keychain-db"
     KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
-    CERT_PATH="$TMP_DIR/sign-pi-resources-cert.p12"
+    CERT_PATH="$TMP_DIR/sign-omp-resources-cert.p12"
 
     echo "$APPLE_CERTIFICATE" | base64 --decode >"$CERT_PATH"
     security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
@@ -65,7 +65,7 @@ if [ "$(uname)" = "Darwin" ] && ! security find-identity -v -p codesigning | gre
     rm -f "$CERT_PATH"
 fi
 
-echo "[sign-pi-resources] Signing embedded pi native binaries with: $IDENTITY"
+echo "[sign-omp-resources] Signing embedded OMP binary with: $IDENTITY"
 
 signed_any=0
 while IFS= read -r -d '' f; do
@@ -73,8 +73,8 @@ while IFS= read -r -d '' f; do
         codesign --force --options runtime --timestamp --sign "$IDENTITY" "$f"
         signed_any=1
     fi
-done < <(find "$PI_DIR" -type f -print0)
+done < <(find "$OMP_DIR" -type f -print0)
 
 if [ "$signed_any" = "0" ]; then
-    echo "[sign-pi-resources] WARN: no Mach-O binaries found under $PI_DIR"
+    echo "[sign-omp-resources] WARN: no Mach-O binaries found under $OMP_DIR"
 fi

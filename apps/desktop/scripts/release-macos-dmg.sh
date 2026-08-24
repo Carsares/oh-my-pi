@@ -11,15 +11,6 @@ fi
 
 cd "$ROOT_DIR"
 
-echo "Fetching embedded pi binary (idempotent if version matches)..."
-bun run "$ROOT_DIR/scripts/fetch-pi-binary.js"
-echo "Fetching bundled terminal font..."
-bun run "$ROOT_DIR/scripts/fetch-terminal-font.js"
-echo "Fetching bundled CJK font..."
-bun run "$ROOT_DIR/scripts/fetch-cjk-font.js"
-echo "Building extensions bundle..."
-bun run "$ROOT_DIR/scripts/build-extensions.js"
-
 echo "Building macOS DMG via Tauri (standard bundler path)..."
 PATH="$HOME/.cargo/bin:$PATH" tauri build --bundles dmg
 

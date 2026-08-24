@@ -14,9 +14,9 @@ src-tauri/gen/
 # Pi extension bundles (produced by scripts/build-extensions.js)
 extensions/dist/
 
-# Embedded pi binary tree (produced by scripts/fetch-pi-binary.js)
+# Embedded runtime trees (generated during desktop builds)
 src-tauri/resources/pi/
-.cache/pi-binaries/
+src-tauri/resources/omp/
 .cache/terminal-fonts/
 .cache/cjk-fonts/
 

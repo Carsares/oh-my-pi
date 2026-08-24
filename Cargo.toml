@@ -13,6 +13,10 @@ members = [
    "crates/pi-walker",
    "crates/vendor/brush-core",
 ]
+# Picot remains an independent Tauri crate with its own Cargo.lock and build
+# profiles. Excluding it prevents Cargo from treating the nested manifest as
+# an undeclared member of the OMP workspace.
+exclude = ["apps/desktop/src-tauri"]
 resolver = "3"
 
 [workspace.package]

@@ -14,7 +14,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/shixin-guo/picot.git"
+    "url": "https://github.com/Carsares/oh-my-pi.git",
+    "directory": "apps/desktop"
   },
   "scripts": {
     "tauri": "tauri",
@@ -34,7 +35,6 @@
     "pretest": "bun run build:frontend",
     "test": "vitest run && bun run scripts/check-tauri-permissions.js",
     "test:coverage": "bun run build:frontend && vitest run --coverage && bun run scripts/check-tauri-permissions.js",
-    "prepare": "husky",
     "test:watch": "vitest",
     "lint": "biome lint . && bun run check:locales",
     "lint:fix": "biome lint --write . --unsafe",
@@ -90,7 +90,6 @@
     "@tauri-apps/cli": "^2.11.2",
     "@vitest/coverage-istanbul": "3.2.4",
     "esbuild": "^0.28.0",
-    "husky": "^9.1.7",
     "jsdom": "^26.1.0",
     "subset-font": "2.5.0",
     "ttf2woff2": "8.0.1",

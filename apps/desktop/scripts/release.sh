@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 usage() {
   echo "Usage: $0 <version>"
-  echo "Example: $0 0.1.6  (or: $0 v0.1.6)"
+  echo "Example: $0 0.1.6  (or: $0 desktop-v0.1.6)"
 }
 
 if [[ $# -ne 1 ]]; then
@@ -15,12 +15,13 @@ if [[ $# -ne 1 ]]; then
 fi
 
 RAW_VERSION="$1"
-VERSION="${RAW_VERSION#v}"
-TAG="v$VERSION"
+VERSION="${RAW_VERSION#desktop-v}"
+VERSION="${VERSION#v}"
+TAG="desktop-v$VERSION"
 
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
   echo "Invalid version: $RAW_VERSION"
-  echo "Expected: 0.1.6 or v0.1.6 (supports prerelease/build suffixes)"
+  echo "Expected: 0.1.6 or desktop-v0.1.6 (supports prerelease/build suffixes)"
   exit 1
 fi
 

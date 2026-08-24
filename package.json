@@ -13,7 +13,8 @@
   "workspaces": {
     "packages": [
       "packages/*",
-      "python/robomp/web"
+      "python/robomp/web",
+      "apps/desktop"
     ],
     "catalog": {
       "@babel/generator": "^7.29.7",

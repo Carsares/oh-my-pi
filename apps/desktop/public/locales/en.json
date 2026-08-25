@@ -343,6 +343,7 @@
     "compactedWithSummary": "✓ Context compacted — {summary}"
   },
   "errors": {
+    "sessionUnavailable": "This session no longer exists or was never saved, so it cannot be restored.",
     "newSessionOnlyNative": "New session is only supported with a native host.",
     "newSessionPathUnavailable": "Failed to start new session: current workspace path is unavailable",
     "newSessionNavUnavailable": "Failed to start new session: navigation is unavailable",

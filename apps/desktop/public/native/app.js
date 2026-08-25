@@ -60,7 +60,7 @@ import { SessionSidebar } from "./session/session-sidebar.js";
 import { createSessionStore, reduceSessionState } from "./session/session-store.js";
 import { setupSettingsPanel } from "./settings/settings-panel.js";
 import { setupActiveRuntimeTracking } from "./transport/active-runtime.js";
-import { resolveBootstrapTarget } from "./transport/bootstrap-target.js";
+import { createBootstrapError, resolveBootstrapTarget } from "./transport/bootstrap-target.js";
 import { ConfigGateway, consumeConfigResponseFrame } from "./transport/config-gateway.js";
 import {
   setupConfigGatewayConnectionListener,
@@ -779,7 +779,7 @@ document.getElementById("refresh-sessions-btn")?.addEventListener("click", (e) =
   void btn.offsetWidth;
   btn.classList.add("spinning");
   ensureSuperAgentStartupSession({ reloadAfterEnsure: false }).catch(showError);
-  sidebar?.load().catch(showError);
+  sidebar?.load({ acceptEmpty: true }).catch(showError);
 });
 window.addEventListener("picot-super-agent-autostart-changed", (event) => {
   if (event.detail?.enabled) {
@@ -922,7 +922,7 @@ try {
   // temporarily empty host session index. Re-check once registration is
   // complete so startup and cross-project navigation converge without a
   // manual refresh.
-  sidebar?.load({ quiet: true }).catch(showError);
+  sidebar?.load({ quiet: true, acceptEmpty: true }).catch(showError);
   if (route.sessionId.startsWith("temporary-") && target.sessionId !== route.sessionId) {
     replaceTemporarySessionRoute(history, route.workspaceId, route.sessionId, target.sessionId);
   }
@@ -1045,9 +1045,13 @@ async function requestBootstrapTarget(currentRoute) {
   });
   const response = await fetch(`/v2/bootstrap?${query}`);
   if (!response.ok) {
-    const error = new Error("This Picot runtime is stopped or unavailable");
-    error.status = response.status;
-    throw error;
+    const result = await response.json().catch(() => null);
+    throw createBootstrapError(
+      currentRoute,
+      response.status,
+      result?.error?.code,
+      t("errors.sessionUnavailable"),
+    );
   }
   return response.json();
 }
@@ -1832,7 +1836,7 @@ async function handleRuntimeEvent(event) {
       await adoptTarget({ ...target, sessionId: event.sessionId });
       upsertActiveSessionFromUserMessage();
       await hydrateSnapshotOnce();
-      sidebar?.load({ quiet: true }).catch(showError);
+      sidebar?.load({ quiet: true, acceptEmpty: true }).catch(showError);
       break;
   }
 }
@@ -1896,7 +1900,7 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   // the sidebar never populated after bootstrap, because the initial
   // sidebar.load() at startup runs before the workspace is resolved.
   if (nextTarget.workspaceId !== previousTarget.workspaceId) {
-    sidebar?.load().catch(showError);
+    sidebar?.load({ acceptEmpty: true }).catch(showError);
   }
   sessionInfo.refresh();
   headerStatusBar?.reset?.();
@@ -2244,7 +2248,7 @@ function abortCurrentRun() {
 
 function showError(error) {
   setStatus("disconnected");
-  messageRenderer.renderError(error?.message || String(error));
+  messageRenderer.renderError(error?.message || String(error), { key: error?.sessionLoadKey });
 }
 
 // ── Composer model dropdown & thinking button (functions & event wiring) ────────

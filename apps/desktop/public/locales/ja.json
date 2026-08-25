@@ -343,6 +343,7 @@
     "compactedWithSummary": "✓ コンテキストをコンパクトにしました — {summary}"
   },
   "errors": {
+    "sessionUnavailable": "このセッションは存在しないか保存されていないため、復元できません。",
     "newSessionOnlyNative": "新しいセッションはネイティブホストでのみサポートされています。",
     "newSessionPathUnavailable": "新しいセッションの開始に失敗しました：現在のワークスペースパスが利用できません",
     "newSessionNavUnavailable": "新しいセッションの開始に失敗しました：ナビゲーションが利用できません",

@@ -1,11 +1,35 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolveBootstrapTarget } from "./bootstrap-target.js";
+import { createBootstrapError, resolveBootstrapTarget } from "./bootstrap-target.js";
 
 const temporaryRoute = {
   name: "session",
   workspaceId: "workspace-a",
   sessionId: "temporary-stale",
 };
+
+describe("createBootstrapError", () => {
+  it("maps a missing saved session to a localized, deduplicated load error", () => {
+    const route = { ...temporaryRoute, sessionId: "saved-session" };
+
+    const error = createBootstrapError(route, 404, "session_not_found", "Session unavailable");
+
+    expect(error).toMatchObject({
+      message: "Session unavailable",
+      status: 404,
+      code: "session_not_found",
+      sessionLoadKey: "session-load:workspace-a:saved-session:session_not_found",
+    });
+  });
+
+  it("keeps the existing generic message for other bootstrap failures", () => {
+    const error = createBootstrapError(temporaryRoute, 503, "runtime_unavailable", "Ignored");
+
+    expect(error.message).toBe("This Picot runtime is stopped or unavailable");
+    expect(error.sessionLoadKey).toBe(
+      "session-load:workspace-a:temporary-stale:runtime_unavailable",
+    );
+  });
+});
 
 describe("resolveBootstrapTarget", () => {
   it("replaces a missing temporary runtime with a new runtime in the same workspace", async () => {

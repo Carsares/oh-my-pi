@@ -343,6 +343,7 @@
     "compactedWithSummary": "✓ Contexto compactado — {summary}"
   },
   "errors": {
+    "sessionUnavailable": "Esta sesión ya no existe o nunca se guardó, por lo que no se puede restaurar.",
     "newSessionOnlyNative": "La nueva sesión solo está disponible con un host nativo.",
     "newSessionPathUnavailable": "Error al iniciar nueva sesión: la ruta del espacio de trabajo no está disponible",
     "newSessionNavUnavailable": "Error al iniciar nueva sesión: la navegación no está disponible",

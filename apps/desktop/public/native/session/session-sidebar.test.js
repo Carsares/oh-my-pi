@@ -368,6 +368,30 @@ describe("SessionSidebar.render", () => {
     expect(JSON.parse(localStorage.getItem("picot-session-list-cache:ws-1"))).toHaveLength(2);
   });
 
+  it("clears stale cached sessions when the host empty response is authoritative", async () => {
+    localStorage.setItem(
+      "picot-session-list-cache:ws-1",
+      JSON.stringify([
+        {
+          id: "s-stale",
+          timestamp: "2026-08-09T01:00:00.000Z",
+          name: "Stale session",
+          projectPath: "/ws-1",
+          projectName: "ws-1",
+          isCurrentWorkspace: true,
+        },
+      ]),
+    );
+    const { sidebar, container, data } = makeSidebar([]);
+    data.listAllSessions.mockResolvedValueOnce({ sessions: [] });
+
+    await sidebar.load({ acceptEmpty: true });
+
+    expect(sidebar.sessions).toEqual([]);
+    expect(container.querySelector('[data-session-id="s-stale"]')).toBeNull();
+    expect(JSON.parse(localStorage.getItem("picot-session-list-cache:ws-1"))).toEqual([]);
+  });
+
   it("clears a cached in-progress status when the live session list has no runtime status", async () => {
     const pending = deferred();
     localStorage.setItem(

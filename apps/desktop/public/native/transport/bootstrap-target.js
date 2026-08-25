@@ -1,3 +1,15 @@
+const RUNTIME_UNAVAILABLE_MESSAGE = "This Picot runtime is stopped or unavailable";
+
+export function createBootstrapError(route, status, code, sessionNotFoundMessage) {
+  const message =
+    code === "session_not_found" ? sessionNotFoundMessage : RUNTIME_UNAVAILABLE_MESSAGE;
+  const error = new Error(message);
+  error.status = status;
+  error.code = code;
+  error.sessionLoadKey = `session-load:${route.workspaceId}:${route.sessionId}:${code || status}`;
+  return error;
+}
+
 /**
  * Resolve the runtime target for a session route.
  *

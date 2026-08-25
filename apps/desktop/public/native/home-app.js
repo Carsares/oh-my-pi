@@ -94,9 +94,9 @@ export async function startHomeApp({
   if (sidebar) {
     setupHomeSessionSearch(sidebar);
     document.getElementById("refresh-sessions-btn")?.addEventListener("click", () => {
-      void sidebar.load();
+      void sidebar.load({ acceptEmpty: true });
     });
-    await sidebar.load();
+    await sidebar.load({ acceptEmpty: true });
   }
 
   return { sidebar, redirected: false };

@@ -473,7 +473,7 @@ export class SessionSidebar {
   }
 
   // ── loading ─────────────────────────────────────────────────────
-  async load({ quiet = false, retryAttempt = 0 } = {}) {
+  async load({ quiet = false, retryAttempt = 0, acceptEmpty = false } = {}) {
     const seq = ++this._loadSeq;
     const workspaceId = this.getTarget()?.workspaceId ?? null;
     if (!workspaceId && !this.workspaceNeutral) return;
@@ -512,7 +512,7 @@ export class SessionSidebar {
       // non-empty cache (including Agent Inbox); a post-bootstrap reload will
       // replace it with the authoritative list moments later.
       const nextSessions =
-        receivedSessions.length === 0 && this.sessions.length > 0
+        !acceptEmpty && receivedSessions.length === 0 && this.sessions.length > 0
           ? [...this.sessions]
           : receivedSessions;
       // Preserve a just-created active session that the server hasn't persisted
@@ -546,7 +546,7 @@ export class SessionSidebar {
         }
         setTimeout(() => {
           if (seq === this._loadSeq) {
-            this.load({ quiet: true, retryAttempt: retryAttempt + 1 });
+            this.load({ quiet: true, retryAttempt: retryAttempt + 1, acceptEmpty });
           }
         }, retryDelay);
         return;

@@ -443,9 +443,18 @@ export class MessageRenderer {
     this.scrollToBottom();
   }
 
-  renderError(errorMessage) {
+  renderError(errorMessage, { key } = {}) {
+    if (
+      key &&
+      Array.from(this.container.children).some(
+        (child) => child.classList.contains("error-message") && child.dataset.errorKey === key,
+      )
+    ) {
+      return;
+    }
     const div = document.createElement("div");
     div.className = "error-message";
+    if (key) div.dataset.errorKey = key;
     div.textContent = `⚠️ ${errorMessage}`;
     this.container.appendChild(div);
     this.scrollToBottom();

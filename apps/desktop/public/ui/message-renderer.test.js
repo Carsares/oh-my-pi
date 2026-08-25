@@ -244,6 +244,23 @@ describe("MessageRenderer streaming markdown preview", () => {
   });
 });
 
+describe("MessageRenderer errors", () => {
+  it("deduplicates keyed session errors while preserving unkeyed errors", () => {
+    const container = document.createElement("div");
+    const renderer = new MessageRenderer(container);
+
+    renderer.renderError("Session unavailable", { key: "session-load:ws-1:s-1:not-found" });
+    renderer.renderError("Session unavailable again", {
+      key: "session-load:ws-1:s-1:not-found",
+    });
+    renderer.renderError("Unkeyed error");
+    renderer.renderError("Unkeyed error");
+
+    expect(container.querySelectorAll(".error-message")).toHaveLength(3);
+    expect(container.textContent).not.toContain("Session unavailable again");
+  });
+});
+
 describe("MessageRenderer locale change", () => {
   let container;
   let renderer;

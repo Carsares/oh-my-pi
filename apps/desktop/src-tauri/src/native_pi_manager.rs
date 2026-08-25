@@ -205,10 +205,18 @@ impl NativePiManager {
                         return;
                     };
                     match event.get("type").and_then(Value::as_str) {
+                        Some("ready") => {
+                            let _ = coordinator.set_state(&target, RuntimeState::Ready);
+                        }
                         Some("agent_start") => {
                             let _ = coordinator.set_state(&target, RuntimeState::Working);
                         }
-                        Some("agent_settled") | Some("agent_end") => {
+                        Some("agent_settled") => {
+                            let _ = coordinator.set_state(&target, RuntimeState::Idle);
+                        }
+                        Some("agent_end")
+                            if event.get("isTerminal").and_then(Value::as_bool) != Some(false) =>
+                        {
                             let _ = coordinator.set_state(&target, RuntimeState::Idle);
                         }
                         _ => {}
@@ -623,7 +631,7 @@ fn configure_child_process(_command: &mut Command) {}
 #[cfg(test)]
 mod tests {
     use super::{NativeLaunchSpec, NativePiManager};
-    use crate::runtime_coordinator::RuntimeTarget;
+    use crate::runtime_coordinator::{RuntimeState, RuntimeTarget};
     use serde_json::json;
     use std::path::PathBuf;
     use std::time::Duration;
@@ -746,6 +754,55 @@ mod tests {
             )
             .await
             .is_err());
+    }
+
+    #[tokio::test]
+    async fn keeps_runtime_working_when_agent_end_is_non_terminal() {
+        let manager = NativePiManager::in_memory(8);
+        let target = RuntimeTarget::new("workspace-a", "session-a", "instance-a");
+        let mut fake = manager.register_in_memory(target.clone()).unwrap();
+        let mut events = manager.subscribe();
+
+        fake.write_frame(json!({ "type": "agent_start" }))
+            .await
+            .unwrap();
+        events.recv().await.unwrap();
+        fake.write_frame(json!({ "type": "agent_end", "isTerminal": false }))
+            .await
+            .unwrap();
+        events.recv().await.unwrap();
+
+        let status = manager
+            .statuses()
+            .unwrap()
+            .into_iter()
+            .find(|status| status.target == target)
+            .unwrap();
+        assert_eq!(status.state, RuntimeState::Working);
+    }
+
+    #[tokio::test]
+    async fn marks_runtime_ready_when_omp_ready_frame_arrives() {
+        let manager = NativePiManager::in_memory(8);
+        let target = RuntimeTarget::new("workspace-a", "session-a", "instance-a");
+        let mut fake = manager.register_in_memory(target.clone()).unwrap();
+        let mut events = manager.subscribe();
+
+        fake.write_frame(json!({
+            "type": "ready",
+            "protocolVersion": 1,
+            "supportedProtocolVersions": [1, 2]
+        }))
+        .await
+        .unwrap();
+        assert_eq!(events.recv().await.unwrap().event["type"], "ready");
+        let status = manager
+            .statuses()
+            .unwrap()
+            .into_iter()
+            .find(|status| status.target == target)
+            .unwrap();
+        assert_eq!(status.state, RuntimeState::Ready);
     }
 
     #[tokio::test]

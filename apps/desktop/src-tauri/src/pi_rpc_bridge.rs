@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use base64::Engine;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -31,11 +32,16 @@ impl BridgeError {
 
 type PendingSender = oneshot::Sender<Result<Value, BridgeError>>;
 
+struct PendingRequest {
+    command: String,
+    sender: PendingSender,
+}
+
 struct BridgeInner {
     next_id: AtomicU64,
     outbound: mpsc::Sender<Value>,
     frames: Mutex<mpsc::Receiver<BridgeFrame>>,
-    pending: Mutex<HashMap<String, PendingSender>>,
+    pending: Mutex<HashMap<String, PendingRequest>>,
 }
 
 #[derive(Clone)]
@@ -167,6 +173,11 @@ impl PiRpcBridge {
         let object = command
             .as_object_mut()
             .ok_or_else(|| BridgeError::Transport("RPC command must be an object".into()))?;
+        let command_type = object
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
         object.insert("id".into(), Value::String(id.clone()));
 
         let (response_tx, response_rx) = oneshot::channel();
@@ -174,7 +185,13 @@ impl PiRpcBridge {
             .pending
             .lock()
             .await
-            .insert(id.clone(), response_tx);
+            .insert(
+                id.clone(),
+                PendingRequest {
+                    command: command_type,
+                    sender: response_tx,
+                },
+            );
         if self.inner.outbound.send(command).await.is_err() {
             self.inner.pending.lock().await.remove(&id);
             return Err(BridgeError::ProcessClosed);
@@ -282,6 +299,8 @@ async fn read_frames(
     inner: Arc<BridgeInner>,
     max_frame_bytes: usize,
 ) {
+    let mut chunks = None;
+    let mut protocol_v2 = false;
     while let Some(raw) = incoming.recv().await {
         if raw.len() > max_frame_bytes {
             let _ = frames
@@ -302,10 +321,89 @@ async fn read_frames(
                 continue;
             }
         };
+        let parsed = match parsed.get("type").and_then(Value::as_str) {
+            Some("rpc_chunk") => match reassemble_rpc_chunk(&mut chunks, parsed, max_frame_bytes) {
+                Ok(frame) => frame,
+                Err(message) => {
+                    chunks = None;
+                    let _ = frames.send(BridgeFrame::ProtocolError(message)).await;
+                    continue;
+                }
+            },
+            _ => {
+                if chunks.take().is_some() {
+                    let _ = frames
+                        .send(BridgeFrame::ProtocolError(
+                            "RPC chunk sequence interrupted".into(),
+                        ))
+                        .await;
+                }
+                Some(parsed)
+            }
+        };
+        let Some(parsed) = parsed else {
+            continue;
+        };
+        if parsed.get("type").and_then(Value::as_str) == Some("ready") && !protocol_v2 {
+            let supports_v2 = parsed
+                .get("supportedProtocolVersions")
+                .and_then(Value::as_array)
+                .is_some_and(|versions| versions.iter().any(|version| version.as_u64() == Some(2)));
+            if supports_v2 {
+                protocol_v2 = true;
+                if inner
+                    .outbound
+                    .send(serde_json::json!({
+                        "type": "negotiate_protocol",
+                        "protocolVersion": 2,
+                    }))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        }
+        if parsed.get("type").and_then(Value::as_str) == Some("response")
+            && parsed.get("command").and_then(Value::as_str) == Some("negotiate_protocol")
+            && parsed.get("id").is_none()
+        {
+            if parsed.get("success").and_then(Value::as_bool) != Some(true) {
+                let message = parsed
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("OMP RPC protocol v2 negotiation failed");
+                let _ = frames
+                    .send(BridgeFrame::ProtocolError(message.to_owned()))
+                    .await;
+            }
+            continue;
+        }
         if let Some(id) = parsed.get("id").and_then(Value::as_str) {
-            if let Some(sender) = inner.pending.lock().await.remove(id) {
-                let _ = sender.send(Ok(parsed));
+            if let Some(pending) = inner.pending.lock().await.remove(id) {
+                let _ = pending.sender.send(Ok(parsed));
                 continue;
+            }
+        }
+        if parsed.get("type").and_then(Value::as_str) == Some("response")
+            && parsed.get("id").is_none()
+        {
+            let pending_id = if let Some(command) = parsed.get("command").and_then(Value::as_str) {
+                inner
+                    .pending
+                    .lock()
+                    .await
+                    .iter()
+                    .find(|(_, request)| request.command == command)
+                    .map(|(id, _)| id.clone())
+            } else {
+                None
+            };
+            if let Some(pending_id) = pending_id {
+                if let Some(pending) = inner.pending.lock().await.remove(&pending_id) {
+                    let _ = pending.sender.send(Ok(parsed));
+                    continue;
+                }
             }
         }
         let frame = if parsed
@@ -320,9 +418,114 @@ async fn read_frames(
         let _ = frames.send(frame).await;
     }
 
-    for (_, sender) in inner.pending.lock().await.drain() {
-        let _ = sender.send(Err(BridgeError::ProcessClosed));
+    for (_, pending) in inner.pending.lock().await.drain() {
+        let _ = pending.sender.send(Err(BridgeError::ProcessClosed));
     }
+}
+
+const RPC_CHUNK_PAYLOAD_BYTES: usize = 256 * 1024;
+const MAX_RPC_REASSEMBLED_BYTES: usize = 64 * 1024 * 1024;
+
+struct PendingRpcChunks {
+    chunk_id: String,
+    count: usize,
+    byte_length: usize,
+    next_index: usize,
+    chunks: Vec<Vec<u8>>,
+    received_bytes: usize,
+}
+
+fn reassemble_rpc_chunk(
+    pending: &mut Option<PendingRpcChunks>,
+    frame: Value,
+    max_frame_bytes: usize,
+) -> Result<Option<Value>, String> {
+    let chunk_id = frame
+        .get("chunkId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= 128)
+        .ok_or_else(|| "Invalid RPC chunk metadata".to_string())?;
+    let index = frame
+        .get("index")
+        .and_then(Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| "Invalid RPC chunk metadata".to_string())?;
+    let count = frame
+        .get("count")
+        .and_then(Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| "Invalid RPC chunk metadata".to_string())?;
+    let byte_length = frame
+        .get("byteLength")
+        .and_then(Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| "Invalid RPC chunk metadata".to_string())?;
+    let max_count = MAX_RPC_REASSEMBLED_BYTES.div_ceil(RPC_CHUNK_PAYLOAD_BYTES);
+    if count < 2
+        || count > max_count
+        || index >= count
+        || byte_length <= max_frame_bytes
+        || byte_length > MAX_RPC_REASSEMBLED_BYTES
+    {
+        return Err("Invalid RPC chunk metadata".into());
+    }
+    let data = frame
+        .get("data")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "Invalid RPC chunk data".to_string())?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|_| "Invalid RPC chunk data".to_string())?;
+    if bytes.is_empty() || bytes.len() > RPC_CHUNK_PAYLOAD_BYTES {
+        return Err("Invalid RPC chunk data".into());
+    }
+    if base64::engine::general_purpose::STANDARD.encode(&bytes) != data {
+        return Err("Invalid RPC chunk data".into());
+    }
+
+    if pending.is_none() {
+        if index != 0 {
+            return Err("RPC chunk sequence must start at index 0".into());
+        }
+        *pending = Some(PendingRpcChunks {
+            chunk_id: chunk_id.to_owned(),
+            count,
+            byte_length,
+            next_index: 0,
+            chunks: Vec::with_capacity(count),
+            received_bytes: 0,
+        });
+    }
+    let state = pending.as_mut().expect("pending chunks initialized");
+    if state.chunk_id != chunk_id
+        || state.count != count
+        || state.byte_length != byte_length
+        || state.next_index != index
+    {
+        return Err("RPC chunk sequence mismatch".into());
+    }
+    state.received_bytes += bytes.len();
+    if state.received_bytes > state.byte_length {
+        return Err("RPC chunk sequence exceeds declared length".into());
+    }
+    state.chunks.push(bytes);
+    state.next_index += 1;
+    if state.next_index < state.count {
+        return Ok(None);
+    }
+    if state.received_bytes != state.byte_length {
+        return Err("RPC chunk sequence length mismatch".into());
+    }
+    let state = pending.take().expect("completed chunks present");
+    let bytes = state.chunks.into_iter().flatten().collect::<Vec<_>>();
+    let text = String::from_utf8(bytes).map_err(|_| "Invalid UTF-8 RPC chunk frame".to_string())?;
+    let value = serde_json::from_str::<Value>(&text)
+        .map_err(|error| format!("Invalid reassembled RPC frame: {error}"))?;
+    if !value.is_object() {
+        return Err("Reassembled RPC frame must be an object".into());
+    }
+    Ok(Some(value))
 }
 
 #[cfg(test)]
@@ -356,6 +559,7 @@ impl InMemoryPiProcess {
 #[cfg(test)]
 mod tests {
     use super::{BridgeFrame, PiRpcBridge};
+    use base64::Engine;
     use serde_json::json;
     #[cfg(unix)]
     use std::process::{Command, Stdio};
@@ -392,6 +596,101 @@ mod tests {
             bridge.next_frame().await,
             Some(BridgeFrame::Event(json!({ "type": "agent_start" })))
         );
+    }
+
+    #[tokio::test]
+    async fn negotiates_protocol_v2_after_ready() {
+        let (bridge, mut process) = PiRpcBridge::in_memory(1024);
+        process
+            .write_frame(json!({
+                "type": "ready",
+                "protocolVersion": 1,
+                "supportedProtocolVersions": [1, 2]
+            }))
+            .await
+            .unwrap();
+
+        let negotiation = process.read_request().await.unwrap();
+        assert_eq!(negotiation, json!({ "type": "negotiate_protocol", "protocolVersion": 2 }));
+        assert_eq!(bridge.next_frame().await, Some(BridgeFrame::Event(json!({
+            "type": "ready",
+            "protocolVersion": 1,
+            "supportedProtocolVersions": [1, 2]
+        }))));
+
+        process
+            .write_frame(json!({
+                "type": "response",
+                "command": "negotiate_protocol",
+                "success": true
+            }))
+            .await
+            .unwrap();
+        assert!(tokio::time::timeout(Duration::from_millis(20), bridge.next_frame())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn reassembles_rpc_chunks_before_dispatching_the_logical_frame() {
+        let (bridge, mut process) = PiRpcBridge::in_memory(1024);
+        let logical = serde_json::to_vec(&json!({
+            "type": "notice",
+            "text": "a sufficiently long event payload ".repeat(40)
+        }))
+        .unwrap();
+        let chunk_size = logical.len().div_ceil(4);
+        for index in 0..4 {
+            let start = index * chunk_size;
+            let end = (start + chunk_size).min(logical.len());
+            let chunk = &logical[start..end];
+            process
+                .write_frame(json!({
+                    "type": "rpc_chunk",
+                    "chunkId": "rpc-1",
+                    "index": index,
+                    "count": 4,
+                    "byteLength": logical.len(),
+                    "data": base64::engine::general_purpose::STANDARD.encode(chunk)
+                }))
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(
+            bridge.next_frame().await,
+            Some(BridgeFrame::Event(json!({
+                "type": "notice",
+                "text": "a sufficiently long event payload ".repeat(40)
+            })))
+        );
+    }
+
+    #[tokio::test]
+    async fn correlates_unknown_command_errors_without_an_id() {
+        let (bridge, mut process) = PiRpcBridge::in_memory(1024);
+        let request = tokio::spawn({
+            let bridge = bridge.clone();
+            async move {
+                bridge
+                    .request(json!({ "type": "unsupported_command" }), Duration::from_secs(1))
+                    .await
+            }
+        });
+        process.read_request().await.unwrap();
+        process
+            .write_frame(json!({
+                "type": "response",
+                "command": "unsupported_command",
+                "success": false,
+                "error": "Unknown command: unsupported_command"
+            }))
+            .await
+            .unwrap();
+
+        let response = request.await.unwrap().unwrap();
+        assert_eq!(response["success"], false);
+        assert_eq!(response["command"], "unsupported_command");
     }
 
     #[tokio::test]

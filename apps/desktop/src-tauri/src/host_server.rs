@@ -1164,55 +1164,39 @@ fn annotate_live_sessions(sessions: &mut Value, statuses: Vec<RuntimeStatus>) {
     }
 }
 
-fn messages_from_entries_response(response: &Value) -> Value {
-    let Some(entries) = response.pointer("/data/entries").and_then(Value::as_array) else {
+fn messages_from_rpc_responses(messages_response: &Value, branch_response: &Value) -> Value {
+    let Some(messages) = messages_response
+        .pointer("/data/messages")
+        .and_then(Value::as_array)
+    else {
         return json!([]);
     };
-    let leaf_id = response.pointer("/data/leafId").and_then(Value::as_str);
-    let mut id_to_index = HashMap::new();
-    for (index, entry) in entries.iter().enumerate() {
-        if let Some(id) = entry.get("id").and_then(Value::as_str) {
-            id_to_index.insert(id, index);
-        }
-    }
-
-    let mut branch = Vec::new();
-    let mut current = leaf_id.and_then(|id| id_to_index.get(id).copied());
-    let mut visited = HashSet::new();
-    while let Some(index) = current {
-        if !visited.insert(index) {
-            break;
-        }
-        let entry = &entries[index];
-        if entry.get("type").and_then(Value::as_str) == Some("message") {
-            if let Some(message) = entry.get("message") {
-                branch.push(message_with_entry_id(
-                    message.clone(),
-                    entry.get("id").and_then(Value::as_str),
-                ));
+    let branch_messages = branch_response
+        .pointer("/data/messages")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut branch_index = 0;
+    let hydrated = messages
+        .iter()
+        .cloned()
+        .map(|mut message| {
+            if message.get("role").and_then(Value::as_str) == Some("user") {
+                if let Some(entry_id) = branch_messages
+                    .get(branch_index)
+                    .and_then(|candidate| candidate.get("entryId"))
+                    .and_then(Value::as_str)
+                {
+                    if let Some(object) = message.as_object_mut() {
+                        object.insert("entryId".to_owned(), Value::String(entry_id.to_owned()));
+                    }
+                }
+                branch_index += 1;
             }
-        }
-        current = entry
-            .get("parentId")
-            .and_then(Value::as_str)
-            .and_then(|parent_id| id_to_index.get(parent_id).copied());
-    }
-
-    branch.reverse();
-    Value::Array(branch)
-}
-
-fn message_with_entry_id(mut message: Value, entry_id: Option<&str>) -> Value {
-    if message.get("role").and_then(Value::as_str) != Some("user") {
-        return message;
-    }
-    let Some(entry_id) = entry_id else {
-        return message;
-    };
-    if let Some(object) = message.as_object_mut() {
-        object.insert("entryId".to_owned(), Value::String(entry_id.to_owned()));
-    }
-    message
+            message
+        })
+        .collect::<Vec<_>>();
+    Value::Array(hydrated)
 }
 
 async fn dispatch(
@@ -1256,17 +1240,27 @@ async fn dispatch(
                             .map_err(|message| ("session_binding_failed", message))?;
                     }
                 }
-                let entries_response = state
+                let messages_response = state
                     .runtimes
                     .request(
                         &target,
-                        json!({ "type": "get_entries" }),
+                        json!({ "type": "get_messages" }),
                         None,
                         Duration::from_secs(10),
                     )
                     .await
                     .map_err(|message| ("snapshot_failed", message))?;
-                let messages = messages_from_entries_response(&entries_response);
+                let branch_response = state
+                    .runtimes
+                    .request(
+                        &target,
+                        json!({ "type": "get_branch_messages" }),
+                        None,
+                        Duration::from_secs(10),
+                    )
+                    .await
+                    .map_err(|message| ("snapshot_failed", message))?;
+                let messages = messages_from_rpc_responses(&messages_response, &branch_response);
                 let host_snapshot = state
                     .runtimes
                     .snapshot(&target)
@@ -2234,7 +2228,7 @@ fn now_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        append_pairing_token, extension_ui_requires_owner, messages_from_entries_response,
+        append_pairing_token, extension_ui_requires_owner, messages_from_rpc_responses,
         HostServer,
     };
     use crate::metadata_store::MetadataStore;
@@ -2282,49 +2276,33 @@ mod tests {
     }
 
     #[test]
-    fn derives_active_branch_messages_with_user_entry_ids_from_entries() {
-        let response = json!({
+    fn hydrates_messages_with_branch_entry_ids_from_omp_responses() {
+        let messages_response = json!({
             "type": "response",
-            "command": "get_entries",
+            "command": "get_messages",
             "success": true,
             "data": {
-                "leafId": "assistant-2",
-                "entries": [
-                    {
-                        "type": "message",
-                        "id": "user-1",
-                        "parentId": null,
-                        "message": { "role": "user", "content": "first" }
-                    },
-                    {
-                        "type": "message",
-                        "id": "assistant-1",
-                        "parentId": "user-1",
-                        "message": { "role": "assistant", "content": [{ "type": "text", "text": "old" }] }
-                    },
-                    {
-                        "type": "message",
-                        "id": "user-abandoned",
-                        "parentId": "assistant-1",
-                        "message": { "role": "user", "content": "abandoned" }
-                    },
-                    {
-                        "type": "message",
-                        "id": "user-2",
-                        "parentId": "assistant-1",
-                        "message": { "role": "user", "content": "current" }
-                    },
-                    {
-                        "type": "message",
-                        "id": "assistant-2",
-                        "parentId": "user-2",
-                        "message": { "role": "assistant", "content": [{ "type": "text", "text": "new" }] }
-                    }
+                "messages": [
+                    { "role": "user", "content": "first" },
+                    { "role": "assistant", "content": [{ "type": "text", "text": "old" }] },
+                    { "role": "user", "content": "current" },
+                    { "role": "assistant", "content": [{ "type": "text", "text": "new" }] }
+                ]
+            }
+        });
+        let branch_response = json!({
+            "type": "response",
+            "command": "get_branch_messages",
+            "success": true,
+            "data": {
+                "messages": [
+                    { "entryId": "user-1", "text": "first" },
+                    { "entryId": "user-2", "text": "current" }
                 ]
             }
         });
 
-        let messages = messages_from_entries_response(&response);
+        let messages = messages_from_rpc_responses(&messages_response, &branch_response);
 
         assert_eq!(
             messages,

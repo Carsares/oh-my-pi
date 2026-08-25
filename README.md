@@ -492,9 +492,11 @@ Inside `pi-natives`, the per-module breakdown (glue and tests omitted):
 | html          | HTML to Markdown with optional content cleaning                                   | html-to-markdown-rs                       |     60 |
 | sixel         | Terminal image rendering · decode PNG · JPEG · WebP · GIF · resize · SIXEL encode | icy_sixel · image                         |     55 |
 
-## Four entry points: _interactive_, _one-shot_, RPC, and ACP.
+## Runtime entry points
 
-Same engine, four wrappers. `omp` runs the TUI. `omp -p` answers a single prompt and exits. The Node SDK embeds the session in your process. `omp --mode rpc` and `omp acp` hand the wheel to another program over stdio.
+The same engine powers the interactive TUI, one-shot `omp -p`, the Node SDK,
+stdio RPC/ACP integrations, and the Picot desktop/browser UI. Each surface keeps
+the OMP session and tool behavior as its source of truth.
 
 ### Interactive — when in doubt, the agent asks
 
@@ -558,6 +560,44 @@ The [Agent Client Protocol](https://github.com/zed-industries/agent-client-proto
 | `edit, bash` | `session/request_permission`        |
 
 Full reference: [omp.sh/docs/sdk](https://omp.sh/docs/sdk).
+
+### Desktop GUI and browser access — Picot
+
+The monorepo also contains [Picot](apps/desktop), a local Tauri application that
+provides a desktop and LAN/browser UI for the same OMP runtime. Picot does not
+reimplement the agent: it stages the OMP build from this checkout and starts one
+managed `omp --mode rpc` process per workspace.
+
+```text
+Picot WebView / LAN browser
+          │  /v2/ws
+          ▼
+Rust HostServer
+          │  stdio RPC
+          ▼
+bundled omp --mode rpc
+          │
+          ▼
+OMP sessions, config, credentials, and extensions
+```
+
+The Rust host owns native capabilities and workspace/session data. The frontend
+receives streaming tokens, tool events, session state, and settings through the
+typed host bridge, while OMP remains the source of truth for agent behavior,
+configuration, credentials, and session JSONL. The desktop and browser surfaces
+therefore share the same runtime semantics rather than maintaining a second
+agent implementation.
+
+Build the GUI from the repository root:
+
+```sh
+bun install --frozen-lockfile
+bun --cwd apps/desktop run dev      # development desktop app
+bun --cwd apps/desktop run build    # release bundle
+```
+
+See the [Picot README](apps/desktop/README.md) for UI capabilities, host/runtime
+boundaries, LAN access, and desktop-specific checks.
 
 ## A harness worth keeping is one you _don't_ outgrow.
 

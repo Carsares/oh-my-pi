@@ -9,6 +9,7 @@ function validId(value) {
 }
 
 export function parseAppRoute(pathname) {
+  if (pathname === "/") return { name: "home" };
   if (pathname === "/app/settings") return { name: "settings" };
   const segments = pathname.split("/");
   if (
@@ -35,6 +36,8 @@ export function parseAppRoute(pathname) {
 
 export function appRoutePath(route) {
   switch (route.name) {
+    case "home":
+      return "/";
     case "launcher":
       if (!validId(route.workspaceId)) throw new Error("Invalid workspaceId");
       return `/app/workspaces/${route.workspaceId}/launcher`;

@@ -5,10 +5,17 @@
 // files; a second failure means it's a real bug, so we stop retrying.
 const RELOAD_GUARD_KEY = "picot:bootstrap-reload-attempted";
 
-import("./native/app.js")
+const appModule = import("./native/utils/router.js").then(({ parseAppRoute }) => {
+  if (parseAppRoute(window.location.pathname).name === "home") {
+    return import("./native/home-app.js").then(({ startHomeApp }) => startHomeApp());
+  }
+  return import("./native/app.js");
+});
+
+appModule
   .then(() => sessionStorage.removeItem(RELOAD_GUARD_KEY))
   .catch((error) => {
-    console.error("[bootstrap] failed to load native/app.js", error);
+    console.error("[bootstrap] failed to initialize Picot", error);
     if (sessionStorage.getItem(RELOAD_GUARD_KEY)) return;
     sessionStorage.setItem(RELOAD_GUARD_KEY, "1");
     location.reload();

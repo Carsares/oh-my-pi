@@ -818,6 +818,7 @@ fn setup_native_runtime(app: &mut tauri::App, static_dir: PathBuf) -> Result<(),
         )
         .await?;
         runtimes.spawn(target.clone(), launch)?;
+        host.set_active_runtime(&target)?;
         Ok::<HostServer, String>(host)
     })?;
     if let Err(error) = open_native_workspace_window(app.handle(), host.origin(), &target) {

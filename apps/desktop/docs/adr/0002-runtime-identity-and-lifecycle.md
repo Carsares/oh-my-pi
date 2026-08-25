@@ -29,6 +29,11 @@ working or be reused after its OMP process exits. Reopening starts a fresh proce
 Mutations require idempotency keys. Acceptance and completion are separate; a lost outcome is surfaced
 as unknown and is never automatically retried.
 
+The Host keeps a most-recently-used list of validated live runtime targets for UI navigation only.
+Visible session pages refresh that order when they adopt a target or regain focus. The Web root route
+opens the most recent live target, pruning stopped targets before selection; this does not change
+runtime ownership, command routing, or session persistence.
+
 Historical session names remain OMP-owned metadata. The native sidebar invokes the bundled
 `picot-config` adapter through the active RPC process; that adapter validates the target against
 `SessionManager.listAll()`, opens the canonical managed session with `SessionManager.open()`, and

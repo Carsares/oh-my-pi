@@ -267,6 +267,32 @@ describe("SessionSidebar.render", () => {
     expect(container.querySelector(".session-title").textContent).toBe("Recovered");
   });
 
+  it("loads global sessions without assigning a current workspace", async () => {
+    const { sidebar, container, data } = makeSidebar(
+      [
+        {
+          id: "s-global",
+          name: "Global session",
+          filePath: "/sessions/global.jsonl",
+          isCurrentWorkspace: false,
+        },
+      ],
+      {
+        config: null,
+        control: null,
+        getTarget: () => null,
+        workspaceNeutral: true,
+      },
+    );
+
+    await sidebar.load();
+
+    expect(data.listAllSessions).toHaveBeenCalledWith(null);
+    expect(container.textContent).toContain("Global session");
+    expect(container.querySelector(".session-rename-btn")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("picot-session-list-cache:global"))).toHaveLength(1);
+  });
+
   it("renders a cached session list immediately while refreshing in the background", async () => {
     const pending = deferred();
     localStorage.setItem(

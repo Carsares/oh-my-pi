@@ -137,6 +137,22 @@ describe("HostDataGateway", () => {
     );
   });
 
+  it("loads workspace-neutral sessions over HTTP without opening a websocket fallback", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ sessions: [{ id: "session-a" }] }),
+    });
+    const data = new HostDataGateway(null, {
+      fetchImpl,
+      location: { origin: "http://127.0.0.1:4000" },
+    });
+
+    await expect(data.listAllSessions()).resolves.toMatchObject({
+      sessions: [{ id: "session-a" }],
+    });
+    expect(fetchImpl.mock.calls[0][0].toString()).toBe("http://127.0.0.1:4000/v2/sessions");
+  });
+
   it("falls back to the websocket request when the HTTP session list hangs", async () => {
     vi.useFakeTimers();
     try {

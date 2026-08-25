@@ -59,6 +59,7 @@ import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
 import { createSessionStore, reduceSessionState } from "./session/session-store.js";
 import { setupSettingsPanel } from "./settings/settings-panel.js";
+import { setupActiveRuntimeTracking } from "./transport/active-runtime.js";
 import { resolveBootstrapTarget } from "./transport/bootstrap-target.js";
 import { ConfigGateway, consumeConfigResponseFrame } from "./transport/config-gateway.js";
 import {
@@ -237,6 +238,10 @@ const sessionUiState = new SessionUiStateStore({
 let currentModelContextWindow = 0;
 let availableModels = [];
 let target = provisionalTargetFromRoute(route);
+const activeRuntimeTracking = setupActiveRuntimeTracking({
+  getTarget: () => target,
+  onError: (error) => console.warn("[Native] Failed to update active runtime:", error),
+});
 let configGatewayTargetReady = false;
 let resolveConfigGatewayReady;
 const configGatewayReady = new Promise((resolve) => {
@@ -1869,6 +1874,7 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
     );
   }
   target = nextTarget;
+  void activeRuntimeTracking.sync();
   store = createSessionStore(target);
   // Reset the in-flight guard whenever the target changes so a new session
   // is never blocked from hydrating by a stale flag from the previous one.

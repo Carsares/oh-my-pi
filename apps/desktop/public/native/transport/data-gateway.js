@@ -39,8 +39,8 @@ export class HostDataGateway {
     this.#location = location;
     this.#dataRequestTimeoutMs = dataRequestTimeoutMs;
     this.#sessionListHttpTimeoutMs = sessionListHttpTimeoutMs;
-    adapter.setReceiver((frame) => this.#receive(frame));
-    adapter.setConnectionListener?.((connected) => {
+    adapter?.setReceiver((frame) => this.#receive(frame));
+    adapter?.setConnectionListener?.((connected) => {
       if (!connected) this.#disconnect();
     });
   }
@@ -49,6 +49,7 @@ export class HostDataGateway {
     if (!READ_OPERATIONS.has(operation)) {
       throw new Error(`Unsupported read-only data operation: ${operation}`);
     }
+    if (!this.#adapter) throw new Error("Host data WebSocket adapter is unavailable");
     const traceSessionLoad = operation === "read_session_messages";
     const startedAt = performance.now();
     if (traceSessionLoad) {
@@ -115,9 +116,10 @@ export class HostDataGateway {
   // belonging to `workspaceId` are tagged `isCurrentWorkspace: true`.
   listAllSessions(workspaceId) {
     if (this.#fetch) {
-      return this.#listAllSessionsHttp(workspaceId).catch(() =>
-        this.request("list_all_sessions", { workspaceId }),
-      );
+      const request = this.#listAllSessionsHttp(workspaceId);
+      return this.#adapter
+        ? request.catch(() => this.request("list_all_sessions", { workspaceId }))
+        : request;
     }
     return this.request("list_all_sessions", { workspaceId });
   }
@@ -146,7 +148,7 @@ export class HostDataGateway {
 
   async #listAllSessionsHttp(workspaceId) {
     const url = new URL("/v2/sessions", this.#location?.origin ?? globalThis.location?.origin);
-    url.searchParams.set("workspaceId", workspaceId);
+    if (workspaceId) url.searchParams.set("workspaceId", workspaceId);
     const response = await this.#fetchWithTimeout(url, this.#sessionListHttpTimeoutMs);
     if (!response.ok) throw new Error("Session list request failed");
     return response.json();

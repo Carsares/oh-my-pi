@@ -34,8 +34,7 @@ use futures_util::StreamExt;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::Infallible;
 use std::fs;
 use std::path::PathBuf;
@@ -97,6 +96,7 @@ fn fingerprint_static_dir(static_dir: &std::path::Path) -> String {
 struct HostState {
     router: Mutex<HostRouter>,
     runtimes: NativePiManager,
+    active_runtimes: Mutex<VecDeque<RuntimeTarget>>,
     auth: Arc<Mutex<RemoteAuth>>,
     session_owners: Mutex<std::collections::HashMap<RuntimeTarget, String>>,
     data: HostDataPlane,
@@ -213,6 +213,7 @@ impl HostServer {
         let state = Arc::new(HostState {
             router: Mutex::new(HostRouter::new()),
             runtimes,
+            active_runtimes: Mutex::new(VecDeque::new()),
             auth,
             session_owners: Mutex::new(std::collections::HashMap::new()),
             data,
@@ -292,6 +293,10 @@ impl HostServer {
             .route("/health/models/test", post(health_model_test))
             .route("/v2/ws", get(websocket_upgrade))
             .route("/v2/bootstrap", get(bootstrap_target))
+            .route(
+                "/v2/active-runtime",
+                get(get_active_runtime).post(set_active_runtime),
+            )
             .route("/v2/sessions", get(list_all_sessions_http))
             .route("/v2/auth/exchange", post(exchange_pairing))
             .route("/v2/lan-qr", get(lan_qr))
@@ -344,6 +349,10 @@ impl HostServer {
             .data
             .workspace_root_path(workspace_id)
             .map_err(|error| format!("Cannot resolve workspace path: {error:?}"))
+    }
+
+    pub fn set_active_runtime(&self, target: &RuntimeTarget) -> Result<(), String> {
+        record_active_runtime(&self.state, target)
     }
 
     pub fn origin(&self) -> &str {
@@ -406,6 +415,54 @@ async fn health_runtime(
         "byState": by_state,
         "runtimes": statuses,
     })))
+}
+
+fn record_active_runtime(state: &HostState, target: &RuntimeTarget) -> Result<(), String> {
+    state.runtimes.snapshot(target)?;
+    let mut active = state
+        .active_runtimes
+        .lock()
+        .map_err(|_| "Active runtime registry lock poisoned".to_string())?;
+    active.retain(|candidate| candidate.instance_id != target.instance_id);
+    active.push_front(target.clone());
+    Ok(())
+}
+
+fn most_recent_active_runtime(state: &HostState) -> Result<Option<RuntimeTarget>, String> {
+    let mut active = state
+        .active_runtimes
+        .lock()
+        .map_err(|_| "Active runtime registry lock poisoned".to_string())?;
+    active.retain(|candidate| {
+        state
+            .runtimes
+            .target_for_session(&candidate.workspace_id, &candidate.session_id)
+            .is_some_and(|target| target.instance_id == candidate.instance_id)
+    });
+    Ok(active.front().cloned())
+}
+
+async fn get_active_runtime(
+    State(state): State<Arc<HostState>>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let target = most_recent_active_runtime(&state).map_err(|message| {
+        api_error_with_detail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "active_runtime_unavailable",
+            &message,
+        )
+    })?;
+    Ok(Json(json!({ "target": target })))
+}
+
+async fn set_active_runtime(
+    State(state): State<Arc<HostState>>,
+    Json(target): Json<RuntimeTarget>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    record_active_runtime(&state, &target).map_err(|message| {
+        api_error_with_detail(StatusCode::NOT_FOUND, "runtime_not_found", &message)
+    })?;
+    Ok(Json(json!({ "target": target })))
 }
 
 #[derive(Deserialize)]
@@ -550,7 +607,7 @@ struct BootstrapQuery {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SessionsQuery {
-    workspace_id: String,
+    workspace_id: Option<String>,
 }
 
 async fn list_all_sessions_http(
@@ -559,7 +616,7 @@ async fn list_all_sessions_http(
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let sessions = state
         .data
-        .list_all_sessions(&query.workspace_id)
+        .list_all_sessions(query.workspace_id.as_deref())
         .map_err(host_data_http_error)?;
     let mut sessions = serde_json::to_value(sessions)
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed"))?;
@@ -1469,7 +1526,7 @@ async fn dispatch(
                     .ok_or(("invalid_workspace", "workspaceId is required".into()))?;
                 let sessions = state
                     .data
-                    .list_all_sessions(workspace_id)
+                    .list_all_sessions(Some(workspace_id))
                     .map_err(host_data_error)?;
                 let mut sessions = serde_json::to_value(sessions)
                     .map_err(|error| ("serialization_failed", error.to_string()))?;
@@ -2236,7 +2293,7 @@ mod tests {
     use crate::remote_auth::RemoteAuth;
     use crate::runtime_coordinator::RuntimeTarget;
     use futures_util::{SinkExt, StreamExt};
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::fs;
     use std::sync::{Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -2427,6 +2484,63 @@ mod tests {
         assert_eq!(body["status"], "ok");
         assert_eq!(body["runtimeCount"], 0);
         assert!(body["runtimes"].as_array().unwrap().is_empty());
+
+        host.stop();
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[tokio::test]
+    async fn active_runtime_endpoint_returns_the_most_recent_live_target() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!("picot-host-active-runtime-{nonce}"));
+        let public = temp.join("public");
+        fs::create_dir_all(&public).unwrap();
+        fs::write(public.join("index.html"), "<h1>Picot native host</h1>").unwrap();
+        let metadata = MetadataStore::open(&temp.join("picot.sqlite3")).unwrap();
+        let auth = Arc::new(Mutex::new(RemoteAuth::new(Arc::new(Mutex::new(metadata)))));
+        let runtimes = NativePiManager::new(32);
+        let target_a = RuntimeTarget::new("workspace-a", "session-a", "instance-a");
+        let target_b = RuntimeTarget::new("workspace-b", "session-b", "instance-b");
+        let _fake_a = runtimes.register_in_memory(target_a.clone()).unwrap();
+        let _fake_b = runtimes.register_in_memory(target_b.clone()).unwrap();
+        let host = HostServer::start(public, runtimes.clone(), auth, None)
+            .await
+            .unwrap();
+        let client = reqwest::Client::new();
+
+        for target in [&target_a, &target_b] {
+            let response = client
+                .post(format!("{}/v2/active-runtime", host.origin()))
+                .json(target)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), reqwest::StatusCode::OK);
+        }
+
+        let body: Value = client
+            .get(format!("{}/v2/active-runtime", host.origin()))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(body["target"]["instanceId"], "instance-b");
+
+        runtimes.stop(&target_b).unwrap();
+        let body: Value = client
+            .get(format!("{}/v2/active-runtime", host.origin()))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(body["target"]["instanceId"], "instance-a");
 
         host.stop();
         fs::remove_dir_all(temp).unwrap();

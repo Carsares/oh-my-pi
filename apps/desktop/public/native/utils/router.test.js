@@ -3,6 +3,7 @@ import { appRoutePath, parseAppRoute, replaceTemporarySessionRoute } from "./rou
 
 describe("app router", () => {
   it("round-trips opaque launcher and session routes", () => {
+    expect(parseAppRoute(appRoutePath({ name: "home" }))).toEqual({ name: "home" });
     const launcher = { name: "launcher", workspaceId: "workspace_A-1" };
     expect(parseAppRoute(appRoutePath(launcher))).toEqual(launcher);
     const session = {

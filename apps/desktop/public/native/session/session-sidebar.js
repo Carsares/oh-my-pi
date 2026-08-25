@@ -217,6 +217,7 @@ export class SessionSidebar {
       control,
       config,
       getTarget,
+      workspaceNeutral = false,
       onSelect,
       onCreateSession,
       onSessionsLoaded,
@@ -229,6 +230,7 @@ export class SessionSidebar {
     this.control = control;
     this.config = config;
     this.getTarget = getTarget;
+    this.workspaceNeutral = workspaceNeutral;
     this.onSelect = onSelect;
     this.onCreateSession = onCreateSession;
     this.onSessionsLoaded = onSessionsLoaded;
@@ -473,11 +475,12 @@ export class SessionSidebar {
   // ── loading ─────────────────────────────────────────────────────
   async load({ quiet = false, retryAttempt = 0 } = {}) {
     const seq = ++this._loadSeq;
-    const workspaceId = this.getTarget()?.workspaceId;
-    if (!workspaceId) return;
+    const workspaceId = this.getTarget()?.workspaceId ?? null;
+    if (!workspaceId && !this.workspaceNeutral) return;
+    const cacheScope = workspaceId ?? "global";
     let renderedFromCache = false;
     if (!quiet && this.sessions.length === 0) {
-      const cachedSessions = readSessionCache(workspaceId, this.activeSessionId);
+      const cachedSessions = readSessionCache(cacheScope, this.activeSessionId);
       if (cachedSessions.length > 0) {
         this.sessions = cachedSessions;
         this.#hydrateStatuses(this.sessions);
@@ -524,7 +527,7 @@ export class SessionSidebar {
       const changed = sessionListSignature(nextSessions) !== previousSignature;
       this.sessions = nextSessions;
       this.#hydrateStatuses(this.sessions, { authoritative: true });
-      writeSessionCache(workspaceId, this.sessions);
+      writeSessionCache(cacheScope, this.sessions);
       this.onSessionsLoaded?.(this.sessions);
       this.syncAgentInboxNav();
       if (changed || (!quiet && !renderedFromCache)) this.render();
@@ -783,7 +786,7 @@ export class SessionSidebar {
       actionSlot.appendChild(pinBtn);
     }
 
-    if (session.filePath) {
+    if (session.filePath && this.config) {
       const renameBtn = document.createElement("button");
       renameBtn.type = "button";
       renameBtn.className = "session-rename-btn";
@@ -932,21 +935,23 @@ export class SessionSidebar {
             body.appendChild(this.#buildItem(s, { showArchiveButton: false }));
           }
         },
-        renderHeaderActions: (header) => {
-          const deleteBtn = document.createElement("button");
-          deleteBtn.type = "button";
-          deleteBtn.className = "archived-delete-all-btn";
-          const deleteLabel = t("sidebar.deleteAllArchived");
-          deleteBtn.title = deleteLabel;
-          deleteBtn.setAttribute("aria-label", deleteLabel);
-          const trashGlyph = createIcon("trash-2", { size: 13 });
-          if (trashGlyph) deleteBtn.replaceChildren(trashGlyph);
-          deleteBtn.addEventListener("click", (event) => {
-            event.stopPropagation();
-            this.deleteAllArchived();
-          });
-          header.appendChild(deleteBtn);
-        },
+        renderHeaderActions: this.control
+          ? (header) => {
+              const deleteBtn = document.createElement("button");
+              deleteBtn.type = "button";
+              deleteBtn.className = "archived-delete-all-btn";
+              const deleteLabel = t("sidebar.deleteAllArchived");
+              deleteBtn.title = deleteLabel;
+              deleteBtn.setAttribute("aria-label", deleteLabel);
+              const trashGlyph = createIcon("trash-2", { size: 13 });
+              if (trashGlyph) deleteBtn.replaceChildren(trashGlyph);
+              deleteBtn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                this.deleteAllArchived();
+              });
+              header.appendChild(deleteBtn);
+            }
+          : undefined,
       });
       archivedSection.classList.add("archived-group");
       archivedHeader.classList.add("archived-header");
@@ -1266,8 +1271,10 @@ export class SessionSidebar {
           this.render();
         },
       });
-      rows.push({ label: t("sidebar.rename"), action: () => this.#startRename(session) });
-    } else if (session.filePath) {
+      if (this.config) {
+        rows.push({ label: t("sidebar.rename"), action: () => this.#startRename(session) });
+      }
+    } else if (session.filePath && this.config) {
       rows.push({ separator: true });
       rows.push({ label: t("sidebar.rename"), action: () => this.#startRename(session) });
     }

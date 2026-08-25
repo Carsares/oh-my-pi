@@ -1081,14 +1081,14 @@ impl HostDataPlane {
 
     /// List saved sessions across *all* projects, not just the current
     /// workspace, so the sidebar can group them by project. Sessions that
-    /// belong to `workspace_id` are tagged `is_current_workspace = true` and
-    /// carry the live workspace id so the UI can open them in-window; all other
-    /// sessions carry an empty workspace id and are opened by project path.
+    /// belong to `current_workspace_id` are tagged `is_current_workspace = true`
+    /// and carry the live workspace id so the UI can open them in-window. When
+    /// there is no current workspace, every session remains workspace-neutral.
     pub fn list_all_sessions(
         &self,
-        workspace_id: &str,
+        current_workspace_id: Option<&str>,
     ) -> Result<Vec<SessionSummary>, HostDataError> {
-        let current = self.workspace_root(workspace_id).ok();
+        let current = current_workspace_id.and_then(|workspace_id| self.workspace_root(workspace_id).ok());
         let mut sessions = self.collect_sessions(None)?;
         for session in &mut sessions {
             let project = PathBuf::from(&session.project_path);
@@ -1096,7 +1096,7 @@ impl HostDataPlane {
                 .as_ref()
                 .is_some_and(|root| same_dir(root, &project))
             {
-                session.workspace_id = workspace_id.to_owned();
+                session.workspace_id = current_workspace_id.unwrap_or_default().to_owned();
                 session.is_current_workspace = true;
             }
         }
@@ -2402,7 +2402,7 @@ mod tests {
 
         // list_all_sessions returns both projects, tagging only the current
         // workspace's session as current.
-        let all = data.list_all_sessions("workspace-a").unwrap();
+        let all = data.list_all_sessions(Some("workspace-a")).unwrap();
         assert_eq!(all.len(), 2);
         let current = all.iter().find(|s| s.id == "session-a").unwrap();
         assert!(current.is_current_workspace);
@@ -2412,6 +2412,11 @@ mod tests {
         assert!(foreign.workspace_id.is_empty());
         assert!(foreign.project_path.ends_with("other"));
         assert_eq!(foreign.project_name, "other");
+
+        let neutral = data.list_all_sessions(None).unwrap();
+        assert!(neutral
+            .iter()
+            .all(|session| !session.is_current_workspace && session.workspace_id.is_empty()));
         fs::remove_dir_all(temp).unwrap();
     }
 
@@ -2463,7 +2468,7 @@ mod tests {
             .unwrap()
             .with_session_root(temp.join("sessions"));
 
-        let all = data.list_all_sessions("workspace-a").unwrap();
+        let all = data.list_all_sessions(Some("workspace-a")).unwrap();
         assert_eq!(
             all.iter()
                 .map(|session| session.id.as_str())
@@ -2510,7 +2515,7 @@ mod tests {
             .unwrap()
             .with_session_root(temp.join("sessions"));
 
-        let all = data.list_all_sessions("workspace-a").unwrap();
+        let all = data.list_all_sessions(Some("workspace-a")).unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].id, "session-a");
         assert_eq!(all[0].name.as_deref(), Some("Generated title"));
@@ -2545,7 +2550,7 @@ mod tests {
             .unwrap()
             .with_session_root(temp.join("sessions"));
 
-        let all = data.list_all_sessions("workspace-a").unwrap();
+        let all = data.list_all_sessions(Some("workspace-a")).unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].id, "session-a");
         fs::remove_dir_all(temp).unwrap();
@@ -2626,7 +2631,10 @@ mod tests {
             .unwrap()
             .with_session_root(temp.join("sessions"));
 
-        assert!(data.list_all_sessions("workspace-a").unwrap().is_empty());
+        assert!(data
+            .list_all_sessions(Some("workspace-a"))
+            .unwrap()
+            .is_empty());
         let result = data.delete_sessions(&["session-empty".to_owned()]).unwrap();
 
         assert_eq!(result.deleted, vec!["session-empty"]);
@@ -2666,7 +2674,10 @@ mod tests {
         assert!(result.errors.is_empty());
         assert!(!file_a.exists());
         assert!(!file_b.exists());
-        assert!(data.list_all_sessions("workspace-a").unwrap().is_empty());
+        assert!(data
+            .list_all_sessions(Some("workspace-a"))
+            .unwrap()
+            .is_empty());
         fs::remove_dir_all(temp).unwrap();
     }
 

@@ -53,6 +53,10 @@
       "types": "./src/ar/index.ts",
       "import": "./src/ar/index.ts"
     },
+    "./file-lock": {
+      "types": "./src/file-lock.ts",
+      "import": "./src/file-lock.ts"
+    },
     "./*": {
       "types": "./src/*.ts",
       "import": "./src/*.ts"

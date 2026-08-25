@@ -67,6 +67,17 @@ export const finalBeta = Reflect.get(globalThis, "__betaLoads") ?? 0;
 		expect(overrides["@oh-my-pi/pi-ai/oauth"]).toBe("omp-legacy-pi-bundled:@oh-my-pi/pi-ai/oauth");
 	});
 
+	it("serves the native-dependent pi-utils file-lock subpath in compiled mode", () => {
+		// `pi-utils` keeps a root wildcard export for its small helpers, but
+		// `file-lock` imports the native addon and therefore must be an explicit
+		// compiled registry entry. Otherwise dev mode resolves the source tree
+		// while a packaged binary fails on the transitive `pi-natives` import.
+		const key = "@oh-my-pi/pi-utils/file-lock";
+		const overrides = __buildLegacyPiPackageRootOverrides(true, bundledModuleKeys);
+		expect(bundledModuleKeys.has(key)).toBe(true);
+		expect(overrides[key]).toBe(`omp-legacy-pi-bundled:${key}`);
+	});
+
 	it("expands wildcard exports for concrete on-disk targets (issue #3442 follow-up)", () => {
 		// `pi-ai/oauth/anthropic` is exposed via the `./oauth/*` wildcard export;
 		// the original fix only bundled non-wildcard subpaths, so peer-only plugins

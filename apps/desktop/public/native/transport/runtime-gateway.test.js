@@ -56,4 +56,25 @@ describe("RuntimeGateway", () => {
     });
     await expect(fresh).resolves.toMatchObject({ sequence: 4 });
   });
+
+  it("rejects nested OMP runtime errors instead of resolving the transport envelope", async () => {
+    const adapter = createInMemoryRuntimeAdapter();
+    const gateway = new RuntimeGateway(adapter);
+    const pending = gateway.snapshot(target.sessionId);
+    const frame = adapter.takeSent();
+
+    adapter.receive({
+      type: "runtime_response",
+      requestId: frame.requestId,
+      acceptance: "accepted",
+      response: {
+        type: "response",
+        command: "get_state",
+        success: false,
+        error: "Unknown command: get_state",
+      },
+    });
+
+    await expect(pending).rejects.toThrow("Unknown command: get_state");
+  });
 });

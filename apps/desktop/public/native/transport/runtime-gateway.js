@@ -114,8 +114,16 @@ export class RuntimeGateway {
       const pending = this.#pending.get(frame.requestId);
       if (pending && pending.generation === this.#generation) {
         this.#pending.delete(frame.requestId);
-        if (frame.error) pending.reject(new Error(frame.error.message ?? String(frame.error)));
-        else pending.resolve(frame);
+        const error =
+          frame.error ??
+          (frame.type === "runtime_response" && frame.response?.success === false
+            ? (frame.response.error ?? frame.response)
+            : null);
+        if (error) {
+          const message =
+            typeof error === "string" ? error : (error.message ?? JSON.stringify(error));
+          pending.reject(new Error(message));
+        } else pending.resolve(frame);
         return;
       }
     }

@@ -13,13 +13,13 @@ import { setupSkillsTabShell } from "./skills-tab-shell.js";
 import { setupThinkingEffortControl } from "./thinking-effort-control.js";
 
 // Wires the settings overlay panel for the native runtime: open/close, tab
-// switching, theme grid, the embedded pi version readout, the Usage tab (cost
+// switching, theme grid, the bundled OMP version readout, the Usage tab (cost
 // dashboard), the Extensions tab (community package browse), and the
 // Configuration tab (API keys / model catalog + agent-config / models.json
 // editors). When `data` + `getWorkspaceId` are supplied the Usage tab loads
 // aggregated cost data from the native host on first open. `control` is a
 // HostControlGateway (or null) used by the Extensions tab to list/install/remove
-// packages via the embedded pi CLI. `configGateway` (or null) drives the
+// packages via the bundled OMP CLI. `configGateway` (or null) drives the
 // Configuration tab via the picot-bridge extension. Both tabs are populated
 // lazily whenever they are shown.
 export function setupSettingsPanel({

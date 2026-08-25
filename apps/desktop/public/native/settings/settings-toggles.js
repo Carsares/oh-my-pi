@@ -1,5 +1,5 @@
 // Wires the settings toggle switches in the General tab. Auto-compaction is
-// persisted to Pi's default settings; client-only toggles still use localStorage.
+// persisted to OMP's default settings; client-only toggles still use localStorage.
 
 const STORAGE_PREFIX = "picot-settings-";
 

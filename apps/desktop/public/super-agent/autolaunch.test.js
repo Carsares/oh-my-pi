@@ -9,8 +9,8 @@ describe("super-agent autolaunch", () => {
       currentSessionId: "normal",
       sessions: [
         { id: "normal", projectPath: "/Users/me/project", timestamp: 30 },
-        { id: "agent-old", projectPath: "/Users/me/.pi/agent/super-agent", timestamp: 10 },
-        { id: "agent-new", projectPath: "/Users/me/.pi/agent/super-agent", timestamp: 20 },
+        { id: "agent-old", projectPath: "/Users/me/.omp/agent/super-agent", timestamp: 10 },
+        { id: "agent-new", projectPath: "/Users/me/.omp/agent/super-agent", timestamp: 20 },
       ],
     });
 
@@ -23,7 +23,7 @@ describe("super-agent autolaunch", () => {
       currentSessionId: "agent-new",
       sessions: [
         { id: "normal", projectPath: "/Users/me/project", timestamp: 30 },
-        { id: "agent-new", projectPath: "/Users/me/.pi/agent/super-agent", timestamp: 20 },
+        { id: "agent-new", projectPath: "/Users/me/.omp/agent/super-agent", timestamp: 20 },
       ],
     });
 
@@ -31,7 +31,7 @@ describe("super-agent autolaunch", () => {
   });
 
   it("does not launch when disabled or already launched", () => {
-    const sessions = [{ id: "agent", projectPath: "/Users/me/.pi/agent/super-agent" }];
+    const sessions = [{ id: "agent", projectPath: "/Users/me/.omp/agent/super-agent" }];
 
     expect(selectSuperAgentSessionToLaunch({ enabled: false, sessions })).toBeNull();
     expect(

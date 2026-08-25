@@ -1,7 +1,7 @@
 {
   "name": "Picot",
   "short_name": "Picot",
-  "description": "Local desktop GUI for the Pi coding agent",
+  "description": "Local desktop GUI for Oh My Pi",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f3ef",

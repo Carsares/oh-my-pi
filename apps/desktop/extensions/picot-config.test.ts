@@ -23,8 +23,8 @@ const ompSettings = vi.hoisted(() => ({
 }));
 
 vi.mock("@oh-my-pi/pi-coding-agent", () => ({
+  AgentRegistry: vi.fn(),
   createAgentSession: vi.fn(),
-  ModelRuntime: { create: vi.fn() },
   SessionManager: { inMemory: vi.fn(), listAll: vi.fn(), open: vi.fn() },
   settings: ompSettings,
 }));
@@ -95,15 +95,15 @@ afterEach(() => {
 });
 
 describe("picot config default settings operations", () => {
-  it("renames a managed historical session through Pi SessionManager", async () => {
+  it("renames a managed historical session through OMP SessionManager", async () => {
     const home = mkdtempSync(join(tmpdir(), "picot-config-session-"));
     tempHomes.push(home);
     const sessionPath = join(home, "session.jsonl");
     writeFileSync(sessionPath, '{"type":"session","id":"s1"}\n', "utf8");
-    const appendSessionInfo = vi.fn();
+    const setSessionName = vi.fn(async () => true);
     const { SessionManager } = await import("@oh-my-pi/pi-coding-agent");
     vi.mocked(SessionManager.listAll).mockResolvedValue([{ path: sessionPath }] as never);
-    vi.mocked(SessionManager.open).mockReturnValue({ appendSessionInfo } as never);
+    vi.mocked(SessionManager.open).mockResolvedValue({ setSessionName } as never);
     const { handlePicotConfig } = await loadConfigWithTempHome();
 
     await expect(
@@ -117,7 +117,7 @@ describe("picot config default settings operations", () => {
       data: { filePath: realpathSync(sessionPath), name: "Renamed session" },
     });
     expect(SessionManager.open).toHaveBeenCalledWith(realpathSync(sessionPath));
-    expect(appendSessionInfo).toHaveBeenCalledWith("Renamed session");
+    expect(setSessionName).toHaveBeenCalledWith("Renamed session", "user");
   });
 
   it("rejects unmanaged historical session paths", async () => {
@@ -147,7 +147,11 @@ describe("picot config default settings operations", () => {
         {},
         {
           model: { provider: "test", id: "model" },
-          sessionManager: { getSessionFile: () => "/sessions/current.jsonl" },
+          modelRegistry: { getApiKey: vi.fn(), resolver: vi.fn() },
+          sessionManager: {
+            getSessionFile: () => "/sessions/current.jsonl",
+            getSessionId: () => "session-1",
+          },
         },
       ),
     ).resolves.toEqual({ ok: true, data: { title: "Generated title" } });

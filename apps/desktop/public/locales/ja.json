@@ -1,7 +1,7 @@
 {
   "app": {
     "welcome": "Picotへようこそ",
-    "welcomeHint": "下にメッセージを入力してPiとチャットを始めるか、サイドバーからセッションを選択してください。",
+    "welcomeHint": "下にメッセージを入力してOMPとチャットを始めるか、サイドバーからセッションを選択してください。",
     "currentWorkspace": "現在のワークスペース："
   },
   "shortcuts": {
@@ -254,7 +254,7 @@
     "uninstallFailed": "アンインストール失敗",
     "installFailedNote": "この拡張機能はnpmが必要です。npmがインストールされPicotからアクセス可能であることを確認してから再試行してください。",
     "uninstallFailedNote": "Picotがこの拡張機能パッケージを削除できませんでした。エラーの詳細を確認してから再試行してください。",
-    "permissionDenied": "~/.pi/agent/npmの権限が拒否されました（所有者/権限を確認してください）。",
+    "permissionDenied": "~/.omp/pluginsの権限が拒否されました（所有者/権限を確認してください）。",
     "browseCountZero": "0 / 全{total}件",
     "browseCountRange": "{start}–{end} / 全{total}件",
     "downloadsPerMonth": "{count}/月",
@@ -421,7 +421,7 @@
   "sidebar": {
     "loadingSessions": "セッションを読み込み中...",
     "failedToLoadSessions": "セッションの読み込みに失敗しました。",
-    "failedToLoadSessionsRuntime": "セッションの読み込みに失敗しました。Piランタイムが利用できない可能性があります。",
+    "failedToLoadSessionsRuntime": "セッションの読み込みに失敗しました。OMPランタイムが利用できない可能性があります。",
     "search": "検索...",
     "clearSearch": "検索をクリア",
     "openFolder": "フォルダーをワークスペースとして開く",
@@ -565,7 +565,7 @@
     "help": "これは通常、インストールが不完全または破損していることを意味します。Picotを再インストールすると通常は解決します。再インストールまたは再起動後に「起動を再試行」をクリックしてください。",
     "retry": "起動を再試行",
     "tauriUnavailable": "このウィンドウではTauriランタイムが利用できません。",
-    "starting": "Piランタイムを起動中...",
+    "starting": "OMPランタイムを起動中...",
     "startupFailed": "起動に失敗しました"
   },
   "settings": {
@@ -587,7 +587,7 @@
     "taskNotificationsDescription": "タスクの完了時にOS通知を表示します。",
     "taskCompleteTitle": "タスクが完了しました",
     "taskCompleteMessage": "タスクが完了しました。",
-    "piVersion": "Piバージョン",
+    "piVersion": "OMPバージョン",
     "picotVersion": "Picotバージョン",
     "checkForUpdates": "アップデートを確認",
     "status": "ステータス",
@@ -600,7 +600,7 @@
     "providersFile": "プロバイダーファイル",
     "llmProviders": "LLMプロバイダー",
     "browseCommunityPackages": "コミュニティパッケージを閲覧",
-    "browseHelp": "Piエコシステムの拡張機能、スキル、テーマ、プロンプトを発見してください。ワンクリックでインストール。",
+    "browseHelp": "OMPエコシステムの拡張機能、スキル、テーマ、プロンプトを発見してください。ワンクリックでインストール。",
     "costDashboard": "コストダッシュボード",
     "loadingProviders": "プロバイダーを読み込み中…",
     "thinkingLevel": "思考：{level}",
@@ -671,7 +671,7 @@
     },
     "skills": {
       "title": "スキル",
-      "description": "発見されたスキルを管理します。変更は新しいセッションまたはPiの再起動後に適用されます。",
+      "description": "発見されたスキルを管理します。変更はconfig.ymlに保存され、新しいセッションまたはOMPの再起動後に適用されます。",
       "rescan": "再スキャン",
       "global": "グローバル",
       "project": "現在のプロジェクト",
@@ -685,16 +685,15 @@
       "enableGroup": "グループ全体を切り替え",
       "enableSkill": "スキルを切り替え",
       "shadowedBy": "{name}によってシャドウされています",
-      "customRules": "カスタム包含/フィルタールール（読み取り専用 — settings.jsonを手動で編集してください）",
-      "savedRestartRequired": "保存しました。新しいセッションを開始するかPiを再起動してください。",
+      "customRules": "カスタム包含/フィルタールール（読み取り専用 — config.ymlを手動で編集してください）",
+      "savedRestartRequired": "保存しました。新しいセッションを開始するかOMPを再起動してください。",
       "loadFailed": "スキルの読み込みに失敗しました。",
       "saveFailed": "スキル設定の保存に失敗しました。",
       "rescanFailed": "スキルの再スキャンに失敗しました。",
-      "ambiguousRuleTarget": "このターゲットは複数のルートにマップされます。settings.jsonを手動で編集して変更してください。",
+      "ambiguousRuleTarget": "このターゲットは複数のルートにマップされます。config.ymlを手動で編集して変更してください。",
       "scopeSummary": "{total}個のスキル · {groups}個のグループ",
       "discovered": "Discovered",
       "install": "Install",
-      "packages": "Packages",
       "sectionsAriaLabel": "Skills sections"
     },
     "installSkills": {
@@ -713,29 +712,10 @@
       "installing": "Installing…",
       "installFailed": "Failed to install selected skills.",
       "complete": "Installed {added} entries; {skipped} already configured.",
-      "restartRequired": "Saved. Start a new session or restart Pi for the change to take effect.",
+      "restartRequired": "Saved. Start a new session or restart OMP for the change to take effect.",
       "confirmationHeading": "Confirm skill installation",
       "skill": "Skill",
       "group": "Group"
-    },
-    "packageSkills": {
-      "title": "Packages skills",
-      "description": "Bundled skill candidates from configured Pi packages. These are read-only candidates; effective enable/disable state is computed by Pi and is not shown here.",
-      "bundledCandidates": "Bundled candidates",
-      "refresh": "Refresh",
-      "global": "Global",
-      "project": "Current project",
-      "loading": "Loading package skills…",
-      "retry": "Retry",
-      "empty": "No configured packages in this scope.",
-      "loadFailed": "Failed to load package skills.",
-      "projectUntrusted": "This project is not trusted. Project package paths are not shown.",
-      "notInstalled": "Not installed",
-      "package": "Package",
-      "canonicalPath": "Canonical path",
-      "candidateCount": "{count} candidates",
-      "scopeSummary": "{count} packages",
-      "enableAll": "Enable all"
     },
     "installedPackages": "インストール済みパッケージ",
     "installedHelp": "このインストールに設定された拡張パッケージを管理します: 有効化、無効化、更新、削除。",
@@ -835,7 +815,7 @@
     "bootstrap": {
       "text": {
         "picotStartup": "Picot Startup",
-        "pi": "pi"
+        "pi": "OMP"
       }
     },
     "index": {
@@ -1022,7 +1002,7 @@
     "advancedRawConfig": "高度な生設定",
     "advancedHelpPre": "内部設定の保存先：",
     "advancedHelpPost": "。通常は手動で編集する必要はありません。",
-    "chatConfigPath": "~/.pi/agent/chat/config.json",
+    "chatConfigPath": "~/.omp/agent/chat/config.json",
     "saveRawConfig": "生設定を保存",
     "invalidJson": "JSON が無効です",
     "savedRawConfig": "生設定を保存しました。",

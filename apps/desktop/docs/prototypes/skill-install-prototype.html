@@ -150,7 +150,7 @@
         color: var(--text);
         border-color: var(--accent);
       }
-      .pill {
+      .ompll {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -557,9 +557,9 @@
           <div class="eyebrow">Settings</div>
           <h1>Skills</h1>
           <p class="intro">
-            Discover skills available to Pi, or link a local skill directory to
+            Discover skills available to OMP, or link a local skill directory to
             this installation. Changes apply when you start a new session or
-            restart Pi.
+            restart OMP.
           </p>
           <nav class="top-tabs" aria-label="Skills sections">
             <button class="top-tab" data-tab="discovered">
@@ -729,9 +729,9 @@
             <section class="step">
               <div class="step-no">3</div>
               <div>
-                <h2>Choose where Pi loads them</h2>
+                <h2>Choose where OMP loads them</h2>
                 <p>
-                  Linking never copies files. Pi reads the selected source paths
+                  Linking never copies files. OMP reads the selected source paths
                   from the matching settings file.
                 </p>
                 <div
@@ -746,7 +746,7 @@
                   </button>
                 </div>
                 <div class="scope-hint" id="scopeHint">
-                  Writes to <code>~/.pi/agent/settings.json</code> for every
+                  Writes to <code>~/.omp/agent/config.yml</code> for every
                   trusted workspace.
                 </div>
                 <div class="preview">
@@ -755,7 +755,7 @@
                     ><span id="pathCount">2 paths</span>
                   </div>
                   <pre id="previewText">
-~/.pi/agent/settings.json
+~/.omp/agent/config.yml
 skills += [
   "../../Developer/agent-skills/baoyu-skills/visual-content",
   "../../Developer/agent-skills/baoyu-skills/engineering/code-review"
@@ -785,14 +785,14 @@ skills += [
         <div class="modal-header">
           <h2 id="modalTitle">Confirm skill installation</h2>
           <p>
-            Picot will add these source paths to Pi. No skill files will be
+            Picot will add these source paths to OMP. No skill files will be
             copied, moved, or changed.
           </p>
         </div>
         <div class="change-list">
           <div class="change">
             <span>SETTINGS FILE</span
-            ><code id="modalSettings">~/.pi/agent/settings.json</code>
+            ><code id="modalSettings">~/.omp/agent/config.yml</code>
           </div>
           <div class="change">
             <span>ADD TO skills ARRAY</span
@@ -868,8 +868,8 @@ skills += [
             );
           const global = scope === "global";
           const settings = global
-            ? "~/.pi/agent/settings.json"
-            : "<cwd>/.pi/settings.json";
+            ? "~/.omp/agent/config.yml"
+            : "<cwd>/.omp/config.yml";
           const first = global
             ? "../../Developer/agent-skills/baoyu-skills/visual-content"
             : "../agent-skills/baoyu-skills/visual-content";
@@ -877,8 +877,8 @@ skills += [
             ? "../../Developer/agent-skills/baoyu-skills/engineering/code-review"
             : "../agent-skills/baoyu-skills/engineering/code-review";
           scopeHint.textContent = global
-            ? "Writes to ~/.pi/agent/settings.json for every trusted workspace."
-            : "Writes to <cwd>/.pi/settings.json for this trusted project.";
+            ? "Writes to ~/.omp/agent/config.yml for every trusted workspace."
+            : "Writes to <cwd>/.omp/config.yml for this trusted project.";
           previewText.textContent = `${settings}\nskills += [\n  "${first}",\n  "${second}"\n]`;
           modalSettings.textContent = settings;
           document.getElementById("modalPaths").textContent =
@@ -895,7 +895,7 @@ skills += [
         .addEventListener("click", () => modal.classList.remove("show"));
       document.getElementById("confirm").addEventListener("click", () => {
         modal.classList.remove("show");
-        installButton.textContent = "Installed — restart Pi to apply";
+        installButton.textContent = "Installed — restart OMP to apply";
         installButton.disabled = true;
       });
       document.getElementById("browse").addEventListener("click", () => {

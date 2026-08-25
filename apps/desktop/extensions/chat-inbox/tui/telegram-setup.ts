@@ -1,5 +1,5 @@
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { BorderedLoader } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import { BorderedLoader } from "@oh-my-pi/pi-coding-agent";
 
 import { saveChatConfig } from "../config.js";
 import type {
@@ -151,7 +151,7 @@ async function observeTelegramTarget(
   const message = buildSetupMessage(botUsername);
   const result = await ctx.ui.custom<ObservedTelegramTarget | undefined>(
     (tui, theme, _kb, done) => {
-      const loader = new BorderedLoader(tui, theme, message, { cancellable: true });
+      const loader = new BorderedLoader(tui, theme, message);
       loader.onAbort = () => done(undefined);
       void (async () => {
         try {

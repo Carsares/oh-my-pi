@@ -46,9 +46,7 @@ const entries = [
   },
   {
     ...common,
-    entryPoints: [
-      path.join(ROOT, "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs"),
-    ],
+    entryPoints: [require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs")],
     outfile: path.join(OUT_DIR, "pdf.worker.js"),
   },
   {
@@ -75,11 +73,10 @@ const entries = [
 
 // Static assets copied verbatim into public/vendor/. Each entry is a
 // [source-relative-to-ROOT, destination-filename] pair.
-const staticAssets = [["node_modules/@xterm/xterm/css/xterm.css", "xterm.css"]];
+const staticAssets = [[require.resolve("@xterm/xterm/css/xterm.css"), "xterm.css"]];
 
 function copyStaticAssets() {
-  for (const [relSrc, destName] of staticAssets) {
-    const src = path.join(ROOT, relSrc);
+  for (const [src, destName] of staticAssets) {
     const dest = path.join(OUT_DIR, destName);
     fs.copyFileSync(src, dest);
     const sizeKb = (fs.statSync(dest).size / 1024).toFixed(1);

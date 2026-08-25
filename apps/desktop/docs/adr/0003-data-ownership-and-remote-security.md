@@ -5,26 +5,26 @@
 
 ## Context
 
-Picot needs stable UI identity and remote-client authorization without taking ownership of Pi sessions,
+Picot needs stable UI identity and remote-client authorization without taking ownership of OMP sessions,
 credentials, settings, or project trust. The approved release retains LAN access without transport
 encryption.
 
 ## Decision
 
 SQLite stores only Picot metadata: workspace IDs, UI preferences, suspension policy, schema version,
-and paired-device token hashes. Pi continues to own session JSONL, `AuthStorage`, settings files, and
-`trust.json`. Losing or resetting the Picot database cannot mutate Pi sessions or workspace files.
+and paired-device token hashes. OMP continues to own session JSONL, credentials, configuration files,
+and project trust. Losing or resetting the Picot database cannot mutate OMP sessions or workspace files.
 
 Project Trust is a blocking, default-deny startup gate before project resources execute. Current-session
-settings use native RPC; project and global defaults atomically merge into Pi settings while preserving
+settings use native RPC; project and global defaults atomically merge into OMP configuration while preserving
 unknown keys.
 
 Remote pairing is QR-only. A single-use pairing token expires after five minutes and exchanges for a
 revocable long-term device token; only its hash is persisted. A device that completes QR pairing is
 trusted to the same degree as the desktop app: as of 2026-08, the Host router no longer distinguishes
 `ClientKind::Remote` from `ClientKind::Desktop` for authorization purposes, so a paired mobile/LAN
-client has parity with desktop for Host operations (folder picking, app launching, package and Pi
-package changes, updates, workspace deletion, `/picot-config`) and for local Git operations. The
+client has parity with desktop for Host operations (folder picking, app launching, OMP plugin
+changes, updates, workspace deletion, `/picot-config`) and for local Git operations. The
 `ClientKind` distinction is retained only for identity/telemetry, not for gating.
 
 The LAN transport remains unencrypted for this release. The product must display an explicit warning

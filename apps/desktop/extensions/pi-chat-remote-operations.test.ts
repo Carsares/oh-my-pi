@@ -12,9 +12,9 @@ import {
 } from "./chat-inbox/remote-operations.ts";
 
 async function fixture(): Promise<RemoteOperationsPaths> {
-  const root = await mkdtemp(join(tmpdir(), "pi-chat-operations-"));
-  const agentRoot = join(root, ".pi", "agent");
-  const instancesDir = join(root, ".pi", "pistudio-instances");
+  const root = await mkdtemp(join(tmpdir(), "omp-chat-operations-"));
+  const agentRoot = join(root, ".omp", "agent");
+  const instancesDir = join(agentRoot, "picot-instances");
   const workersDir = join(agentRoot, "chat", "worker-status");
   await mkdir(join(agentRoot, "super-agent"), { recursive: true });
   await mkdir(instancesDir, { recursive: true });

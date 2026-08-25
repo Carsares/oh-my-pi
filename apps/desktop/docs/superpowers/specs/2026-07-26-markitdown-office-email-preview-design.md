@@ -40,7 +40,7 @@ File tree click
   → existing Markdown sanitizer and renderer
 ```
 
-The server performs conversion in the same Pi process that already owns the HTTP routes. No Pi slash command, broker command, iframe, raw-file route expansion, or new endpoint is introduced.
+The server performs conversion in the same OMP process that already owns the HTTP routes. No OMP slash command, broker command, iframe, raw-file route expansion, or new endpoint is introduced.
 
 A conversion is never cached in this slice. Reopening a tab runs a new conversion, avoiding stale output after an external file change and keeping conversion-memory ownership simple.
 

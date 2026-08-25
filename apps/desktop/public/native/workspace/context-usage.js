@@ -1,7 +1,7 @@
 import { t } from "../../i18n.js";
 import { formatTokens, setupContextViz } from "../../ui/context-viz.js";
 
-// Mirrors Pi's DEFAULT_COMPACTION_SETTINGS.keepRecentTokens. Below this
+// Mirrors OMP's DEFAULT_COMPACTION_SETTINGS.keepRecentTokens. Below this
 // boundary prepareCompaction() has no older context to summarize.
 export const MIN_COMPACTABLE_CONTEXT_TOKENS = 20_000;
 

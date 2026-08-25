@@ -187,7 +187,7 @@ class SuperAgentRuntime extends HTMLElement {
     }
   }
 
-  // The embedded pi server can still be warming up its extension routes
+  // The bundled OMP process can still be warming up its extension routes
   // right after a fresh workspace/session spawn even though /api/health
   // already answered (see wait_for_endpoint in pi_manager.rs). Rather than
   // waiting out the full 3s interval on a failed/errored first poll, retry
@@ -596,7 +596,7 @@ class SuperAgentRuntime extends HTMLElement {
 
 function isDispatchableProjectPath(path) {
   const normalized = String(path || "").replace(/\/+$/, "");
-  return normalized.includes("/") && !normalized.endsWith("/.pi/agent/super-agent");
+  return normalized.includes("/") && !normalized.endsWith("/.omp/agent/super-agent");
 }
 
 function sourceHtml(task) {

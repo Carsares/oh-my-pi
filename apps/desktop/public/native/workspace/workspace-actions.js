@@ -1,7 +1,7 @@
 /**
  * Workspace actions — bridge UI controls to native Tauri commands that manage
  * workspace windows. Currently wires the "Open folder as workspace" button to
- * the native folder picker, which spawns a dedicated window + pi runtime for
+ * the native folder picker, which spawns a dedicated window + OMP runtime for
  * the chosen directory.
  */
 

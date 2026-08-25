@@ -18,11 +18,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+  AgentRegistry,
   createAgentSession,
-  ModelRuntime,
+  type ExtensionContext,
   SessionManager,
   settings,
 } from "@oh-my-pi/pi-coding-agent";
+import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
   buildTelegramDmConfig,
@@ -59,8 +61,11 @@ type CatalogModel = {
   provider?: string;
   id?: string;
   name?: string;
-  contextWindow?: number;
+  contextWindow?: number | null;
 };
+
+type NativeModel = NonNullable<ExtensionContext["model"]>;
+type NativeModelRegistry = ExtensionContext["modelRegistry"];
 
 type CatalogRegistry = {
   getAll: () => CatalogModel[];
@@ -87,8 +92,11 @@ type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "
 type ConfigContext = {
   modelRegistry?: CatalogRegistry;
   cwd?: string;
-  model?: unknown;
-  sessionManager?: { getSessionFile: () => string | undefined };
+  model?: ExtensionContext["model"] | CatalogModel;
+  sessionManager?: {
+    getSessionFile: () => string | undefined;
+    getSessionId: () => string;
+  };
   isProjectTrusted?: () => boolean;
 };
 
@@ -120,8 +128,8 @@ async function renameHistoricalSession(filePath: unknown, requestedName: unknown
     }
   });
   if (!managed) throw new Error("Session is not available.");
-  const manager = SessionManager.open(canonicalTarget);
-  manager.appendSessionInfo(name);
+  const manager = await SessionManager.open(canonicalTarget);
+  await manager.setSessionName(name, "user");
   return { filePath: canonicalTarget, name };
 }
 
@@ -159,21 +167,16 @@ function resolveHomeDir(): string {
   return candidates[0] || os.homedir();
 }
 
-function resolveOmpAgentRoot(): string {
-  const override = process.env.PI_CODING_AGENT_DIR?.trim();
-  if (override) return path.resolve(override);
-  return path.join(resolveHomeDir(), ".omp", "agent");
-}
-
 const HOME_DIR = resolveHomeDir();
-const OMP_AGENT_ROOT = resolveOmpAgentRoot();
+const OMP_AGENT_ROOT = getAgentDir();
 const MODELS_PREFS_PATH = path.join(OMP_AGENT_ROOT, "picot-models.json");
 const AGENT_CONFIG_PATH = path.join(OMP_AGENT_ROOT, "config.yml");
 const MODELS_CONFIG_PATH = path.join(OMP_AGENT_ROOT, "models.yml");
 const CHAT_CONFIG_PATH = path.join(OMP_AGENT_ROOT, "chat", "config.json");
 const CHAT_WORKER_STATUS_DIR = path.join(OMP_AGENT_ROOT, "chat", "worker-status");
-const SUPER_AGENT_TASKS_PATH = path.join(OMP_AGENT_ROOT, "super-agent", "tasks.json");
-const PISTUDIO_INSTANCES_DIR = path.join(os.homedir(), ".pi", "pistudio-instances");
+const SUPER_AGENT_ROOT = path.join(OMP_AGENT_ROOT, "super-agent");
+const SUPER_AGENT_TASKS_PATH = path.join(SUPER_AGENT_ROOT, "tasks.json");
+const PICOT_INSTANCES_DIR = path.join(OMP_AGENT_ROOT, "picot-instances");
 const PROJECT_CONFIG_DIR_NAME = ".omp";
 const THINKING_LEVELS = new Set<ThinkingLevel>([
   "minimal",
@@ -371,8 +374,8 @@ function getProviderAuthStatus(
 }
 
 async function runModelHealthCheck(
-  _registry: CatalogRegistry,
-  model: CatalogModel,
+  registry: NativeModelRegistry,
+  model: NativeModel,
   preferences: ModelPreferencesStore,
 ): Promise<{ provider: string; modelId: string } & ModelHealth> {
   const provider = model.provider as string;
@@ -380,14 +383,25 @@ async function runModelHealthCheck(
   const startedAt = Date.now();
   let sawAssistantText = false;
   try {
-    const modelRuntime = await ModelRuntime.create();
     const { session } = await createAgentSession({
       model,
       thinkingLevel: "off",
-      tools: [],
+      modelRegistry: registry,
+      settings,
+      toolNames: [],
+      restrictToolNames: true,
+      disableExtensionDiscovery: true,
+      enableMCP: false,
+      enableLsp: false,
+      skipPythonPreflight: true,
+      skills: [],
+      rules: [],
+      contextFiles: [],
+      promptTemplates: [],
+      slashCommands: [],
       sessionManager: SessionManager.inMemory(),
-      modelRuntime,
-    } as Parameters<typeof createAgentSession>[0]);
+      agentRegistry: new AgentRegistry(),
+    });
     try {
       const unsubscribe = session.subscribe((event: unknown) => {
         const evt = event as { assistantMessageEvent?: { type?: string; delta?: string } };
@@ -405,7 +419,7 @@ async function runModelHealthCheck(
         unsubscribe();
       }
     } finally {
-      session.dispose();
+      await session.dispose();
     }
     const result: { provider: string; modelId: string } & ModelHealth = {
       provider,
@@ -429,6 +443,13 @@ async function runModelHealthCheck(
     preferences.setHealth(provider, modelId, result);
     return result;
   }
+}
+
+function isNativeModelRegistry(
+  registry: CatalogRegistry,
+): registry is CatalogRegistry & NativeModelRegistry {
+  const candidate = registry as Partial<Pick<NativeModelRegistry, "getApiKey" | "resolver">>;
+  return typeof candidate.getApiKey === "function" && typeof candidate.resolver === "function";
 }
 
 function readConfigFile(filePath: string, fallback: string): { content: string; path: string } {
@@ -572,7 +593,11 @@ function getDefaultThinkingLevel(scope: unknown, ctx: ConfigContext) {
   if (requestedScope === "project" || requestedScope === "effective") {
     const project = getProjectSettings(ctx);
     const projectValue = project?.settings.defaultThinkingLevel;
-    if (typeof projectValue === "string" && THINKING_LEVELS.has(projectValue as ThinkingLevel)) {
+    if (
+      project &&
+      typeof projectValue === "string" &&
+      THINKING_LEVELS.has(projectValue as ThinkingLevel)
+    ) {
       return { level: projectValue, source: "project", path: project.path };
     }
     if (requestedScope === "project") {
@@ -678,23 +703,23 @@ type SuperAgentProject = { name: string; cwd: string; status: string };
 // The Runtime panel's project picker lists dispatch targets. In the native
 // architecture the old `/api/super-agent/projects` HTTP endpoint no longer
 // exists, so we reconstruct the list from the per-process instance records
-// Picot writes to ~/.pi/pistudio-instances/*.json (each has a `cwd`). The
+// Picot writes to <agent-dir>/picot-instances/*.json (each has a `cwd`). The
 // super-agent workspace itself is never a dispatch target.
 function listSuperAgentProjects(): SuperAgentProject[] {
   let entries: string[];
   try {
-    entries = fs.readdirSync(PISTUDIO_INSTANCES_DIR);
+    entries = fs.readdirSync(PICOT_INSTANCES_DIR);
   } catch {
     return [];
   }
   const byCwd = new Map<string, SuperAgentProject>();
   for (const entry of entries) {
     if (!entry.endsWith(".json")) continue;
-    const record = readJsonFile(path.join(PISTUDIO_INSTANCES_DIR, entry)) as
+    const record = readJsonFile(path.join(PICOT_INSTANCES_DIR, entry)) as
       | { cwd?: unknown }
       | undefined;
     const cwd = typeof record?.cwd === "string" ? record.cwd.replace(/\/+$/, "") : "";
-    if (!cwd || cwd.endsWith("/.pi/agent/super-agent")) continue;
+    if (!cwd || path.resolve(cwd) === path.resolve(SUPER_AGENT_ROOT)) continue;
     byCwd.set(cwd, { name: cwd.split("/").pop() || cwd, cwd, status: "running" });
   }
   return [...byCwd.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -751,10 +776,12 @@ export async function handlePicotConfig(
       case "generate_session_title": {
         const sessionFile = ctx.sessionManager?.getSessionFile();
         if (!sessionFile) throw new Error("The active session has not been saved yet.");
-        const modelRuntime = await ModelRuntime.create();
+        const registry = requireRegistry();
+        if (!isNativeModelRegistry(registry)) throw new Error("OMP model registry is unavailable");
         const title = await generateTitleForSession(sessionFile, {
-          model: ctx.model,
-          modelRuntime,
+          model: ctx.model as NativeModel | undefined,
+          modelRegistry: registry,
+          sessionId: ctx.sessionManager?.getSessionId(),
         });
         return { ok: true, data: { title } };
       }
@@ -774,6 +801,7 @@ export async function handlePicotConfig(
 
       case "check_model_health": {
         const reg = requireRegistry();
+        if (!isNativeModelRegistry(reg)) throw new Error("OMP model registry is unavailable");
         const provider = asString(params.provider);
         const modelId = asString(params.modelId);
         if (!provider) throw new Error("provider is required");
@@ -786,7 +814,7 @@ export async function handlePicotConfig(
           if (model.provider !== provider || !model.id) return false;
           if (modelId) return model.id === modelId;
           return availableKeys.has(modelPreferenceKey(provider, model.id as string));
-        });
+        }) as NativeModel[];
         if (models.length === 0) throw new Error("No matching models available for health check");
         const results = [];
         for (const model of models) {

@@ -2,13 +2,12 @@
 
 [English](./README.md) | **中文**
 
-本地桌面 GUI，专为 [Pi](https://github.com/badlogic/pi-mono) 编程 Agent 打造。无需云端，无需账号，完全在本机运行。
+本地桌面 GUI，专为 [Oh My Pi](https://github.com/can1357/oh-my-pi)（OMP）编程 Agent 打造。无需云端，无需账号，完全在本机运行。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Latest release](https://img.shields.io/github/v/release/shixin-guo/picot?include_prereleases&label=release)](https://github.com/shixin-guo/picot/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#%E5%AE%89%E8%A3%85)
 
-Picot 将 `pi` 运行时**直接打包进 .app**，无需单独安装 `pi`，无需配置 PATH，也不存在版本不一致的问题。打开任意项目文件夹，与 Agent 对话，浏览会话和文件——无需打开终端。多个项目可以并行运行，每个项目有独立窗口和独立 Agent 进程。
+Picot 将同一 monorepo 中构建的 OMP 运行时**直接打包进桌面应用**，无需单独安装 OMP，也不会出现 GUI 与 Agent 运行时版本漂移。打开任意项目文件夹即可与 Agent 对话并浏览会话和文件。多个项目可以并行运行，每个项目有独立窗口和独立 Agent 进程。
 
 <p align="center">
   <img width="1200" alt="Picot 主界面" src="docs/images/hero.webp" />
@@ -29,9 +28,9 @@ Picot 将 `pi` 运行时**直接打包进 .app**，无需单独安装 `pi`，无
 
 ## 安装
 
-[从 GitHub Releases 下载](https://github.com/shixin-guo/picot/releases)
+按[从源码构建](#从源码构建)中的命令从当前 monorepo 构建并启动 Picot。
 
-**无需单独安装 `pi` CLI** — Picot 内置了自己的 pi 运行时。
+**无需单独安装 `omp` CLI** — Picot 会从同一份源码构建、暂存并打包 OMP 运行时。
 
 ---
 
@@ -39,9 +38,9 @@ Picot 将 `pi` 运行时**直接打包进 .app**，无需单独安装 `pi`，无
 
 1. 启动 **Picot**
 2. 点击项目气泡或选择一个文件夹
-3. 开始对话 — 嵌入的 pi Agent 会自动在该工作区启动
+3. 开始对话 — 打包的 OMP Agent 会自动在该工作区启动
 
-通过任意工作区内的 `pi /login` 提供模型凭证，或直接写入 `~/.pi/agent/auth.json`。Picot 本身不管理凭证。界面提供英文和中文。
+在“设置 > Providers”中配置模型凭证，或使用 OMP 支持的 Provider 环境变量。OMP 管理的凭证保存在 `~/.omp/agent/agent.db`。界面提供英文和中文。
 
 ---
 
@@ -74,7 +73,7 @@ Picot 将 `pi` 运行时**直接打包进 .app**，无需单独安装 `pi`，无
 <details>
 <summary><strong>🗂️ 多会话 & 多 Agent</strong></summary>
 
-- **多 Agent 并行** — 每个会话启动独立的 headless pi 进程，不弹新窗口，不中断已有会话
+- **多 Agent 并行** — 每个会话启动独立的 headless OMP 进程，不弹新窗口，不中断已有会话
 - 从侧边栏浏览并恢复任意历史会话
 - 跨所有会话历史**全文搜索**，高亮匹配片段
 - 会话按创建时间排序，活跃会话显示绿点
@@ -127,7 +126,7 @@ Picot 将 `pi` 运行时**直接打包进 .app**，无需单独安装 `pi`，无
 </p>
 
 - 在 UI 内浏览、安装和删除社区包
-- 基于 `pi install`，无需额外命令
+- 基于 `omp plugin`，Picot 不重复实现包管理逻辑
 
 </details>
 
@@ -189,7 +188,7 @@ Picot 将 `pi` 运行时**直接打包进 .app**，无需单独安装 `pi`，无
 - 思考级别切换（关闭 / 低 / 中 / 高）
 - 自动和手动**上下文压缩**，含状态显示
 - 推送通知开关
-- **技能管理** — 设置 → 技能：按 source root 浏览所有发现的技能，用 Pi 的 `!`/`+`/`-` 规则语义启用/禁用单个技能或整组（下次会话/重启后生效）
+- **技能管理** — 设置 → 技能：按 source root 浏览所有发现的技能，用 OMP 的 `!`/`+`/`-` 规则语义启用/禁用单个技能或整组（下次会话/重启后生效）
 - **自动更新** — 设置 → 通用 → 更新，一键应用内升级
 
 </details>
@@ -200,59 +199,59 @@ Picot 将 `pi` 运行时**直接打包进 .app**，无需单独安装 `pi`，无
 
 ### 架构
 
-Picot 启动 Rust `HostServer` 和受管的 native `pi --mode rpc` 进程。WebView 连接 host 的 `/v2/ws`，host 再通过 stdio RPC 与 Pi 通信。打包的 `picot-bridge.mjs` 只提供 Picot 专用 Pi 命令，不负责服务应用 UI。
+Picot 启动 Rust `HostServer` 和受管的打包版 `omp --mode rpc` 进程。WebView 连接 host 的 `/v2/ws`，host 再通过 stdio RPC 与 OMP 通信。打包的 `picot-bridge.mjs` 只提供 Picot 专用 OMP 命令，不负责服务应用 UI。
 
 ```
 ┌──────────────────────────────────────────────────────┐
 │ Picot .app                                       │
 │                                                      │
 │   Tauri + native HostServer (Rust)                   │
-│      ├─► 启动 pi --mode rpc --extension picot-bridge.mjs │
+│      ├─► 启动 omp --mode rpc --extension picot-bridge.mjs │
 │      ├─► 通过 /v2/ws 桥接 stdio RPC 帧              │
 │      └─► OS 窗口 ──► WebView ──► native host HTTP    │
 │                                                      │
 │   resources/                                         │
 │      ├─ public/             (前端)                   │
 │      ├─ extensions/         (picot-bridge.mjs)       │
-│      └─ pi/                 (bun 编译的 pi 二进制)   │
+│      └─ omp/                (bun 编译的 OMP 二进制)  │
 └──────────────────────────────────────────────────────┘
                        │
                        ▼ 读取 / 写入
-              ~/.pi/agent/
+              ~/.omp/agent/
                  ├─ sessions/   (对话历史)
-                 ├─ auth.json   (API 密钥)
-                 └─ settings.json
+                 ├─ agent.db    (托管凭证)
+                 └─ config.yml
 ```
 
 > 此图为面向公众的简化版本，与 [`AGENTS.md`](./AGENTS.md#architecture) 中的架构说明保持同步——那里还包含项目目标、约束条件，以及各模块的贡献规范。
 
-### 集成的 Pi 能力
+### 集成的 OMP 能力
 
-Picot 不重新实现 Agent 逻辑——它内嵌 Pi 并通过原生 UI 暴露其运行时能力。
+Picot 不重新实现 Agent 逻辑，而是打包 OMP 并通过原生 UI 暴露其运行时能力。
 
-- **内嵌 `pi --mode rpc` 运行时** — 每个工作区一个独立的托管进程，按项目隔离
+- **打包的 `omp --mode rpc` 运行时** — 每个工作区一个独立的托管进程，按项目隔离
 - **流式 RPC 桥接** — 逐 Token 输出、工具调用事件和思考块实时渲染
 - **会话生命周期 API** — 创建、切换、恢复会话，完整的按项目历史
-- **Native host server** — Rust 负责 HTTP/WebSocket 层，并将浏览器帧桥接到 Pi RPC
-- **扩展兼容** — 自动加载 `~/.pi/agent/extensions/` 和 `.pi/extensions/` 中的用户扩展
-- **凭证复用** — 读取 Pi 已有的 `~/.pi/agent/auth.json`，无需单独登录
+- **Native host server** — Rust 负责 HTTP/WebSocket 层，并将浏览器帧桥接到 OMP RPC
+- **扩展兼容** — 自动加载 `~/.omp/agent/extensions/` 和 `.omp/extensions/` 中的用户扩展
+- **凭证复用** — GUI 与打包的 OMP 共用 `~/.omp/agent/agent.db`
 
 ### 从源码构建
 
 ```bash
-git clone https://github.com/shixin-guo/picot.git
-cd picot
+git clone https://github.com/Carsares/oh-my-pi.git
+cd oh-my-pi
 bun install --frozen-lockfile
-bun run dev      # 下载内嵌 pi 二进制 + 启动 tauri dev 热重载
+bun --cwd apps/desktop run dev
 ```
 
 发布构建：
 
 ```bash
-bun run build    # 下载内嵌 pi 二进制，然后运行 tauri build
+bun --cwd apps/desktop run build
 ```
 
-完整命令参考（测试、lint/format、Rust 检查、升级内嵌 pi 版本等）见 [`AGENTS.md` → Common commands](./AGENTS.md#common-commands)。
+完整命令参考（测试、lint/format、Rust 检查和 OMP 暂存等）见 [`AGENTS.md` → Common commands](./AGENTS.md#common-commands)。
 
 ### 项目文档
 
@@ -265,10 +264,10 @@ bun run build    # 下载内嵌 pi 二进制，然后运行 tauri build
 
 ## 上游关系
 
-Picot 是 **Tau** 的维护性 fork，专为 Pi 优先的本地开发工作流定制。主要增强：
+桌面目录从 **Picot** 导入，并适配到当前 monorepo 的 OMP 包与运行时。Picot 仍是界面上游，`can1357/oh-my-pi` 仍是运行时上游。
 
-- **Native Pi runtime manager** — 启动并监管 `pi --mode rpc` 进程
-- **内嵌 pi 运行时** — 无需全局安装，Picot 自带二进制
+- **Native OMP runtime manager** — 启动并监管 `omp --mode rpc` 进程
+- **打包 OMP 运行时** — 无需全局安装，桌面应用暂存当前 monorepo 构建
 - **Protocol v2 host bridge** — 为 runtime、data、auth 和 extension UI 帧提供路由
 - **Host data plane** — Rust 直接向 native UI 提供会话和工作区数据
 

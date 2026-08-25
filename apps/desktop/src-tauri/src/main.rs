@@ -16,7 +16,6 @@ mod pi_rpc_bridge;
 mod remote_auth;
 mod runtime_coordinator;
 mod session_ui_profile_store;
-mod settings_store;
 mod skill_install;
 mod skill_source_registry;
 mod terminal_manager;
@@ -54,7 +53,7 @@ type SkillSourceRegistryState = Arc<SkillSourceRegistry>;
 #[cfg(target_os = "macos")]
 const MENU_NEW_SESSION_ID: &str = "picot-new-session";
 const BETA_UPDATE_ENDPOINT: &str =
-    "https://github.com/shixin-guo/picot/releases/download/beta/latest.json";
+    "https://github.com/Carsares/oh-my-pi/releases/download/beta/latest.json";
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -899,7 +898,7 @@ fn main() {
                     );
                     app.dialog()
                         .message(format!(
-                            "Picot could not start the embedded pi runtime.\n\n{error}\n\nThe Picot installation may be incomplete or corrupted. Please reinstall Picot and try again."
+                            "Picot could not start the bundled OMP runtime.\n\n{error}\n\nThe Picot installation may be incomplete or corrupted. Please reinstall Picot and try again."
                         ))
                         .title("Picot startup failed")
                         .kind(MessageDialogKind::Error)

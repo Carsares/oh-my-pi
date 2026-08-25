@@ -15,7 +15,7 @@ beforeEach(async () => {
         status: 200,
         json: async () => ({
           extensions: {
-            permissionDenied: "Permission denied in ~/.pi/agent/npm (check owner/permissions).",
+            permissionDenied: "Permission denied in ~/.omp/plugins (check owner/permissions).",
             installFailed: "Install failed",
             uninstallFailed: "Uninstall failed",
             installFailedNote:
@@ -59,8 +59,8 @@ describe("package install failure status", () => {
   });
 
   test("keeps permission errors actionable", () => {
-    expect(summarizePackageError("EACCES: permission denied, open ~/.pi/agent/npm")).toBe(
-      "Permission denied in ~/.pi/agent/npm (check owner/permissions).",
+    expect(summarizePackageError("EACCES: permission denied, open ~/.omp/plugins")).toBe(
+      "Permission denied in ~/.omp/plugins (check owner/permissions).",
     );
   });
 

@@ -39,10 +39,6 @@ impl PiLaunchResolver {
             agent_dir: omp_paths::agent_dir()?,
             omp_version: bundled_omp_version().to_owned(),
             path_env: build_augmented_path(),
-            // Picot workspaces are opened via the OS folder picker, so the user
-            // has already opted in; trust project-local resources for every
-            // OMP process Picot spawns.
-            approve: true,
         })
     }
 
@@ -227,7 +223,9 @@ fn build_augmented_path() -> String {
 
         if let Ok(home) = std::env::var("HOME") {
             let home = Path::new(&home);
-            extras.push(pi_extension_npm_bin_dir(home));
+            if let Ok(plugins_bin) = omp_paths::plugins_bin_dir() {
+                extras.push(plugins_bin);
+            }
             extras.push(home.join(".local/bin"));
             extras.push(home.join(".bun/bin"));
             extras.push(home.join(".volta/bin"));
@@ -259,7 +257,9 @@ fn build_augmented_path() -> String {
         }
         if let Ok(home) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) {
             let home = Path::new(&home);
-            extras.push(pi_extension_npm_bin_dir(home));
+            if let Ok(plugins_bin) = omp_paths::plugins_bin_dir() {
+                extras.push(plugins_bin);
+            }
             extras.push(home.join(".cargo").join("bin"));
             extras.push(home.join(".bun").join("bin"));
             extras.push(home.join("scoop").join("shims"));
@@ -481,14 +481,6 @@ fn configure_child_process_for_windows(command: &mut Command) {
 #[cfg(not(target_os = "windows"))]
 fn configure_child_process_for_windows(_command: &mut Command) {}
 
-fn pi_extension_npm_bin_dir(home: &Path) -> PathBuf {
-    home.join(".pi")
-        .join("agent")
-        .join("npm")
-        .join("node_modules")
-        .join(".bin")
-}
-
 fn strip_verbatim_prefix(path: &str) -> String {
     if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
         format!(r"\\{}", rest)
@@ -504,7 +496,7 @@ mod tests {
     use super::strip_verbatim_prefix;
 
     // Windows `std::fs::canonicalize` returns `\\?\`-prefixed extended-length
-    // paths. Bun (the embedded pi runtime) cannot resolve modules from such
+    // paths. Bun (the bundled OMP runtime) cannot resolve modules from such
     // paths, so the prefix must be stripped before any canonicalized path
     // reaches pi — as cwd, session path, binary, or extension argument.
     #[test]
@@ -512,8 +504,8 @@ mod tests {
         // Drive-prefixed extended-length path: strip the `\\?\` prefix,
         // keep the drive letter.
         assert_eq!(
-            strip_verbatim_prefix(r"\\?\C:\Users\WIN10\.pi\agent"),
-            r"C:\Users\WIN10\.pi\agent"
+            strip_verbatim_prefix(r"\\?\C:\Users\WIN10\.omp\agent"),
+            r"C:\Users\WIN10\.omp\agent"
         );
         // UNC extended-length path: collapse `\\?\UNC\` to the plain `\\`
         // UNC form.
@@ -525,8 +517,8 @@ mod tests {
         assert_eq!(strip_verbatim_prefix(r"C:\Users\WIN10"), r"C:\Users\WIN10");
         // Plain POSIX path: returned unchanged (no prefix to strip).
         assert_eq!(
-            strip_verbatim_prefix("/home/user/.pi/agent"),
-            "/home/user/.pi/agent"
+            strip_verbatim_prefix("/home/user/.omp/agent"),
+            "/home/user/.omp/agent"
         );
         // Empty string is a valid no-op input.
         assert_eq!(strip_verbatim_prefix(""), "");

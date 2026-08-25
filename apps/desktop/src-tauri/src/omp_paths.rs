@@ -40,6 +40,17 @@ pub fn agent_inbox_dir() -> Result<PathBuf, String> {
     Ok(agent_dir()?.join("super-agent"))
 }
 
+pub fn plugins_bin_dir() -> Result<PathBuf, String> {
+    dirs::home_dir()
+        .map(|home| {
+            home.join(PROJECT_DIR_NAME)
+                .join("plugins")
+                .join("node_modules")
+                .join(".bin")
+        })
+        .ok_or_else(|| "Cannot resolve home directory for OMP plugins".to_string())
+}
+
 pub fn session_dir_name(cwd: &Path) -> String {
     session_dir_name_with_roots(
         cwd,

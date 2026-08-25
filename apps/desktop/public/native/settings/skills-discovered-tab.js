@@ -1,4 +1,4 @@
-// ABOUTME: Renders the Discovered tab from the server-authoritative Pi skill inventory.
+// ABOUTME: Renders the Discovered tab from the server-authoritative OMP skill inventory.
 // ABOUTME: Owns Claude root enablement and existing skill toggle/tree behavior.
 
 import { onLocaleChange, t } from "../../i18n.js";

@@ -25,7 +25,7 @@ describe("models provider editor", () => {
         return {
           ok: true,
           data: {
-            path: "/home/.pi/agent/models.json",
+            path: "/home/.omp/agent/models.yml",
             content: JSON.stringify({
               providers: {
                 gateway: {
@@ -142,7 +142,7 @@ describe("models provider editor", () => {
         return {
           ok: true,
           data: {
-            path: "/home/.pi/agent/models.json",
+            path: "/home/.omp/agent/models.yml",
             content: JSON.stringify({
               providers: {
                 gateway: {
@@ -218,7 +218,7 @@ describe("models provider editor", () => {
 
     resolveModelsConfig({
       ok: true,
-      data: { path: "/home/.pi/agent/models.json", content: '{"providers":{}}' },
+      data: { path: "/home/.omp/agent/models.yml", content: "providers: {}\n" },
     });
     await modelsLoad;
   });

@@ -60,7 +60,7 @@ export async function dispatchSuperAgentTaskNative({
 
     await sendPrompt(target, buildProjectAgentPrompt(dispatched), { idempotencyKey });
 
-    // A fresh Pi runtime only upgrades its temporary id when the host serves a
+    // A fresh OMP runtime only upgrades its temporary id when the host serves a
     // snapshot. Resolve that binding before returning so the persisted task
     // always points at a resumable session, even after the child runtime exits.
     if (resolveBoundTarget) {

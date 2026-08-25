@@ -9,7 +9,7 @@ describe("notification center", () => {
       type: "error",
       title: "Uninstall failed",
       message: "Picot could not remove this extension package.",
-      detail: "Permission denied in ~/.pi/agent/npm.",
+      detail: "Permission denied in ~/.omp/plugins.",
     });
 
     expect(document.querySelector(".native-notification-stack")).not.toBeNull();

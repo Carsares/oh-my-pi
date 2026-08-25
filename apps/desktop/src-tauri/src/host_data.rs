@@ -969,9 +969,9 @@ impl HostDataPlane {
     }
 
     /// Read session messages directly from the on-disk JSONL file, bypassing
-    /// the Pi runtime process. Returns messages in the same format that Pi's
+    /// the OMP runtime process. Returns messages in the same format that OMP's
     /// `get_messages` command returns. This is a fast path for session switching:
-    /// the UI can render historical messages immediately while the Pi process
+    /// the UI can render historical messages immediately while the OMP process
     /// warms up in the background.
     ///
     /// For sessions with branched history (forks), this traces back from the

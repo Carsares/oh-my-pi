@@ -109,7 +109,7 @@ struct HostState {
     git_events: tokio::sync::broadcast::Sender<(String, Value)>,
     // Skill source handle registry: pick_skill_source registers an opaque
     // sourceId for a chosen directory; scan/install resolve it by owner before
-    // forwarding to the pi process. Paths never leave the host.
+    // forwarding to the OMP process. Paths never leave the host.
     skill_registry: Arc<crate::skill_source_registry::SkillSourceRegistry>,
     // Persistent per-session UI profile (provider/modelId/thinkingLevel).
     // Keyed by session id from the frontend; survives across sessions, used
@@ -1772,7 +1772,7 @@ async fn dispatch_host_operation(
                 .workspace_root_path(&workspace_id)
                 .map_err(host_data_error)?;
             let owner_id = crate::window_owner::OwnerId::from_client_id(client_id);
-            // The native host runs one Pi process per workspace on a single
+            // The native host runs one OMP process per workspace on a single
             // host port, so workspace_port is the host port itself and
             // workspace_generation stays 0 (no multi-generation swap in the
             // native architecture). The window_label is the client_id — it

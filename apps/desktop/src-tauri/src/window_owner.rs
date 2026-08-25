@@ -93,7 +93,7 @@ impl WindowOwnerRegistry {
         current_origin: String,
     ) -> Result<(OwnerId, String), String> {
         let origin = normalize_origin(&current_origin)
-            .ok_or_else(|| "owner origin must be an http loopback Pi origin".to_string())?;
+            .ok_or_else(|| "owner origin must be an http loopback OMP origin".to_string())?;
 
         let mut state = self.inner.lock().expect("owner registry lock poisoned");
         if state
@@ -153,7 +153,7 @@ impl WindowOwnerRegistry {
         ttl: Duration,
     ) -> Result<u64, String> {
         let origin = normalize_origin(&origin)
-            .ok_or_else(|| "navigation origin must be an http loopback Pi origin".to_string())?;
+            .ok_or_else(|| "navigation origin must be an http loopback OMP origin".to_string())?;
         let mut state = self.inner.lock().expect("owner registry lock poisoned");
         let transition_gen = state
             .owners
@@ -245,7 +245,7 @@ impl WindowOwnerRegistry {
         target_origin: String,
     ) -> Result<(), String> {
         let target = normalize_origin(&target_origin)
-            .ok_or_else(|| "commit origin must be an http loopback Pi origin".to_string())?;
+            .ok_or_else(|| "commit origin must be an http loopback OMP origin".to_string())?;
         let mut state = self.inner.lock().expect("owner registry lock poisoned");
         let record = state
             .owners
@@ -389,7 +389,7 @@ impl WindowOwnerRegistry {
 /// the document is Picot's canonical native http loopback origin. Defense in
 /// depth behind the host navigation callback; never an authorization boundary.
 /// Loopback-agnostic capability injection script. The capability is bound to
-/// the window owner (not to a specific Pi port), so it is exposed on every
+/// the window owner (not to a specific OMP port), so it is exposed on every
 /// loopback HTTP origin the WebView loads. This keeps the capability available
 /// across a cross-port workspace navigation, where the document reloads at a new
 /// loopback port. The exact-origin boundary is enforced by `authorize_navigation`

@@ -1,8 +1,7 @@
 /* Settings → Skills inventory tree (public/native/settings/skills-page.js). */
 
 .skills-page,
-.skills-install-page,
-.package-skills-page {
+.skills-install-page {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -253,7 +252,6 @@
   flex-shrink: 0;
 }
 
-.package-skills-page.hidden,
 .skills-install-page.hidden,
 .skills-page.hidden {
   display: none;
@@ -309,108 +307,4 @@
 
 .skills-install-error {
   color: var(--error);
-}
-
-/* Packages skills tab: read-only bundled candidates from configured Pi packages. */
-.package-skills-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-.package-skills-intro,
-.package-skills-bundled-note {
-  margin: var(--space-1) 0 0;
-  font-size: var(--font-size-sm);
-}
-.package-skills-scope-tabs {
-  display: flex;
-  gap: var(--space-1);
-  margin: var(--space-3) 0 var(--space-2);
-}
-.package-skills-scope-tab {
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: transparent;
-  cursor: pointer;
-}
-.package-skills-scope-tab.active {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
-}
-.package-skills-card-list {
-  display: grid;
-  gap: var(--space-2);
-}
-.package-skills-card {
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-glass);
-}
-.package-skills-card.not-installed {
-  opacity: 0.7;
-}
-.package-skills-card-header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
-}
-.package-skills-expand {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: var(--font-size-md);
-}
-.package-skills-card-name {
-  font-weight: 600;
-  font-size: var(--font-size-md);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.package-skills-card-meta {
-  display: flex;
-  gap: var(--space-2);
-  font-size: var(--font-size-sm);
-}
-.package-skills-not-installed,
-.package-skills-diagnostic {
-  color: var(--text-warn, var(--text-secondary));
-  font-size: var(--font-size-sm);
-}
-.package-skills-card-listing {
-  display: grid;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-}
-.package-skills-candidate {
-  padding: var(--space-1) var(--space-2);
-  border-left: 2px solid var(--border);
-}
-.package-skills-candidate-name {
-  font-weight: 600;
-  font-size: var(--font-size-md);
-}
-.package-skills-candidate-description {
-  font-size: var(--font-size-sm);
-}
-.package-skills-candidate-relative {
-  font-size: var(--font-size-sm);
-}
-.package-skills-empty,
-.package-skills-loading,
-.package-skills-error {
-  padding: var(--space-3);
-  font-size: var(--font-size-md);
-  text-align: center;
-}
-.package-skills-notice {
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-warn, var(--border));
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
 }

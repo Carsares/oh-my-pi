@@ -458,7 +458,7 @@ function setSessionCost(cost) {
 }
 
 // Compact coordinator: a single state machine that distinguishes the RPC
-// acknowledgement from Pi's actual compaction_start/compaction_end lifecycle
+// acknowledgement from OMP's actual compaction_start/compaction_end lifecycle
 // events. This prevents duplicate requests and ensures the UI only returns to
 // idle when compaction truly completes (or fails).
 const compactCoordinator = createCompactCoordinator({
@@ -888,7 +888,7 @@ window.addEventListener("picot:session-created", (event) => {
     input.value = "";
     composerAutoResize.sync();
     input.focus();
-    // Hydrate the new session's state from Pi
+    // Hydrate the new session's state from OMP
     hydrateSnapshotOnce().catch(showError);
   });
 });
@@ -927,10 +927,10 @@ try {
     totalElapsedMs: Math.round(performance.now() - initialLoadStartedAt),
   });
 
-  // Two-phase load: render session history from disk immediately while Pi
-  // warms up, then overlay the authoritative Pi snapshot when it arrives.
+  // Two-phase load: render session history from disk immediately while OMP
+  // warms up, then overlay the authoritative OMP snapshot when it arrives.
   // Skip the fast path for brand-new (temporary) sessions — they have no
-  // saved JSONL file yet and go straight to the Pi snapshot. Focus the
+  // saved JSONL file yet and go straight to the OMP snapshot. Focus the
   // composer so the user can start typing right away.
   if (!target.sessionId.startsWith("temporary-")) {
     const diskResult = await data
@@ -970,7 +970,7 @@ try {
 
   const snapshotStartedAt = performance.now();
   await hydrateSnapshotOnce();
-  console.info("[SESSION-LOAD] initial Pi snapshot hydrated", {
+  console.info("[SESSION-LOAD] initial OMP snapshot hydrated", {
     sessionId: target.sessionId,
     elapsedMs: Math.round(performance.now() - snapshotStartedAt),
     totalElapsedMs: Math.round(performance.now() - initialLoadStartedAt),
@@ -1167,8 +1167,8 @@ async function switchSession(sessionId) {
   // history render below replaces them atomically once the new data is ready.
   setStatus("loading");
 
-  // Phase 1: fire bootstrap (spawns Pi if needed) and fast disk message read
-  // in parallel. The disk read returns messages without waiting for Pi to start.
+  // Phase 1: fire bootstrap (spawns OMP if needed) and fast disk message read
+  // in parallel. The disk read returns messages without waiting for OMP to start.
   const workspaceId = target.workspaceId;
   const bootstrapPromise = loadBootstrapTarget({ name: "session", workspaceId, sessionId }).then(
     (nextTarget) => {
@@ -1230,13 +1230,13 @@ async function switchSession(sessionId) {
   updateSuperAgentActiveState(adoptedSession);
 
   // Phase 2: disk history was rendered by the parallel read as soon as it
-  // arrived, without waiting for the Pi process to finish bootstrapping.
+  // arrived, without waiting for the OMP process to finish bootstrapping.
   setStatus("connected");
   if (diskLoad.hadInFlightPrompt) {
     await extensionUi.flushForegroundQueue();
   }
 
-  // Phase 3: get the authoritative snapshot from Pi (Pi may still be starting).
+  // Phase 3: get the authoritative snapshot from OMP (OMP may still be starting).
   // When it arrives, re-render with the live state (model, thinking level,
   // lifecycle) and the authoritative message tree (handles branched sessions).
   try {
@@ -1244,7 +1244,7 @@ async function switchSession(sessionId) {
     const snapshot = await runtime.snapshot(target.sessionId);
     if (generation !== navigationGeneration) return;
     await hydrateFromSnapshot(snapshot);
-    console.info("[SESSION-LOAD] switch Pi snapshot hydrated", {
+    console.info("[SESSION-LOAD] switch OMP snapshot hydrated", {
       sessionId: target.sessionId,
       generation,
       elapsedMs: Math.round(performance.now() - snapshotStartedAt),
@@ -1252,9 +1252,9 @@ async function switchSession(sessionId) {
     });
   } catch (error) {
     if (generation !== navigationGeneration) return;
-    // Pi snapshot failed but disk messages are already showing — degrade
+    // OMP snapshot failed but disk messages are already showing — degrade
     // gracefully rather than surfacing an error over a readable history.
-    console.warn("[switchSession] Pi snapshot failed, showing disk history:", error);
+    console.warn("[switchSession] OMP snapshot failed, showing disk history:", error);
     setStatus("connected");
     // Still flush any queued extension prompts even when snapshot fails.
     await extensionUi.flushForegroundQueue();
@@ -1719,7 +1719,7 @@ async function handleRuntimeEvent(event) {
         const error = event.errorMessage || event.error;
         if (error) showError(new Error(error));
       } else {
-        // Pi has replaced its context; the old aggregate is stale. Re-hydrate
+        // OMP has replaced its context; the old aggregate is stale. Re-hydrate
         // from the authoritative get_session_stats.
         await hydrateSnapshotOnce();
         hydrateHeaderSessionStats();

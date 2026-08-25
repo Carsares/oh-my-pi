@@ -136,7 +136,7 @@ export class HostDataGateway {
 
   /**
    * Read session messages directly from the on-disk JSONL file, without
-   * waiting for the Pi process to start. Returns the same message format
+   * waiting for the OMP process to start. Returns the same message format
    * as the runtime snapshot so `renderHistory` can consume it immediately.
    * Used as the fast path during session switching.
    */

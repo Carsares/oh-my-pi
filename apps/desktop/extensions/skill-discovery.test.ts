@@ -1,4 +1,4 @@
-// ABOUTME: Behavior-locked tests for the shared Pi-compatible skill discovery collector.
+// ABOUTME: Behavior-locked tests for the shared OMP-compatible skill discovery collector.
 // ABOUTME: Validates recursion boundaries, ignore-file semantics, frontmatter parsing, and symlink dedupe.
 
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";

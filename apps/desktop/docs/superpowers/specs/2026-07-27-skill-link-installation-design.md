@@ -6,21 +6,19 @@ Approved design derived from discussion with Dr. Lin on 2026-07-27. The static
 visual reference is [`skill-install-prototype.html`](../../../skill-install-prototype.html).
 This document extends the existing Skills discovery/configuration design and
 the Claude Code skills discovery proposal. The final Skills information
-architecture is the three-tab model in
-[`2026-07-27-package-skills-tab-design.md`](2026-07-27-package-skills-tab-design.md):
-**Discovered**, **Install**, and **Packages skills**. It defines an explicit
-installation workflow; it does not change Pi's native resource resolver.
+architecture separates **Discovered** and **Install**. It defines an explicit
+installation workflow; it does not change OMP's native resource resolver.
 
 ## Goal
 
 Add an **Install** tab to Settings > Skills. A desktop owner selects any local
 directory through the system folder picker, reviews the skill groups and skills
 found beneath it, selects a global or trusted-project target, and explicitly
-adds Pi-compatible source paths to that target scope's `settings.json`.
+adds OMP-compatible source paths to that target scope's `config.yml`.
 
 This is a **link configuration** workflow only: it never copies, moves,
-deletes, edits, or creates symbolic links for skill files. Pi loads selected
-skills from their original locations after a new session begins or the Pi
+deletes, edits, or creates symbolic links for skill files. OMP loads selected
+skills from their original locations after a new session begins or the OMP
 process restarts.
 
 ## Non-goals
@@ -32,7 +30,7 @@ process restarts.
 - changing existing `!`, `+`, or `-` rules while installing;
 - enabling, disabling, deleting, or editing a selected source skill;
 - auto-installing a discovered skill root;
-- reloading skills in a running Pi process;
+- reloading skills in a running OMP process;
 - LAN, mobile, temporary-chat, or ephemeral-client access to local source paths
   or settings mutations.
 
@@ -43,21 +41,21 @@ version does not add a dedicated removal affordance or project-settings editor.
 
 | Concern | Decision |
 | --- | --- |
-| Skills page information architecture | Settings > Skills contains three inner tabs: **Discovered** for the existing inventory and effective enable/disable state, **Install** for this workflow, and read-only **Packages skills** for configured Pi package resources. |
+| Skills page information architecture | Settings > Skills contains two inner tabs: **Discovered** for the existing inventory and effective enable/disable state, and **Install** for this workflow. |
 | Source selection | The user may select any local directory through the system folder picker, including workspace-internal directories, `.claude/skills`, and directories outside the workspace. Browser-provided paths are never authoritative. |
 | Source discovery | If the chosen directory contains `SKILL.md`, it is one selectable skill. Otherwise Picot recursively discovers groups and skills below it. |
 | Selectable units | Both groups and individual skills are selectable. Selecting a group initially selects all descendant skills; the user may deselect individual descendants. |
 | Group path granularity | A completely selected group adds one source path for that group. A partially selected group adds one source path per selected skill, never the broader group path. |
-| Install mechanism | Link configuration only: append selected plain paths to the `skills` array in the selected Pi settings file. No copy mode exists. |
-| Scope | Global writes `~/.pi/agent/settings.json`. Current project writes `<cwd>/.pi/settings.json` and is disabled unless the retained Pi context reports the project trusted. |
-| Path serialization | Generate a portable POSIX path relative to the target Pi resource base when that representation resolves reliably; otherwise serialize a POSIX absolute path. |
-| Deduplication | Resolve and canonicalize existing ordinary source paths against the target Pi resource base. If one already resolves to the same selected source directory, mark it configured and do not add a duplicate, even if stored text differs. |
+| Install mechanism | Link configuration only: append selected plain paths to the `skills` array in the selected OMP settings file. No copy mode exists. |
+| Scope | Global writes `~/.omp/agent/config.yml`. Current project writes `<cwd>/.omp/config.yml` and is disabled unless the retained OMP context reports the project trusted. |
+| Path serialization | Generate a portable POSIX path relative to the target OMP resource base when that representation resolves reliably; otherwise serialize a POSIX absolute path. |
+| Deduplication | Resolve and canonicalize existing ordinary source paths against the target OMP resource base. If one already resolves to the same selected source directory, mark it configured and do not add a duplicate, even if stored text differs. |
 | Existing rules | Preserve all existing `!`, `+`, and `-` rules. Install never deletes, reorders, or rewrites them. Show their resolved effect when they leave a selected skill disabled. |
-| Name collisions | Permit installation. Show the Pi-compatible winning skill and any selected skill shadowed by a frontmatter-name collision; do not falsely claim every installed skill registers a command. |
+| Name collisions | Permit installation. Show the OMP-compatible winning skill and any selected skill shadowed by a frontmatter-name collision; do not falsely claim every installed skill registers a command. |
 | Pre-write validation | Rescan/revalidate every selected source immediately before writing. If any selected source vanished, is unreadable, is invalid, or no longer satisfies the requested group/skill identity, return an error and write nothing. |
-| Settings write | Read the latest JSON object under the existing Pi-compatible settings lock, preserve unrelated keys and every unmanaged `skills` entry, append only missing plain paths, atomically replace the file, recompute the inventory, and return `runtimeRestartRequired: true`. |
+| Settings write | Read the latest JSON object under the existing OMP-compatible settings lock, preserve unrelated keys and every unmanaged `skills` entry, append only missing plain paths, atomically replace the file, recompute the inventory, and return `runtimeRestartRequired: true`. |
 | Confirmation | The Install button opens a final confirmation dialog; no settings file changes before explicit confirmation. |
-| Completion | On success stay on the Install tab, replace the server-backed result, and show that a new Pi session or Pi-process restart is required. Do not automatically switch to Discovered. |
+| Completion | On success stay on the Install tab, replace the server-backed result, and show that a new OMP session or OMP-process restart is required. Do not automatically switch to Discovered. |
 
 ## User Experience
 
@@ -69,10 +67,8 @@ The Skills primary Settings item retains the existing page shell and offers:
 Skills
 ├─ Discovered
 │  └─ existing inventory, diagnostics, effective status, group/skill controls
-├─ Install
-│  └─ system-folder selection, scan, selection, target scope, preview, confirmation
-└─ Packages skills
-   └─ read-only configured-package skill inventory
+└─ Install
+   └─ system-folder selection, scan, selection, target scope, preview, confirmation
 ```
 
 The Install tab is a numbered, linear form but keeps already scanned selection
@@ -115,8 +111,8 @@ name, description, and canonical source path in accessible text or tooltip.
 - Checking a group checks all descendant skills.
 - Unchecking one child leaves its ancestor group visually indeterminate.
 - Complete group selection serializes one group directory path. The preview and
-  confirmation explicitly warn that Pi recursively discovers the directory, so
-  skills added beneath it later will also load in future Pi sessions.
+  confirmation explicitly warn that OMP recursively discovers the directory, so
+  skills added beneath it later will also load in future OMP sessions.
 - Partial group selection serializes the selected skill directories separately.
 - A source directory that is itself a single skill is selected as one skill and
   serializes its containing skill directory.
@@ -133,14 +129,14 @@ configuration and current inventory. Each candidate is annotated as applicable:
   displayed winner;
 - **Invalid:** it cannot be installed and blocks confirmation.
 
-### 3. Choose where Pi loads the skills
+### 3. Choose where OMP loads the skills
 
 A segmented control provides:
 
-- **Global install**, targeting `~/.pi/agent/settings.json` and using
-  `~/.pi/agent/` as its Pi resource base;
-- **Current project**, targeting `<cwd>/.pi/settings.json` and using
-  `<cwd>/.pi/` as its Pi resource base.
+- **Global install**, targeting `~/.omp/agent/config.yml` and using
+  `~/.omp/agent/` as its OMP resource base;
+- **Current project**, targeting `<cwd>/.omp/config.yml` and using
+  `<cwd>/.omp/` as its OMP resource base.
 
 The Current project choice is disabled until `ctx.isProjectTrusted()` is true.
 The host derives `cwd`, home directory, agent directory, and trust state from
@@ -149,8 +145,8 @@ its retained context; the browser cannot submit a target settings path.
 For every ordinary selected source directory, the server calculates the target
 settings entry as follows:
 
-1. derive a POSIX relative path from the selected scope's Pi resource base;
-2. resolve that text through Pi-compatible local-path resolution and confirm it
+1. derive a POSIX relative path from the selected scope's OMP resource base;
+2. resolve that text through OMP-compatible local-path resolution and confirm it
    identifies the canonical selected directory;
 3. use it when it round-trips reliably; otherwise use a POSIX absolute path.
 
@@ -171,7 +167,7 @@ representation.
 
 The pre-confirmation preview lists:
 
-- target scope and exact target `settings.json` path;
+- target scope and exact target `config.yml` path;
 - exact plain `skills` strings that will be appended;
 - configured-equivalent paths that will be skipped;
 - all effective disabled-by-rule and shadowed outcomes;
@@ -179,7 +175,7 @@ The pre-confirmation preview lists:
   with a stronger team-portability warning for a home-directory source linked
   from project settings;
 - an explicit notice on every complete-group path that future skills added below
-  that source directory will also be discovered by Pi;
+  that source directory will also be discovered by OMP;
 - the selected skill name, description, and full canonical source path;
 - a security notice: skills can contain instructions and executable scripts,
   and should be reviewed before enabling.
@@ -195,8 +191,8 @@ present a copy/move/symlink operation.
 ### 5. Completion and failure
 
 A successful response leaves the user in Install, reports the source paths
-written or skipped, and states that the change applies only to a new Pi session
-or a restarted Pi process.
+written or skipped, and states that the change applies only to a new OMP session
+or a restarted OMP process.
 
 A failure leaves selection and the last server-backed scan available, reports
 the actionable server error inline, and makes no partial settings modification.
@@ -209,7 +205,7 @@ Settings > Skills > Install (desktop-owner WebView)
   │    └─ OS folder picker → server-side opaque source handle
   └─ authenticated owner-only embedded-server RPC
        ├─ skill_scan_install_source { sourceId }
-       │    └─ pure discovery / grouping / Pi-compatible preview resolver
+       │    └─ pure discovery / grouping / OMP-compatible preview resolver
        └─ skill_install_links { scope, sourceId, selection IDs, scanRevision }
             └─ lock → read → revalidate → minimal atomic settings mutation
                  └─ recomputed inventory + installation result
@@ -246,7 +242,7 @@ than implemented as an unrelated browser-accessible path lookup command.
 
 A handle is valid only for its issuing desktop owner, workspace ID, and current
 workspace generation. It has a bounded TTL, is revoked when its window closes,
-its workspace generation changes, the app/Pi host restarts, or a replacement
+its workspace generation changes, the app/OMP host restarts, or a replacement
 directory is chosen for that Install form, and is consumed after a successful
 install. Cancellation is a normal no-op and creates no handle. Unknown,
 expired, consumed, cross-owner, cross-window, or cross-workspace handles are
@@ -310,7 +306,7 @@ authenticated owner in the ephemeral server path, so scan and install must
 still reject that context, plus temporary chat, LAN, and mobile routes.
 
 `skill_install_links` serializes mutations per target settings path with the
-existing Pi-compatible `${settingsPath}.lock` protocol. It writes all missing
+existing OMP-compatible `${settingsPath}.lock` protocol. It writes all missing
 entries in a single atomic settings replacement; if pre-write revalidation
 fails, it writes none.
 
@@ -347,7 +343,7 @@ provides the interaction and visual reference but is not production code.
   whole installation mutation.
 - A complete-group membership change between preview and pre-write rescan
   invalidates `scanRevision`; the user must review and confirm the new tree.
-- A successful write never claims that an existing Pi process reloaded skills.
+- A successful write never claims that an existing OMP process reloaded skills.
 - The feature must not expose a selected host path or settings mutation
   capability to non-desktop-owner clients.
 
@@ -377,21 +373,21 @@ Add deterministic tests covering:
 - settings preservation of unrelated keys, existing source paths, custom
   patterns, and `!`/`+`/`-` entries;
 - preview annotations for existing rule-disabled selected skills;
-- name collision winner and shadowed result using Pi-compatible precedence;
+- name collision winner and shadowed result using OMP-compatible precedence;
 - unknown/expired/consumed/cross-owner/cross-workspace source IDs, stale scan
   revision, stale candidate ID, source disappearance, untrusted project,
   malformed JSON, non-object settings, lock/atomic-write failure, and
   no-write-on-revalidation-failure behavior;
 - a new descendant added to a completely selected group after preview makes the
   revision stale and writes nothing, while descendants added after a successful
-  group-path install are discovered by a later fresh Pi runtime;
+  group-path install are discovered by a later fresh OMP runtime;
 - all missing entries added in one atomic mutation and repeat install idempotent.
 
 ### Native and authorization tests
 
 Add tests for folder-picker command authorization and cancellation, registry
 TTL/revocation/single-use behavior, window and workspace-generation binding,
-app/Pi restart invalidation, and replacement-selection revocation. Test that
+app/OMP restart invalidation, and replacement-selection revocation. Test that
 non-owner, LAN/mobile, authenticated-owner ephemeral, and temporary-chat
 contexts cannot invoke picker, registry resolution, scanning, or installation.
 Verify browser payload paths cannot replace the host-selected source and a
@@ -401,7 +397,7 @@ handle cannot be replayed across windows or workspaces.
 
 Add jsdom coverage for:
 
-- Discovered / Install / Packages skills tab switching;
+- Discovered / Install tab switching;
 - empty scan and scan diagnostics;
 - group checkbox selection, child deselection, and indeterminate state;
 - complete vs partial group preview;
@@ -429,11 +425,11 @@ Perform a desktop smoke test on macOS:
 
 1. Open Settings > Skills > Install and select a directory in Finder.
 2. Select a full group, choose Global, verify its future-descendant warning,
-   confirm, inspect the minimal global `settings.json` addition, start a fresh
-   Pi session, and confirm `/skill:<name>` or `list_skills` resolves each
+   confirm, inspect the minimal global `config.yml` addition, start a fresh
+   OMP session, and confirm `/skill:<name>` or `list_skills` resolves each
    newly linked relative path.
 3. Select part of a second group, choose a trusted project, verify individual
-   paths rather than its group path, confirm, start a fresh project Pi session,
+   paths rather than its group path, confirm, start a fresh project OMP session,
    and confirm `/skill:<name>` or `list_skills` resolves each newly linked
    relative path.
 4. Repeat either installation and confirm canonical-equivalent entries are
@@ -443,8 +439,8 @@ Perform a desktop smoke test on macOS:
 
 ## Architecture Update
 
-Implementation must update `ARCHITECTURE.md` in the same change to document the
-three-tab Skills IA, the Rust-host-owned opaque source-handle registry and
+Implementation must update the architecture documentation in the same change to document the
+two-tab Skills IA, the Rust-host-owned opaque source-handle registry and
 internal broker resolution lifecycle, owner/workspace-generation binding and
 revocation, link-install scan/revision/atomic mutation lifecycle, scope/trust
 boundaries, display-only path disclosure, and the rule that selected source

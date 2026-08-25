@@ -12,9 +12,9 @@
 # disturb signatures already present on nested files.
 #
 # Runs as part of tauri.conf.json's beforeBuildCommand, which fires before
-# Rust even compiles. Locally (scripts/build.sh with APPLE_SIGNING_IDENTITY
-# exported) the identity is already in the developer's login keychain, so
-# codesign just finds it. In CI (.github/workflows/release.yml), Tauri's own
+# Rust even compiles. Locally, when APPLE_SIGNING_IDENTITY is exported, the
+# identity is already in the developer's login keychain, so
+# codesign just finds it. In CI, Tauri's own
 # bundler only imports APPLE_CERTIFICATE into a keychain right before it
 # signs the .app at the very end of the build — long after this hook runs —
 # so the identity isn't in any keychain yet. When that's the case and

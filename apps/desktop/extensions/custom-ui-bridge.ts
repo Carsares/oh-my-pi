@@ -1,7 +1,7 @@
 // ABOUTME: Renders `ctx.ui.custom()` overlays headlessly so they reach the Picot WebView.
 // ABOUTME: pi's RPC mode stubs custom() out, which hangs any extension that awaits it.
 
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 
 // pi's RPC-mode UI context implements `custom()` as `async () => undefined`: the
 // factory is never invoked and the caller's `done` callback never fires. An
@@ -20,7 +20,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 //
 // The overlay is currently off: session_start panels (MCP, etc.) flash a TUI
 // dialog in the GUI because Picot has no hidden-overlay equivalent. Leave
-// `custom()` as Pi's RPC stub until that mapping is stable. Tests pass
+// `custom()` as OMP's RPC stub until that mapping is stable. Tests pass
 // `{ enabled: true }` to exercise the implementation.
 
 /** When false, `registerCustomUiBridge` is a no-op and `custom()` stays stubbed. */
@@ -204,7 +204,7 @@ export function registerCustomUiBridge(pi: ExtensionAPI, options?: { enabled?: b
 
   pi.registerCommand("picot-custom-ui", {
     description: "Picot internal: deliver input to a custom extension UI panel",
-    handler: (rawArguments, ctx) => {
+    handler: async (rawArguments, ctx) => {
       ensurePatched(ctx);
       let request: { id?: string; data?: string; cancel?: boolean };
       try {

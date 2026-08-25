@@ -1,21 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { type Dirent, constants as fsConstants } from "node:fs";
 import { lstat, open, readdir, realpath } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join, relative } from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import {
-  createBashTool,
-  createBashToolDefinition,
-  createEditTool,
-  createEditToolDefinition,
-  createReadTool,
-  createReadToolDefinition,
-  createWriteTool,
-  createWriteToolDefinition,
-} from "@mariozechner/pi-coding-agent";
-import { Box, Text } from "@mariozechner/pi-tui";
-import { Type } from "@sinclair/typebox";
+import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import { Box, Text } from "@oh-my-pi/pi-tui";
+import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import {
   CHAT_CONFIG_PATH,
   ensureChatHome,
@@ -274,6 +263,8 @@ function extractAssistantSummary(messages: unknown[]): AssistantSummary {
 }
 
 export default function (pi: ExtensionAPI) {
+  const { Type } = pi.typebox;
+
   pi.registerFlag(CHAT_CONVERSATION_FLAG, {
     description: "Auto-connect pi-chat to a configured account/channel",
     type: "string",
@@ -290,6 +281,7 @@ export default function (pi: ExtensionAPI) {
   let pendingControlAction: (() => Promise<void>) | undefined;
   let activeTriggerMessageId: string | undefined;
   let pendingLocalPrompt: string | undefined;
+  let activeTurnAbortController: AbortController | undefined;
 
   function persistChatState(conversationId?: string): void {
     pi.appendEntry<PersistedChatState>(SESSION_STATE_CUSTOM_TYPE, {
@@ -308,26 +300,6 @@ export default function (pi: ExtensionAPI) {
       return undefined;
     }
     return undefined;
-  }
-
-  function getLocalToolCwd(ctx: ExtensionContext): string {
-    return ctx.cwd;
-  }
-
-  async function createReadDelegate(ctx: ExtensionContext) {
-    return createReadTool(getLocalToolCwd(ctx));
-  }
-
-  async function createWriteDelegate(ctx: ExtensionContext) {
-    return createWriteTool(getLocalToolCwd(ctx));
-  }
-
-  async function createEditDelegate(ctx: ExtensionContext) {
-    return createEditTool(getLocalToolCwd(ctx));
-  }
-
-  async function createBashDelegate(ctx: ExtensionContext) {
-    return createBashTool(getLocalToolCwd(ctx));
   }
 
   async function loadConfigOnce() {
@@ -474,10 +446,10 @@ export default function (pi: ExtensionAPI) {
   }
 
   async function buildOperationsSnapshot() {
-    const agentRoot = join(homedir(), ".pi", "agent");
+    const agentRoot = getAgentDir();
     return buildRemoteOperationsSnapshot({
       tasksPath: join(agentRoot, "super-agent", "tasks.json"),
-      instancesDir: join(homedir(), ".pi", "pistudio-instances"),
+      instancesDir: join(agentRoot, "picot-instances"),
       modelPreferencesPath: join(agentRoot, "picot-models.json"),
       workersDir: join(agentRoot, "chat", "worker-status"),
       isProcessAlive: (pid) => {
@@ -525,6 +497,7 @@ export default function (pi: ExtensionAPI) {
                 (runtime.isArmed() ? runtime.parseControlCommand(input) : undefined);
               if (control === "stop") {
                 if (chatTurnInFlight || !ctx.isIdle()) {
+                  activeTurnAbortController?.abort();
                   ctx.abort();
                   await liveConnection?.sendImmediate("Aborted current turn.");
                 } else {
@@ -543,6 +516,7 @@ export default function (pi: ExtensionAPI) {
                 };
                 if (chatTurnInFlight || !ctx.isIdle()) {
                   pendingControlAction = runCompact;
+                  activeTurnAbortController?.abort();
                   ctx.abort();
                   await liveConnection?.sendImmediate("Aborting current turn, then compacting.");
                   return;
@@ -592,6 +566,7 @@ export default function (pi: ExtensionAPI) {
                 };
                 if (chatTurnInFlight || !ctx.isIdle()) {
                   pendingControlAction = queueNewSession;
+                  activeTurnAbortController?.abort();
                   ctx.abort();
                   await liveConnection?.sendImmediate(
                     "Aborting current turn, then starting a new pi session.",
@@ -729,10 +704,6 @@ export default function (pi: ExtensionAPI) {
     name: "chat_history",
     label: "Chat History",
     description: "Search older messages from the current connected chat log by text or date range.",
-    promptSnippet: "Search older messages from the current connected chat log.",
-    promptGuidelines: [
-      "Use chat_history when you need older remote chat context that is not present in the current transcript delta.",
-    ],
     parameters: Type.Object({
       query: Type.Optional(Type.String({ description: "Case-insensitive text to search for" })),
       after: Type.Optional(Type.String({ description: "ISO timestamp lower bound, inclusive" })),
@@ -745,7 +716,7 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
     }),
-    renderCall(args, theme) {
+    renderCall(args, _options, theme) {
       const parts: string[] = [];
       if (typeof args.query === "string" && args.query.trim())
         parts.push(`query=${JSON.stringify(args.query)}`);
@@ -811,17 +782,13 @@ export default function (pi: ExtensionAPI) {
     name: "chat_attach",
     label: "Chat Attach",
     description: "Queue one or more local files to be sent with the next pi-chat reply.",
-    promptSnippet: "Queue local files to be sent with the next remote chat reply.",
-    promptGuidelines: [
-      "When a remote chat user asked for a file or generated artifact, use chat_attach with local file paths.",
-    ],
     parameters: Type.Object({
       paths: Type.Array(Type.String({ description: "Local file path to attach" }), {
         minItems: 1,
         maxItems: 10,
       }),
     }),
-    renderCall(args, theme) {
+    renderCall(args, _options, theme) {
       const files = Array.isArray(args.paths) ? args.paths : [];
       const preview = files.slice(0, 3).join(", ");
       const suffix = files.length > 3 ? ` +${files.length - 3} more` : "";
@@ -869,6 +836,7 @@ export default function (pi: ExtensionAPI) {
     }
     try {
       chatTurnInFlight = true;
+      activeTurnAbortController = new AbortController();
       activeTriggerMessageId = next.triggerMessageId;
       queuedOutboundAttachments = [];
       pendingChatDispatch = true;
@@ -879,6 +847,7 @@ export default function (pi: ExtensionAPI) {
     } catch (error) {
       pendingChatDispatch = false;
       chatTurnInFlight = false;
+      activeTurnAbortController = undefined;
       stopTypingLoop();
       const message = error instanceof Error ? error.message : String(error);
       await runtime.failActiveJob(`dispatch failed: ${message}`);
@@ -891,6 +860,8 @@ export default function (pi: ExtensionAPI) {
     clearPersistedState = true,
   ): Promise<void> {
     stopTypingLoop();
+    activeTurnAbortController?.abort();
+    activeTurnAbortController = undefined;
     const connection = liveConnection;
     liveConnection = undefined;
     if (connection) await connection.disconnect().catch(() => undefined);
@@ -1001,38 +972,6 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     await loadConfigOnce();
     ownerId = `pi-chat-${process.pid}-${randomUUID()}`;
-    const readDefinition = createReadToolDefinition(ctx.cwd);
-    const writeDefinition = createWriteToolDefinition(ctx.cwd);
-    const editDefinition = createEditToolDefinition(ctx.cwd);
-    const bashDefinition = createBashToolDefinition(ctx.cwd);
-    pi.registerTool({
-      ...readDefinition,
-      async execute(id, params, signal, onUpdate, toolCtx) {
-        const tool = await createReadDelegate(toolCtx);
-        return tool.execute(id, params, signal, onUpdate);
-      },
-    });
-    pi.registerTool({
-      ...writeDefinition,
-      async execute(id, params, signal, onUpdate, toolCtx) {
-        const tool = await createWriteDelegate(toolCtx);
-        return tool.execute(id, params, signal, onUpdate);
-      },
-    });
-    pi.registerTool({
-      ...editDefinition,
-      async execute(id, params, signal, onUpdate, toolCtx) {
-        const tool = await createEditDelegate(toolCtx);
-        return tool.execute(id, params, signal, onUpdate);
-      },
-    });
-    pi.registerTool({
-      ...bashDefinition,
-      async execute(id, params, signal, onUpdate, toolCtx) {
-        const tool = await createBashDelegate(toolCtx);
-        return tool.execute(id, params, signal, onUpdate);
-      },
-    });
     pi.setActiveTools(["read", "write", "edit", "bash", "chat_history", "chat_attach"]);
     updateStatus(ctx);
     const persistedConversationId = getPersistedConversationId(ctx);
@@ -1090,17 +1029,18 @@ export default function (pi: ExtensionAPI) {
     const memorySuffix = await buildMemoryPromptSuffix();
     const skillsSuffix = await buildSkillsPromptSuffix();
     const systemMdSuffix = await buildSystemMdSuffix();
+    const chatPrompt =
+      buildChatSystemPromptSuffix(service, mode, channelName) +
+      memorySuffix +
+      skillsSuffix +
+      systemMdSuffix;
     return {
-      systemPrompt:
-        event.systemPrompt +
-        buildChatSystemPromptSuffix(service, mode, channelName) +
-        memorySuffix +
-        skillsSuffix +
-        systemMdSuffix,
+      systemPrompt: [...event.systemPrompt, chatPrompt.trim()],
     };
   });
 
   pi.on("agent_end", async (event, ctx) => {
+    if (event.willContinue) return;
     if (!runtime || !chatTurnInFlight) {
       stopTypingLoop();
       updateStatus(ctx);
@@ -1112,7 +1052,7 @@ export default function (pi: ExtensionAPI) {
         if (summary.text) {
           const combined = `${localPrompt}\n\n${summary.text}`;
           try {
-            await liveConnection.send(combined, [], ctx.signal, undefined);
+            await liveConnection.send(combined, [], undefined, undefined);
           } catch {
             // ignore send failure
           }
@@ -1128,6 +1068,7 @@ export default function (pi: ExtensionAPI) {
     if (summary.stopReason === "aborted") {
       stopTypingLoop();
       chatTurnInFlight = false;
+      activeTurnAbortController = undefined;
       await runtime.failActiveJob("aborted");
       const action = pendingControlAction;
       pendingControlAction = undefined;
@@ -1143,6 +1084,7 @@ export default function (pi: ExtensionAPI) {
     if (summary.stopReason === "error" || summary.stopReason === "length") {
       stopTypingLoop();
       chatTurnInFlight = false;
+      activeTurnAbortController = undefined;
       const errorMessage = summary.errorMessage || `agent ${summary.stopReason}`;
       await runtime.failActiveJob(errorMessage);
       if (liveConnection) {
@@ -1164,17 +1106,19 @@ export default function (pi: ExtensionAPI) {
     const finalText =
       summary.text || (attachmentPaths.length > 0 ? "Attached requested file(s)." : "");
     if (liveConnection && finalText) {
+      const signal = activeTurnAbortController?.signal;
       try {
         remoteMessageId = await Promise.race([
-          liveConnection.send(finalText, attachmentPaths, ctx.signal, activeTriggerMessageId),
+          liveConnection.send(finalText, attachmentPaths, signal, activeTriggerMessageId),
           new Promise<string>((_, reject) =>
             setTimeout(() => reject(new Error("send timed out")), 120000),
           ),
-          waitForAbort(ctx.signal),
+          waitForAbort(signal),
         ]);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         chatTurnInFlight = false;
+        activeTurnAbortController = undefined;
         if (error instanceof Error && error.name === "AbortError") {
           await runtime.failActiveJob("aborted");
           updateStatus(ctx);
@@ -1188,6 +1132,7 @@ export default function (pi: ExtensionAPI) {
       }
     }
     chatTurnInFlight = false;
+    activeTurnAbortController = undefined;
     await runtime.completeActiveJob(finalText, remoteMessageId, attachmentPaths);
     updateStatus(ctx);
     await tryDispatch(ctx);

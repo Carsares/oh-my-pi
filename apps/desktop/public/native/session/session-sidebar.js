@@ -21,7 +21,7 @@ export function workspaceFolderName(path, projectName) {
 // but re-wired onto the native gateways:
 //   - listing        → HostDataGateway.listSessions(workspaceId)   (flat list)
 //   - full-text search→ HostDataGateway.searchSessions(workspaceId, query)
-//   - rename/title    → RuntimeGateway for active sessions, ConfigGateway + Pi SessionManager for history
+//   - rename/title    → RuntimeGateway for active sessions, ConfigGateway + OMP SessionManager for history
 //   - selection       → navigate to the session route (page re-bootstraps)
 //   - streaming/unread→ driven by the caller from runtime_event frames
 //

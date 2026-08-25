@@ -16,8 +16,8 @@ describe("super agent startup flow", () => {
     const action = selectSuperAgentStartupAction({
       enabled: true,
       sessions: [
-        { id: "old", projectPath: "/Users/me/.pi/agent/super-agent", timestamp: 10 },
-        { id: "new", projectPath: "/Users/me/.pi/agent/super-agent", timestamp: 20 },
+        { id: "old", projectPath: "/Users/me/.omp/agent/super-agent", timestamp: 10 },
+        { id: "new", projectPath: "/Users/me/.omp/agent/super-agent", timestamp: 20 },
       ],
     });
 
@@ -38,7 +38,7 @@ describe("super agent startup flow", () => {
   });
 
   it("detects conventional Agent Inbox sessions", () => {
-    expect(hasSuperAgentSession([{ projectPath: "/Users/me/.pi/agent/super-agent" }])).toBe(true);
+    expect(hasSuperAgentSession([{ projectPath: "/Users/me/.omp/agent/super-agent" }])).toBe(true);
     expect(hasSuperAgentSession([{ projectPath: "/Users/me/project" }])).toBe(false);
   });
 });

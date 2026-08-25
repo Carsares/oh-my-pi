@@ -106,7 +106,7 @@ describe("composer slash menu", () => {
     expect(menu.textContent).not.toContain("Picot Help");
   });
 
-  it("shows Personal vs Project from pi skill sourceInfo", async () => {
+  it("shows Personal vs Project from OMP skill sourceInfo", async () => {
     const catalog = buildCommandCatalog({
       nativeCommands: [
         {
@@ -116,7 +116,7 @@ describe("composer slash menu", () => {
           sourceInfo: {
             source: "auto",
             scope: "user",
-            path: "/Users/me/.pi/agent/skills/research/SKILL.md",
+            path: "/Users/me/.omp/agent/skills/research/SKILL.md",
           },
         },
         {
@@ -126,7 +126,7 @@ describe("composer slash menu", () => {
           sourceInfo: {
             source: "auto",
             scope: "project",
-            path: "/Users/me/code/picot/.pi/skills/upgrade-embedded-pi/SKILL.md",
+            path: "/Users/me/code/picot/.omp/skills/upgrade-embedded-pi/SKILL.md",
           },
         },
       ],
@@ -152,11 +152,11 @@ describe("composer slash menu", () => {
     );
     expect(byName.Research).toEqual({
       origin: "Personal",
-      title: "/Users/me/.pi/agent/skills/research/SKILL.md",
+      title: "/Users/me/.omp/agent/skills/research/SKILL.md",
     });
     expect(byName["Upgrade Embedded Pi"]).toEqual({
       origin: "Project",
-      title: "/Users/me/code/picot/.pi/skills/upgrade-embedded-pi/SKILL.md",
+      title: "/Users/me/code/picot/.omp/skills/upgrade-embedded-pi/SKILL.md",
     });
   });
 
@@ -188,7 +188,7 @@ describe("composer slash menu", () => {
           sourceInfo: {
             source: "npm:@juicesharp/rpiv-todo",
             scope: "user",
-            path: "/Users/me/.pi/agent/npm/node_modules/@juicesharp/rpiv-todo/index.ts",
+            path: "/Users/me/.omp/plugins/node_modules/@juicesharp/rpiv-todo/index.ts",
           },
         },
       ],

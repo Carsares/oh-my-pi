@@ -26,12 +26,6 @@ pub struct NativeLaunchSpec {
     pub agent_dir: PathBuf,
     pub omp_version: String,
     pub path_env: String,
-    /// When true, spawn `omp --approve`: the desktop owner trusts the chosen
-    /// workspace's project-local resources (`.omp`, `.agents/skills`,
-    /// project extensions) for this run. Picot's workspace is opened via the OS
-    /// folder picker, so the user has already opted in; OMP's non-interactive
-    /// RPC mode otherwise leaves the project untrusted.
-    pub approve: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,9 +43,6 @@ impl NativeLaunchSpec {
             args.push(extension.to_string_lossy().into_owned());
         }
         args.extend(["--mode".into(), "rpc".into()]);
-        if self.approve {
-            args.push("--approve".into());
-        }
         if let Some(session_path) = &self.session_path {
             args.push("--session".into());
             args.push(session_path.to_string_lossy().into_owned());
@@ -322,7 +313,7 @@ impl NativePiManager {
         let response = bridge
             .request(command, timeout)
             .await
-            .map_err(|error| format!("Pi RPC request failed: {error:?}"))?;
+            .map_err(|error| format!("OMP RPC request failed: {error:?}"))?;
         if let Some(key) = mutation_key {
             self.inner
                 .coordinator
@@ -647,7 +638,6 @@ mod tests {
             agent_dir: PathBuf::from("/omp/agent"),
             omp_version: env!("PICOT_OMP_VERSION_BUNDLED").into(),
             path_env: "/usr/bin".into(),
-            approve: false,
         };
         let launch = spec.command_description();
         assert_eq!(launch.program, PathBuf::from("/embedded/pi"));
@@ -665,24 +655,6 @@ mod tests {
             .args
             .iter()
             .any(|argument| argument.parse::<u16>().is_ok()));
-    }
-
-    #[test]
-    fn approve_flag_appends_dash_dash_approve_arg() {
-        let spec = NativeLaunchSpec {
-            binary: PathBuf::from("/embedded/pi"),
-            cwd: PathBuf::from("/workspace"),
-            session_path: None,
-            extensions: vec![],
-            agent_dir: PathBuf::from("/omp/agent"),
-            omp_version: env!("PICOT_OMP_VERSION_BUNDLED").into(),
-            path_env: "/usr/bin".into(),
-            approve: true,
-        };
-        assert!(spec
-            .command_description()
-            .args
-            .contains(&"--approve".to_string()));
     }
 
     #[tokio::test]

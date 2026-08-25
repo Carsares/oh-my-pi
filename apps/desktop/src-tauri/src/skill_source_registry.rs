@@ -215,7 +215,7 @@ fn canonical_dir(path: &Path) -> Result<PathBuf, String> {
 }
 
 /// Placeholder: scans a local skill source directory for candidates.
-/// The full implementation delegates to the embedded Pi extension layer.
+/// The full implementation delegates to the bundled OMP extension layer.
 #[allow(dead_code)]
 pub fn scan_source_static(
     _source_id: &str,
@@ -224,7 +224,7 @@ pub fn scan_source_static(
     Err("skill source scanning is not yet wired to the native host".into())
 }
 
-/// Placeholder: installs skill links into Pi's settings.json.
+/// Placeholder: installs skill links into OMP's config.yml.
 #[allow(dead_code)]
 pub fn install_links_static(
     _source_id: &str,

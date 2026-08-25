@@ -1,5 +1,5 @@
 // Wires the thinking-effort radio group in the settings General tab. Persists
-// the default thinking level to Pi settings and also applies it to the current
+// the default thinking level to OMP settings and also applies it to the current
 // session so the visible composer stays in sync.
 
 import { onLocaleChange, t } from "../../i18n.js";

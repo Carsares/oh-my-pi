@@ -1,4 +1,4 @@
-// ABOUTME: Runs an isolated one-shot Pi process for staged commit-message suggestions.
+// ABOUTME: Runs an isolated one-shot OMP process for staged commit-message suggestions.
 // ABOUTME: Uses private request files, bounded output, and deterministic cleanup.
 
 use std::fs::{self, OpenOptions};
@@ -105,11 +105,11 @@ impl GitPiRunner {
             let stdout = child
                 .stdout
                 .take()
-                .ok_or_else(|| "Pi stdout unavailable".to_string())?;
+                .ok_or_else(|| "OMP stdout unavailable".to_string())?;
             let stderr = child
                 .stderr
                 .take()
-                .ok_or_else(|| "Pi stderr unavailable".to_string())?;
+                .ok_or_else(|| "OMP stderr unavailable".to_string())?;
             let out_thread = thread::spawn(move || read_capped(stdout, MAX_STDOUT_BYTES));
             let err_thread = thread::spawn(move || read_capped(stderr, MAX_STDERR_BYTES));
             let deadline = Instant::now() + RUN_DEADLINE;
@@ -129,7 +129,7 @@ impl GitPiRunner {
                     if out_overflow {
                         #[cfg(windows)]
                         windows_job::close(job);
-                        return Err("Pi output exceeded limit".into());
+                        return Err("OMP output exceeded limit".into());
                     }
                     #[cfg(windows)]
                     windows_job::close(job);
@@ -139,7 +139,7 @@ impl GitPiRunner {
                     terminate(&mut child, job);
                     let _ = out_thread.join();
                     let _ = err_thread.join();
-                    return Err("Pi runner timed out".into());
+                    return Err("OMP runner timed out".into());
                 }
                 thread::sleep(Duration::from_millis(25));
             }
@@ -162,7 +162,7 @@ fn read_capped<R: Read>(mut reader: R, cap: usize) -> Result<(Vec<u8>, bool), St
             break;
         }
         if bytes.len() >= cap {
-            // Continue draining so the Pi child does not block on a full
+            // Continue draining so the OMP child does not block on a full
             // pipe; flag overflow so the caller can reject the output.
             overflow = true;
             continue;

@@ -6,7 +6,7 @@ import { isSuperAgentEnabled, setSuperAgentEnabled } from "../super-agent/settin
  *
  * The "Agent Inbox" tab inside Settings. The normal Telegram setup flow only asks
  * for a bot token; Picot validates the bot, waits for the user's first DM, and
- * writes the full internal ~/.pi/agent/chat/config.json automatically.
+ * writes the full internal ~/.omp/agent/chat/config.json automatically.
  */
 
 class ChatSettingsPanel extends HTMLElement {
@@ -69,7 +69,7 @@ class ChatSettingsPanel extends HTMLElement {
           <summary class="settings-section-title" data-i18n="inbox.advancedRawConfig">Advanced Raw Config</summary>
           <p class="settings-help">
             <span data-i18n="inbox.advancedHelpPre">Internal config stored in</span>
-            <code data-i18n="inbox.chatConfigPath">~/.pi/agent/chat/config.json</code>
+            <code data-i18n="inbox.chatConfigPath">~/.omp/agent/chat/config.json</code>
             <span data-i18n="inbox.advancedHelpPost">. You normally do not need to edit this manually.</span>
           </p>
           <textarea class="ui-textarea config-editor-textarea settings-config-textarea"

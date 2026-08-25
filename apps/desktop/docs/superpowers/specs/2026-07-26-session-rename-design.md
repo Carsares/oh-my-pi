@@ -2,20 +2,20 @@
 
 ## Goal
 
-让 Picot sidebar 与 Pi TUI 对 session 名称使用同一持久化模型，并允许用户从任意 session row 的操作菜单重命名当前、历史或其他运行中实例所属的 session。
+让 Picot sidebar 与 OMP TUI 对 session 名称使用同一持久化模型，并允许用户从任意 session row 的操作菜单重命名当前、历史或其他运行中实例所属的 session。
 
 用户可见结果：
 
-1. Pi TUI `/name`、`/resume` + Ctrl-R，以及 Picot 写入的自定义名称，都会在 sidebar 显示；
+1. OMP TUI `/name`、`/resume` + Ctrl-R，以及 Picot 写入的自定义名称，都会在 sidebar 显示；
 2. 同一个 session 在项目列表、Recent、Pinned、Archive 与搜索结果中的全部副本会显示同一名称；
 3. 空白名称被拒绝，旧名称保持不变；
-4. 新建 session 时的预设名称（`pi --mode rpc --name`）不属于本功能。
+4. 新建 session 时的预设名称（`omp --mode rpc --name`）不属于本功能。
 
 ## Scope
 
 ### Included
 
-- 用 Pi 无参 `SessionManager.listAll()` 作为 session 名称权威，同时保留 Picot 现有 JSONL catalog-policy 适配层；
+- 用 OMP 无参 `SessionManager.listAll()` 作为 session 名称权威，同时保留 Picot 现有 JSONL catalog-policy 适配层；
 - 新增受路径验证保护的任意 session rename HTTP 端点；
 - 在每个 session row 的右键或更多操作菜单中提供 Rename；
 - 更新项目列表、Recent、Pinned、Archive、搜索结果中的名称、搜索与错误状态；
@@ -26,24 +26,24 @@
 - 新建 session 的名称输入 UI 或 `--name` 启动参数；
 - 将空名称视为清除名称；
 - 直接使用 `fs.appendFile` 操作 JSONL；
-- 对其他运行中 Pi 实例强制广播其内存中的 `sessionName`；
+- 对其他运行中 OMP 实例强制广播其内存中的 `sessionName`；
 - 通用 session metadata 编辑器或新的跨端口事件协议。
 
 ## Background and invariants
 
-Pi 的 session 名称是 session JSONL 中追加式的 `session_info` 元数据。每次 rename 追加一条记录；`SessionManager.list()` 和 `listAll()` 按文件顺序扫描，最后一条 `session_info.name` 覆盖此前名称。Pi picker 显示 `session.name ?? session.firstMessage`。
+OMP 的 session 名称是 session JSONL 中追加式的 `session_info` 元数据。每次 rename 追加一条记录；`SessionManager.list()` 和 `listAll()` 按文件顺序扫描，最后一条 `session_info.name` 覆盖此前名称。OMP picker 显示 `session.name ?? session.firstMessage`。
 
 Picot 当前的 `parseSessionFile()` 在取得首条用户消息后约 50 行即提前停止。这无法读到通常位于文件尾部的 rename 记录；固定大小的尾部采样也不可靠，因为 rename 后还可以追加任意长的对话。
 
 因此，本功能的不可变约束是：
 
-- Pi `SessionManager` 是 session 名称读写的唯一业务实现；
+- OMP `SessionManager` 是 session 名称读写的唯一业务实现；
 - `SessionInfo.name` 是 sidebar 的名称真相；
-- Pi 的默认 agent root 与 embedded server 的 `PI_AGENT_ROOT` 必须相同；否则无参 `listAll()` 与 Picot 的路径验证会观察不同 session 树；
+- OMP 的默认 agent root 与 embedded server 的 `PI_AGENT_ROOT` 必须相同；否则无参 `listAll()` 与 Picot 的路径验证会观察不同 session 树；
 - 浏览器传入的文件路径永远不可信；
 - rename 是 catalog mutation，必须使所有 mutation 前已发出的 catalog 请求永久失效。
 
-> Native-architecture note: historical rename is implemented as the Pi-owned
+> Native-architecture note: historical rename is implemented as the OMP-owned
 > `rename_historical_session` operation in `picot-config`, invoked over the existing
 > native RPC bridge. Active rename still uses native `set_session_name`. This replaces
 > the former loopback `/api/sessions/rename` endpoint while preserving managed-session
@@ -53,11 +53,11 @@ Picot 当前的 `parseSessionFile()` 在取得首条用户消息后约 50 行即
 
 ### Session catalog
 
-`src-tauri/src/pi_manager.rs` 的 `PiManager::spawn_with_spec_inner()` 是唯一的 Pi 启动注入点。它必须解析一个 agent root：非空的父进程 `PI_CODING_AGENT_DIR` 优先，否则使用 Picot 当前跨平台 home/app-data 解析策略。首次启动时先创建该目录，再 canonicalize，并对每个 Pi 子进程设置 `PI_CODING_AGENT_DIR=<canonical-agent-root>`。
+`src-tauri/src/pi_manager.rs` 的 `PiManager::spawn_with_spec_inner()` 是唯一的 OMP 启动注入点。它必须解析一个 agent root：非空的父进程 `PI_CODING_AGENT_DIR` 优先，否则使用 Picot 当前跨平台 home/app-data 解析策略。首次启动时先创建该目录，再 canonicalize，并对每个 OMP 子进程设置 `PI_CODING_AGENT_DIR=<canonical-agent-root>`。
 
-`PI_CODING_AGENT_DIR` 是宿主保留变量；`PiSpawnSpec.environment` 不得提供或覆盖它。`spawn_with_spec_inner()` 在启动前发现该键时必须返回错误，并在应用其余 `spec.environment` 后由宿主写入 canonical 值。embedded server 的 `resolvePiAgentRoot()` 必须优先读取并规范化该环境变量，仅在非 Picot 启动场景下使用现有 fallback。启动与 extension 因而共享同一个 root，保证 Pi 的默认 `getSessionsDir()` 与 Picot 的 `PI_AGENT_ROOT/sessions` 相同。
+`PI_CODING_AGENT_DIR` 是宿主保留变量；`PiSpawnSpec.environment` 不得提供或覆盖它。`spawn_with_spec_inner()` 在启动前发现该键时必须返回错误，并在应用其余 `spec.environment` 后由宿主写入 canonical 值。embedded server 的 `resolvePiAgentRoot()` 必须优先读取并规范化该环境变量，仅在非 Picot 启动场景下使用现有 fallback。启动与 extension 因而共享同一个 root，保证 OMP 的默认 `getSessionsDir()` 与 Picot 的 `PI_AGENT_ROOT/sessions` 相同。
 
-`GET /api/sessions` 随后必须调用**无参** Pi API：
+`GET /api/sessions` 随后必须调用**无参** OMP API：
 
 ```ts
 const infos = await SessionManager.listAll();
@@ -71,7 +71,7 @@ const infos = await SessionManager.listAll();
 - `firstMessage` 的 120 字截断；
 - 现有 `timestamp`、`cwd`、项目分组与 live-instance 合并字段。
 
-适配层不再解析或提供名称；每个保留 session 的 `name` 只能取自对应的 `SessionInfo.name`。这避免 Pi 的 `"(no messages)"` 占位符、完整长消息和临时 session 直接改变现有 sidebar 行为。
+适配层不再解析或提供名称；每个保留 session 的 `name` 只能取自对应的 `SessionInfo.name`。这避免 OMP 的 `"(no messages)"` 占位符、完整长消息和临时 session 直接改变现有 sidebar 行为。
 
 所有 sidebar 副本通过同一个 helper 生成标题：
 
@@ -80,7 +80,7 @@ getSessionDisplayTitle(session) =
   session.name || session.firstMessage || t("sidebar.emptySession");
 ```
 
-服务端拒绝空名称，catalog-policy 层将缺失的 `firstMessage` 归一为 `null`，因此空 session 始终使用本地化兜底，不泄露 Pi 的 `"(no messages)"`。当前 `parseSessionFileCached()` 中的 `session_info` 解析与 50 行截断不再是名称权威来源。
+服务端拒绝空名称，catalog-policy 层将缺失的 `firstMessage` 归一为 `null`，因此空 session 始终使用本地化兜底，不泄露 OMP 的 `"(no messages)"`。当前 `parseSessionFileCached()` 中的 `session_info` 解析与 50 行截断不再是名称权威来源。
 
 ### Rename service
 
@@ -96,7 +96,7 @@ Content-Type: application/json
 }
 ```
 
-服务端对目标 session 的持久化遵循 Pi TUI 的实现：
+服务端对目标 session 的持久化遵循 OMP TUI 的实现：
 
 ```ts
 const manager = SessionManager.open(canonicalSessionPath);
@@ -111,7 +111,7 @@ foreground 优化必须读取单个、同 generation 发布的 active-session bi
 
 每个 `session_start` 同步发布 `api` 与 `ctx.sessionManager.getSessionFile()`；`session_shutdown` 只清理相同 generation 的 binding。rename 请求只读取一次 binding，再把 canonical target path 与该 binding 的 `sessionFile` 比较。匹配时调用该 binding 的 `api.setSessionName(trimmedName)`，使当前进程的内存状态与持久化名称同步。
 
-不得分别读取 `getApi()` 与 `latestCtx`，因为两者可能来自不同 extension generation。若请求期间没有有效 binding，或目标不匹配，端点使用 `SessionManager.open(...).appendSessionInfo(...)`。这与 Pi picker 对任意 session 的操作一致，且不会使用 stale context。
+不得分别读取 `getApi()` 与 `latestCtx`，因为两者可能来自不同 extension generation。若请求期间没有有效 binding，或目标不匹配，端点使用 `SessionManager.open(...).appendSessionInfo(...)`。这与 OMP picker 对任意 session 的操作一致，且不会使用 stale context。
 
 成功响应：
 
@@ -134,10 +134,10 @@ foreground 优化必须读取单个、同 generation 发布的 active-session bi
 4. 以 Unicode code points 计数，名称最多 200 个；超限返回 `400`，不写入；
 5. 对 `SESSIONS_DIR` 与目标文件做 canonicalization，包括 realpath；
 6. 要求目标为 `.jsonl`，且以真实路径 containment 验证其位于 session root 内；禁止仅使用字符串前缀；
-7. 以本次**无参** `SessionManager.listAll()` 的结果确认目标是受管理的 Pi session；不在列表中返回 `404`；
+7. 以本次**无参** `SessionManager.listAll()` 的结果确认目标是受管理的 OMP session；不在列表中返回 `404`；
 8. 仅对通过验证的 canonical path 调用 `SessionManager.open()`。
 
-v1 的文件系统威胁模型与 Pi TUI Ctrl-R 相同：上述 realpath 与 catalog 校验防止 LAN/浏览器提供的静态路径逃逸，并拒绝验证时已存在的 symlink 逃逸；它不承诺抵御恶意、同 OS 用户进程在验证后替换文件的 TOCTOU race。loopback endpoint 不授予该进程原本没有的文件权限。若未来需要该强度，必须由 Pi core 提供基于已验证目录句柄、禁止跟随链接的原子追加 API；这不属于本功能。
+v1 的文件系统威胁模型与 OMP TUI Ctrl-R 相同：上述 realpath 与 catalog 校验防止 LAN/浏览器提供的静态路径逃逸，并拒绝验证时已存在的 symlink 逃逸；它不承诺抵御恶意、同 OS 用户进程在验证后替换文件的 TOCTOU race。loopback endpoint 不授予该进程原本没有的文件权限。若未来需要该强度，必须由 OMP core 提供基于已验证目录句柄、禁止跟随链接的原子追加 API；这不属于本功能。
 
 错误语义：
 
@@ -183,7 +183,7 @@ v1 的文件系统威胁模型与 Pi TUI Ctrl-R 相同：上述 realpath 与 cat
 2. `loadCommitted` 继续只表示“实际已渲染的最高 seq”，不得被 mutation 修改；`loadSessions()` 提交前必须同时拒绝 `seq <= loadInvalidatedThrough` 和 `seq < loadCommitted` 的响应；
 3. 退出编辑态；
 4. 在内存中按 `filePath` 更新所有可见副本的名称；
-5. 调用新的 `loadSessions()` 取得 Pi 的权威 catalog，使排序、项目分组、Recent、Pinned、Archive 和其他并发写入收敛；
+5. 调用新的 `loadSessions()` 取得 OMP 的权威 catalog，使排序、项目分组、Recent、Pinned、Archive 和其他并发写入收敛；
 6. 新 load 的 seq 大于 `loadInvalidatedThrough`；它是唯一可提交的 rename 后 catalog。
 
 失败时，前端保留编辑输入、旧 sidebar 数据和重试能力；不得静默吞掉 fetch 或服务端异常。
@@ -192,25 +192,25 @@ v1 的文件系统威胁模型与 Pi TUI Ctrl-R 相同：上述 realpath 与 cat
 
 ## Concurrency and consistency
 
-- Picot 不自行建立 JSONL 锁，不直接写文件；使用 Pi 的 SessionManager append 语义；
+- Picot 不自行建立 JSONL 锁，不直接写文件；使用 OMP 的 SessionManager append 语义；
 - 对同一 session 的并发 rename 按成功追加顺序决定最终名称：最后成功写入的 `session_info` 生效；
-- 每次成功后重新读取 catalog，sidebar 最终与 Pi picker 收敛；
-- 对其他运行中 Pi 实例，持久化名称与 sidebar 会立即正确；其独立进程的内存 `sessionName` 不在此功能中跨端口强制同步；
+- 每次成功后重新读取 catalog，sidebar 最终与 OMP picker 收敛；
+- 对其他运行中 OMP 实例，持久化名称与 sidebar 会立即正确；其独立进程的内存 `sessionName` 不在此功能中跨端口强制同步；
 - session switch 会重载 extension context；foreground 优化只可使用同 generation 的 active-session binding，不能组合独立读取的 session-bound references。
 
 ## Performance
 
 无参 `SessionManager.listAll()` 是名称正确性基线。该调用会完整扫描默认 session root 下各项目目录中的 JSONL；本功能不以 50 行截断或固定尾部采样替代它。
 
-现有缓存保留为 catalog-policy 适配层的缓存，而非名称缓存。`/api/sessions` 仍在 embedded server 的异步请求路径执行，sidebar 在等待时遵循现有 loading/旧列表策略，不阻塞 WebView。实施前后都要针对同一 session catalog 记录 session 数量、冷启动一次耗时与连续三次 warm refresh 耗时，并将结果写入实现 PR/验证记录。若真实历史目录产生可感知退化，后续单独设计缓存层；缓存必须仍以 Pi 的完整扫描名称语义为权威，不能复制或简化 JSONL 的 `session_info` 解释规则。
+现有缓存保留为 catalog-policy 适配层的缓存，而非名称缓存。`/api/sessions` 仍在 embedded server 的异步请求路径执行，sidebar 在等待时遵循现有 loading/旧列表策略，不阻塞 WebView。实施前后都要针对同一 session catalog 记录 session 数量、冷启动一次耗时与连续三次 warm refresh 耗时，并将结果写入实现 PR/验证记录。若真实历史目录产生可感知退化，后续单独设计缓存层；缓存必须仍以 OMP 的完整扫描名称语义为权威，不能复制或简化 JSONL 的 `session_info` 解释规则。
 
 ## Tests
 
 ### Backend
 
-1. 首次启动会先创建并 canonicalize agent root；Pi 子进程的保留变量 `PI_CODING_AGENT_DIR` 不能被 `PiSpawnSpec.environment` 覆盖，且与 embedded server 的 `PI_AGENT_ROOT` 相同；无参 `listAll()` 能发现 `sessions/<project>/*.jsonl`，而带根目录参数的调用不被使用；
+1. 首次启动会先创建并 canonicalize agent root；OMP 子进程的保留变量 `PI_CODING_AGENT_DIR` 不能被 `PiSpawnSpec.environment` 覆盖，且与 embedded server 的 `PI_AGENT_ROOT` 相同；无参 `listAll()` 能发现 `sessions/<project>/*.jsonl`，而带根目录参数的调用不被使用；
 2. 多条 `session_info` 中最后一条名称胜出；名称位于文件尾部、此前已有多条消息和搜索命中时仍正确读取；
-3. 无名称时保持 Picot 的截断 `firstMessage` 与短暂 session 过滤，不泄露 Pi 的 `"(no messages)"` 占位符；
+3. 无名称时保持 Picot 的截断 `firstMessage` 与短暂 session 过滤，不泄露 OMP 的 `"(no messages)"` 占位符；
 4. rename 历史 session 后，再次无参 `listAll()` 返回新名称；
 5. 当前 foreground target 只使用同 generation 的 `{ api, sessionFile }` binding 的 set-name 路径；无有效 binding 时使用目标文件 append 路径；
 6. 空白名称、超过 200 code points 的名称、错误 JSON 与字段类型错误返回 `400`；Node 与 Bun adapter 都在完整分配 body 前以 UTF-8 字节数拒绝超过 8 KiB 的请求并返回 `413`；
@@ -224,7 +224,7 @@ v1 的文件系统威胁模型与 Pi TUI Ctrl-R 相同：上述 realpath 与 cat
 ### Frontend
 
 1. 所有 row 变体通过 `getSessionDisplayTitle()` 渲染 `name || firstMessage || t("sidebar.emptySession")`，且名称以安全纯文本渲染；
-2. 所有 Rename 菜单入口将对应 `filePath` 发给新端点，且不触发 session switch；测试同时断言不新增新建名称控件，且 Pi spawn 参数中没有 `--name`；
+2. 所有 Rename 菜单入口将对应 `filePath` 发给新端点，且不触发 session switch；测试同时断言不新增新建名称控件，且 OMP spawn 参数中没有 `--name`；
 3. Enter 保存；Escape、取消和失焦不写入；空白输入显示校验错误；
 4. rename 成功时 `loadInvalidatedThrough` 会使所有 `seq <= barrier` 的 rename 前请求不能提交；只有 barrier 后的 refresh 可替换乐观名称，且 `loadCommitted` 仍只记录实际渲染；
 5. 成功后所有相同 `filePath` 副本更新，后续 catalog refresh 保留该名称；
@@ -255,16 +255,16 @@ bun run test
 
 实施时更新：
 
-- `ARCHITECTURE.md`：`PiManager::spawn_with_spec_inner()` 的 `PI_CODING_AGENT_DIR` 启动不变量、session catalog 的 Pi authority、rename HTTP 契约、LAN loopback 边界、路径验证、`loadInvalidatedThrough` mutation barrier 和最后写入胜出语义；
+- `ARCHITECTURE.md`：`PiManager::spawn_with_spec_inner()` 的 `PI_CODING_AGENT_DIR` 启动不变量、session catalog 的 OMP authority、rename HTTP 契约、LAN loopback 边界、路径验证、`loadInvalidatedThrough` mutation barrier 和最后写入胜出语义；
 - `docs/session-naming.md`：移除“历史 session rename 不可行”与尾部采样建议，改为 SessionManager/TUI 方案；
 - `ROADMAP.md`：移除或更新此前 deferred 的 session rename 项；
 - `public/locales/en.json` 与 `public/locales/zh.json`：菜单、输入、校验和错误文案，并通过 i18n completeness 测试。
 
 ## Acceptance criteria
 
-- Pi TUI 改名、Pi `/name`、Picot rename 均能在 sidebar refresh 后显示相同的最新名称；
+- OMP TUI 改名、OMP `/name`、Picot rename 均能在 sidebar refresh 后显示相同的最新名称；
 - 首次启动可创建并 canonicalize agent root；宿主保留的 `PI_CODING_AGENT_DIR` 不可被 spawn environment 覆盖，且与 embedded `PI_AGENT_ROOT`、无参 `listAll()` 的 session tree 一致；
-- 任意可列出的 session 都能从任意 sidebar 副本进入 Rename 并按 Pi TUI 同一同用户文件系统信任模型持久化；
+- 任意可列出的 session 都能从任意 sidebar 副本进入 Rename 并按 OMP TUI 同一同用户文件系统信任模型持久化；
 - 任意不可信路径、空白或超长名称、超大请求体、非 loopback 请求或写入失败均不会改动目标 session；
 - `seq <= loadInvalidatedThrough` 的 rename 前 catalog 请求不能覆盖 rename 成功后的乐观名称，而 `loadCommitted` 始终只表示实际已渲染的最高 seq；
 - 同一 `filePath` 的项目、Recent、Pinned、Archive、搜索显示最终一致；单字符搜索仍可按原始 `firstMessage` 命中已改名 session；

@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 
 import type {
   AccessPolicy,
@@ -10,7 +10,7 @@ import type {
   ResolvedConversation,
 } from "./core/config-types.js";
 
-export const CHAT_HOME = join(homedir(), ".pi", "agent", "chat");
+export const CHAT_HOME = join(getAgentDir(), "chat");
 export const CHAT_CONFIG_PATH = join(CHAT_HOME, "config.json");
 export const CHAT_CACHE_DIR = join(CHAT_HOME, "cache");
 

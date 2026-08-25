@@ -1,23 +1,10 @@
-// ABOUTME: Generates concise model-backed titles for persisted Pi sessions.
-// ABOUTME: Keeps title parsing and transcript shaping isolated and testable.
+// ABOUTME: Generates model-backed titles through OMP's native title pipeline.
+// ABOUTME: Keeps persisted transcript shaping isolated and testable.
 
-import {
-  createAgentSession,
-  type ModelRuntime,
-  SessionManager,
-} from "@earendil-works/pi-coding-agent";
+import { type ExtensionContext, SessionManager, settings } from "@oh-my-pi/pi-coding-agent";
+import { generateSessionTitle } from "@oh-my-pi/pi-coding-agent/utils/title-generator";
 
-const TITLE_TIMEOUT_MS = 90_000;
-const MAX_TITLE_LENGTH = 80;
 const MAX_TRANSCRIPT_LENGTH = 24_000;
-
-const TITLE_PROMPT = `Create a concise title for this session based on the conversation below.
-
-Requirements:
-- Match the primary language used by the user.
-- Describe the user's concrete goal or outcome.
-- Use 4-12 words for space-separated languages, or 8-24 characters for CJK text when practical.
-- Return only the title as plain text, with no quotes, label, markdown, or explanation.`;
 
 type MessageEntry = {
   type?: string;
@@ -59,63 +46,36 @@ export function buildTitleTranscript(entries: MessageEntry[]): string {
   return transcript.slice(0, MAX_TRANSCRIPT_LENGTH).trimEnd();
 }
 
-function stripWrappingQuotes(value: string): string {
-  const pairs: Array<[string, string]> = [
-    ['"', '"'],
-    ["'", "'"],
-    ["`", "`"],
-    ["“", "”"],
-    ["「", "」"],
-    ["『", "』"],
-  ];
-  for (const [start, end] of pairs) {
-    if (value.startsWith(start) && value.endsWith(end) && value.length > 2) {
-      return value.slice(start.length, -end.length).trim();
-    }
-  }
-  return value;
-}
-
-export function parseGeneratedSessionTitle(raw: string): string {
-  let value = raw.trim();
-  const fenced = value.match(/^```(?:json|text)?\s*([\s\S]*?)\s*```$/i);
-  if (fenced) value = fenced[1].trim();
-
-  if (value.startsWith("{")) {
-    try {
-      const parsed = JSON.parse(value) as { title?: unknown };
-      if (typeof parsed.title === "string") value = parsed.title.trim();
-    } catch {
-      // Treat malformed JSON as plain model output.
-    }
-  }
-
-  value = value.split(/\r?\n/, 1)[0] ?? "";
-  value = value.replace(/^(?:session\s+title|title|标题)\s*[:：-]\s*/i, "");
-  value = stripWrappingQuotes(value).replace(/\s+/g, " ").trim();
-  value = value.replace(/[。.!]+$/u, "").trim();
-  if (!/[\p{L}\p{N}]/u.test(value)) throw new Error("The model did not return a usable title");
-
-  const characters = Array.from(value);
-  return characters.length > MAX_TITLE_LENGTH
-    ? characters.slice(0, MAX_TITLE_LENGTH).join("").trim()
-    : value;
-}
-
 export type GenerateTitleRuntime = {
-  model?: unknown;
-  modelRuntime?: ModelRuntime;
+  model?: ExtensionContext["model"];
+  modelRegistry: ExtensionContext["modelRegistry"];
+  sessionId?: string;
+  signal?: AbortSignal;
 };
+
+async function generateTitle(text: string, runtime: GenerateTitleRuntime): Promise<string> {
+  const title = await generateSessionTitle(
+    text,
+    runtime.modelRegistry,
+    settings,
+    runtime.sessionId,
+    runtime.model,
+    undefined,
+    undefined,
+    runtime.signal,
+  );
+  if (!title) throw new Error("The model did not return a usable title");
+  return title;
+}
 
 export async function generateTitleForSession(
   sessionFile: string,
   runtime: GenerateTitleRuntime,
 ): Promise<string> {
-  const entries = SessionManager.open(sessionFile).getEntries() as MessageEntry[];
-  const transcript = buildTitleTranscript(entries);
+  const manager = await SessionManager.open(sessionFile);
+  const transcript = buildTitleTranscript(manager.getEntries() as MessageEntry[]);
   if (!transcript.includes("User:")) throw new Error("The session has no user messages to name");
-
-  return generateTitleFromTranscript(transcript, runtime);
+  return generateTitle(transcript, runtime);
 }
 
 export async function generateTitleForPrompt(
@@ -124,50 +84,5 @@ export async function generateTitleForPrompt(
 ): Promise<string> {
   const text = prompt.trim();
   if (!text) throw new Error("The prompt is empty");
-  const transcript = buildTitleTranscript([
-    { type: "message", message: { role: "user", content: text } },
-  ]);
-  return generateTitleFromTranscript(transcript, runtime);
-}
-
-async function generateTitleFromTranscript(
-  transcript: string,
-  runtime: GenerateTitleRuntime,
-): Promise<string> {
-  const { session } = await createAgentSession({
-    ...(runtime.model ? { model: runtime.model } : {}),
-    thinkingLevel: "off",
-    tools: [],
-    sessionManager: SessionManager.inMemory(),
-    ...(runtime.modelRuntime ? { modelRuntime: runtime.modelRuntime } : {}),
-  } as unknown as Parameters<typeof createAgentSession>[0]);
-
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const run = session.prompt(`${TITLE_PROMPT}\n\n<conversation>\n${transcript}\n</conversation>`);
-    await Promise.race([
-      run,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => {
-          session.abort();
-          reject(new Error("Session title generation timed out"));
-        }, TITLE_TIMEOUT_MS);
-      }),
-    ]);
-
-    const messages = session.agent.state.messages;
-    for (let index = messages.length - 1; index >= 0; index--) {
-      const message = messages[index];
-      if (message.role !== "assistant") continue;
-      const text = message.content
-        .filter((block) => block.type === "text")
-        .map((block) => block.text)
-        .join("\n");
-      if (text.trim()) return parseGeneratedSessionTitle(text);
-    }
-    throw new Error("The model did not return a title");
-  } finally {
-    if (timeout) clearTimeout(timeout);
-    session.dispose();
-  }
+  return generateTitle(text, runtime);
 }

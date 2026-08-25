@@ -17,7 +17,7 @@ import type {
   InboundMessageInput,
   ResolvedConversation,
   StoredAttachment,
-} from "../types.js";
+} from "./types.js";
 
 function guessAttachmentKind(path: string): AttachmentKind {
   const ext = extname(path).toLowerCase();

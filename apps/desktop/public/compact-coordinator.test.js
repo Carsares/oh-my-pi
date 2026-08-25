@@ -43,11 +43,11 @@ describe("createCompactCoordinator", () => {
     const coordinator = createCompactCoordinator({ send: async () => ({ success: true }) });
     await coordinator.request();
 
-    expect(coordinator.ended({ success: false, error: "Pi refused" })).toBe(false);
+    expect(coordinator.ended({ success: false, error: "OMP refused" })).toBe(false);
     expect(coordinator.state).toBe("idle");
   });
 
-  it("locks manual actions when Pi starts an automatic compaction", () => {
+  it("locks manual actions when OMP starts an automatic compaction", () => {
     const coordinator = createCompactCoordinator({ send: async () => ({ success: true }) });
 
     coordinator.started();

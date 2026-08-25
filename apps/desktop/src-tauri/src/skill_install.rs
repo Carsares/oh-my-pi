@@ -231,7 +231,7 @@ fn parse_frontmatter(content: &str) -> ParsedFrontmatter {
 /// Parse only the `name`, `description`, and `disable-model-invocation` keys
 /// from a minimal YAML subset. Full YAML is not needed; the TS original uses
 /// the `yaml` crate, but these three scalars cover all SKILL.md frontmatter
-/// fields Pi reads.
+/// fields OMP reads.
 fn parse_yaml_frontmatter(text: &str) -> ParsedFrontmatter {
     let mut name = None;
     let mut description = None;
@@ -295,7 +295,7 @@ fn validate_skill_name(name: &str) -> Vec<String> {
 
 // ── Ignore-file matching (gitignore subset) ───────────────────────────
 //
-// Pi uses the `ignore` crate semantics; this is a deliberately smaller
+// OMP uses the `ignore` crate semantics; this is a deliberately smaller
 // matcher covering the patterns SKILL.md collections actually use: simple
 // names, `dir/`, leading `/`, and `!` negation. It walks the source tree
 // once collecting patterns relative to the root, then answers per-path

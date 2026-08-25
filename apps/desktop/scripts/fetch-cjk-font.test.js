@@ -62,14 +62,10 @@ describe("CJK font distribution", () => {
   });
 
   test("fetches the CJK font before Tauri dev and distributable builds", () => {
-    const pkg = JSON.parse(read("package.json"));
-    expect(pkg.scripts.dev).toContain("fetch:cjk-font");
-    expect(pkg.scripts.prebuild).toContain("fetch:cjk-font");
+    const tauri = JSON.parse(read("src-tauri/tauri.conf.json"));
 
-    expect(read("src-tauri/tauri.conf.json")).toContain("fetch:cjk-font");
-    expect(read("scripts/build.sh")).toContain("fetch-cjk-font.js");
-    expect(read("scripts/release-macos-dmg.sh")).toContain("fetch-cjk-font.js");
-    expect(read(".github/workflows/release.yml")).toContain("cjk-font-version.json");
+    expect(tauri.build.beforeDevCommand).toContain("bun run fetch:cjk-font");
+    expect(tauri.build.beforeBuildCommand).toContain("bun run fetch:cjk-font");
     expect(read(".gitignore")).toContain(".cache/cjk-fonts/");
     expect(read(".gitignore")).not.toContain("public/fonts/cjk/");
   });

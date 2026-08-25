@@ -1,4 +1,4 @@
-// ABOUTME: Shared Pi-compatible skill collector for discovery, package, and install sources.
+// ABOUTME: Shared OMP-compatible skill collector for discovery, package, and install sources.
 // ABOUTME: Recursively resolves SKILL.md files with frontmatter validation, ignore-file honor, and symlink dedupe.
 
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -24,13 +24,13 @@ export type SkillDiscoveryRoot = {
   dir: string;
   /**
    * `"pi"` roots honor loose Markdown files at the root and use the
-   * `.pi`/agent discovery rules; `"agents"` roots only honor nested
+   * `.omp`/agent discovery rules; `"agents"` roots only honor nested
    * `<dir>/SKILL.md` skill directories.
    */
   mode: SkillDiscoveryMode;
   /**
    * Base directory used to compute relative paths (rule base). Usually the
-   * parent of `dir`, matching Pi's resource base for that scope.
+   * parent of `dir`, matching OMP's resource base for that scope.
    */
   baseDir: string;
   scope: SkillDiscoveryScope;
@@ -52,13 +52,13 @@ export type DiscoveredSkill = {
   /**
    * `true` when the root itself was an explicit Markdown file rather than a
    * directory. Such skills use their file path (not its directory) for exact
-   * override matching, mirroring Pi's collectFilesFromPaths.
+   * override matching, mirroring OMP's collectFilesFromPaths.
    */
   isConfiguredFile: boolean;
   root: SkillDiscoveryRoot;
 };
 
-// ── Constants mirroring Pi ────────────────────────────────────────────
+// ── Constants mirroring OMP ────────────────────────────────────────────
 
 const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
 const MAX_NAME_LENGTH = 64;
@@ -110,7 +110,7 @@ function prefixIgnoreLine(line: string, prefix: string): string | null {
 
 function buildIgnoreMatcher(rootDir: string): IgnoreMatcher {
   // `ignore` implements .gitignore semantics (including trailing-slash
-  // directory rules and negation) the same way Pi's resource loader does.
+  // directory rules and negation) the same way OMP's resource loader does.
   const ig = ignore();
   const walk = (dir: string) => {
     const relDir = toPosixPath(relative(rootDir, dir));
@@ -142,7 +142,7 @@ function buildIgnoreMatcher(rootDir: string): IgnoreMatcher {
   };
 }
 
-// ── Small fs helpers (silent on failure, like Pi) ─────────────────────
+// ── Small fs helpers (silent on failure, like OMP) ─────────────────────
 
 function safeReaddir(dir: string): string[] {
   try {
@@ -201,7 +201,7 @@ function parseFrontmatter(content: string): ParsedFrontmatter {
 // ── Name validation ───────────────────────────────────────────────────
 
 /**
- * Validate a skill name against Pi's rules. Returns a list of human-readable
+ * Validate a skill name against OMP's rules. Returns a list of human-readable
  * error messages; an empty list means the name is valid.
  */
 export function validateSkillName(name: string): string[] {
@@ -216,7 +216,7 @@ export function validateSkillName(name: string): string[] {
   return errors;
 }
 
-// ── Skill discovery (mirrors Pi collectSkillEntries / loadSkillFromFile) ─
+// ── Skill discovery (mirrors OMP collectSkillEntries / loadSkillFromFile) ─
 
 function pushSkill(
   filePath: string,
@@ -279,7 +279,7 @@ export function discoverSkillsFromRoot(
 ): DiscoveredSkill[] {
   if (!existsSync(root.dir)) return [];
   const out: DiscoveredSkill[] = [];
-  // A configured plain entry may point at a single skill file (Pi supports
+  // A configured plain entry may point at a single skill file (OMP supports
   // this via collectFilesFromPaths); treat it as one skill and stop.
   const rootStat = safeStat(root.dir);
   if (rootStat?.isFile) {
@@ -316,7 +316,7 @@ export function discoverSkillsFromRoot(
         collect(full);
         continue;
       }
-      // Direct Markdown files are valid only at a `.pi`-style root in Pi mode.
+      // Direct Markdown files are valid only at a `.omp`-style root in OMP mode.
       if (root.mode === "pi" && dir === root.dir && st.isFile && name.endsWith(".md")) {
         if (!ig.ignores(rel, false)) pushSkill(full, root, diagnostics, out);
       }
@@ -367,7 +367,7 @@ export function discoverSkillsFromPaths(
 
 /**
  * Deduplicate skills by canonical path, preserving first-seen order. This is
- * the same canonical-equivalence rule Pi uses to avoid double-loading a skill
+ * the same canonical-equivalence rule OMP uses to avoid double-loading a skill
  * reachable via both a real path and a symlink alias.
  */
 export function dedupeByCanonical(skills: DiscoveredSkill[]): DiscoveredSkill[] {

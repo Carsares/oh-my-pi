@@ -1,7 +1,7 @@
 {
   "app": {
     "welcome": "Welcome to Picot",
-    "welcomeHint": "Type a message below to start chatting with Pi, or select a session from the sidebar.",
+    "welcomeHint": "Type a message below to start chatting with OMP, or select a session from the sidebar.",
     "currentWorkspace": "Current workspace:"
   },
   "shortcuts": {
@@ -254,7 +254,7 @@
     "uninstallFailed": "Uninstall failed",
     "installFailedNote": "This extension requires npm. Make sure npm is installed and available to Picot, then try again.",
     "uninstallFailedNote": "Picot could not remove this extension package. Check the error details, then try again.",
-    "permissionDenied": "Permission denied in ~/.pi/agent/npm (check owner/permissions).",
+    "permissionDenied": "Permission denied in ~/.omp/plugins (check owner/permissions).",
     "browseCountZero": "0 of {total}",
     "browseCountRange": "{start}–{end} of {total}",
     "downloadsPerMonth": "{count}/mo",
@@ -421,7 +421,7 @@
   "sidebar": {
     "loadingSessions": "Loading sessions...",
     "failedToLoadSessions": "Failed to load sessions.",
-    "failedToLoadSessionsRuntime": "Failed to load sessions. Pi runtime may be unavailable.",
+    "failedToLoadSessionsRuntime": "Failed to load sessions. OMP runtime may be unavailable.",
     "search": "Search...",
     "clearSearch": "Clear search",
     "openFolder": "Open folder as workspace",
@@ -565,7 +565,7 @@
     "help": "This usually means the installation is incomplete or corrupted. Reinstalling Picot normally fixes it. Click Retry startup after reinstalling or rebooting.",
     "retry": "Retry startup",
     "tauriUnavailable": "Tauri runtime is unavailable in this window.",
-    "starting": "Starting Pi runtime...",
+    "starting": "Starting OMP runtime...",
     "startupFailed": "Startup failed"
   },
   "settings": {
@@ -587,7 +587,7 @@
     "taskNotificationsDescription": "Show an operating system notification when a task finishes.",
     "taskCompleteTitle": "Task completed",
     "taskCompleteMessage": "Your task has finished.",
-    "piVersion": "Pi version",
+    "piVersion": "OMP version",
     "picotVersion": "Picot version",
     "checkForUpdates": "Check for updates",
     "status": "Status",
@@ -600,7 +600,7 @@
     "providersFile": "Providers file",
     "llmProviders": "LLM providers",
     "browseCommunityPackages": "Browse Community Packages",
-    "browseHelp": "Discover extensions, skills, themes, and prompts from the Pi ecosystem. Install with one click.",
+    "browseHelp": "Discover extensions, skills, themes, and prompts from the OMP ecosystem. Install with one click.",
     "costDashboard": "Cost Dashboard",
     "loadingProviders": "Loading providers…",
     "thinkingLevel": "Thinking: {level}",
@@ -671,13 +671,13 @@
     },
     "skills": {
       "title": "Skills",
-      "description": "Manage skills Pi discovers for this workspace. Changes are written to the matching settings.json and apply only after a new session or Pi-process restart.",
+      "description": "Manage skills OMP discovers for this workspace. Changes are written to the matching config.yml and apply only after a new session or OMP-process restart.",
       "rescan": "Rescan",
       "global": "Global",
       "project": "Current project",
       "loading": "Loading skills…",
       "empty": "No skills discovered in this scope.",
-      "projectUntrusted": "This project is not trusted yet. Pi will not load project skills, and switches stay disabled until it is trusted.",
+      "projectUntrusted": "This project is not trusted yet. OMP will not load project skills, and switches stay disabled until it is trusted.",
       "allEnabled": "All enabled",
       "allDisabled": "All disabled",
       "enabledCount": "{enabled}/{total} enabled",
@@ -685,16 +685,15 @@
       "enableGroup": "Toggle entire group",
       "enableSkill": "Toggle skill",
       "shadowedBy": "Shadowed by {name}",
-      "customRules": "Custom include/filter rules (read-only — edit settings.json manually)",
-      "savedRestartRequired": "Saved. Start a new session or restart Pi for the change to take effect.",
+      "customRules": "Custom include/filter rules (read-only — edit config.yml manually)",
+      "savedRestartRequired": "Saved. Start a new session or restart OMP for the change to take effect.",
       "loadFailed": "Failed to load skills.",
       "saveFailed": "Failed to save skill settings.",
       "rescanFailed": "Failed to rescan skills.",
-      "ambiguousRuleTarget": "This target maps to multiple roots; edit settings.json manually to change it.",
+      "ambiguousRuleTarget": "This target maps to multiple roots; edit config.yml manually to change it.",
       "scopeSummary": "{total} skills · {groups} groups",
       "discovered": "Discovered",
       "install": "Install",
-      "packages": "Packages",
       "sectionsAriaLabel": "Skills sections"
     },
     "installSkills": {
@@ -714,28 +713,9 @@
       "installing": "Installing…",
       "installFailed": "Failed to install selected skills.",
       "complete": "Installed {added} entries; {skipped} already configured.",
-      "restartRequired": "Saved. Start a new session or restart Pi for the change to take effect.",
+      "restartRequired": "Saved. Start a new session or restart OMP for the change to take effect.",
       "skill": "Skill",
       "group": "Group"
-    },
-    "packageSkills": {
-      "title": "Packages skills",
-      "description": "Bundled skill candidates from configured Pi packages. These are read-only candidates; effective enable/disable state is computed by Pi and is not shown here.",
-      "bundledCandidates": "Bundled candidates",
-      "refresh": "Refresh",
-      "global": "Global",
-      "project": "Current project",
-      "loading": "Loading package skills…",
-      "retry": "Retry",
-      "empty": "No configured packages in this scope.",
-      "loadFailed": "Failed to load package skills.",
-      "projectUntrusted": "This project is not trusted. Project package paths are not shown.",
-      "notInstalled": "Not installed",
-      "package": "Package",
-      "canonicalPath": "Canonical path",
-      "candidateCount": "{count} candidates",
-      "scopeSummary": "{count} packages",
-      "enableAll": "Enable all"
     },
     "installedPackages": "Installed Packages",
     "installedHelp": "Manage the extension packages configured for this installation: enable, disable, update, or remove.",
@@ -835,7 +815,7 @@
     "bootstrap": {
       "text": {
         "picotStartup": "Picot Startup",
-        "pi": "pi"
+        "pi": "OMP"
       }
     },
     "index": {
@@ -1022,7 +1002,7 @@
     "advancedRawConfig": "Advanced Raw Config",
     "advancedHelpPre": "Internal config stored in",
     "advancedHelpPost": ". You normally do not need to edit this manually.",
-    "chatConfigPath": "~/.pi/agent/chat/config.json",
+    "chatConfigPath": "~/.omp/agent/chat/config.json",
     "saveRawConfig": "Save Raw Config",
     "invalidJson": "Invalid JSON",
     "savedRawConfig": "Saved raw config.",

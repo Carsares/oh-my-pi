@@ -86,7 +86,7 @@ describe("context usage header", () => {
     expect(pill.textContent).toBe("In 100 · Out 50");
   });
 
-  it("only shows the compact control when Pi has enough context to compact", () => {
+  it("only shows the compact control when OMP has enough context to compact", () => {
     const control = setupContextUsage();
     const button = document.getElementById("compact-context-btn");
 

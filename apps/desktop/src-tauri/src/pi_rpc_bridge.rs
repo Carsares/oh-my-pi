@@ -61,15 +61,15 @@ impl PiRpcBridge {
         let mut stdin = child
             .stdin
             .take()
-            .ok_or_else(|| "Pi RPC process stdin is not piped".to_string())?;
+            .ok_or_else(|| "OMP RPC process stdin is not piped".to_string())?;
         let mut stdout = child
             .stdout
             .take()
-            .ok_or_else(|| "Pi RPC process stdout is not piped".to_string())?;
+            .ok_or_else(|| "OMP RPC process stdout is not piped".to_string())?;
         let stderr = child
             .stderr
             .take()
-            .ok_or_else(|| "Pi RPC process stderr is not piped".to_string())?;
+            .ok_or_else(|| "OMP RPC process stderr is not piped".to_string())?;
         let (outbound_tx, mut outbound_rx) = mpsc::channel::<Value>(64);
         let (incoming_tx, incoming_rx) = mpsc::channel::<Vec<u8>>(64);
         let (frame_tx, frame_rx) = mpsc::channel(64);
@@ -102,12 +102,12 @@ impl PiRpcBridge {
                     }
                 }
             })
-            .map_err(|error| format!("Cannot start Pi RPC writer: {error}"))?;
+            .map_err(|error| format!("Cannot start OMP RPC writer: {error}"))?;
 
         std::thread::Builder::new()
             .name("picot-pi-rpc-reader".into())
             .spawn(move || read_jsonl_stdout(&mut stdout, incoming_tx, max_frame_bytes))
-            .map_err(|error| format!("Cannot start Pi RPC reader: {error}"))?;
+            .map_err(|error| format!("Cannot start OMP RPC reader: {error}"))?;
 
         let (diagnostic_tx, diagnostic_rx) = std::sync::mpsc::sync_channel(64);
         std::thread::Builder::new()
@@ -118,7 +118,7 @@ impl PiRpcBridge {
                     let _ = diagnostic_tx.try_send(bounded);
                 }
             })
-            .map_err(|error| format!("Cannot start Pi RPC stderr reader: {error}"))?;
+            .map_err(|error| format!("Cannot start OMP RPC stderr reader: {error}"))?;
 
         Ok((
             Self { inner },
@@ -207,25 +207,25 @@ impl PiRpcProcess {
     pub fn try_wait(&mut self) -> Result<Option<ExitStatus>, String> {
         self.child
             .lock()
-            .map_err(|_| "Pi RPC process lock poisoned".to_string())?
+            .map_err(|_| "OMP RPC process lock poisoned".to_string())?
             .try_wait()
-            .map_err(|error| format!("Cannot inspect Pi RPC process: {error}"))
+            .map_err(|error| format!("Cannot inspect OMP RPC process: {error}"))
     }
 
     pub fn wait(&mut self) -> Result<ExitStatus, String> {
         self.child
             .lock()
-            .map_err(|_| "Pi RPC process lock poisoned".to_string())?
+            .map_err(|_| "OMP RPC process lock poisoned".to_string())?
             .wait()
-            .map_err(|error| format!("Cannot wait for Pi RPC process: {error}"))
+            .map_err(|error| format!("Cannot wait for OMP RPC process: {error}"))
     }
 
     pub fn kill(&mut self) -> Result<(), String> {
         self.child
             .lock()
-            .map_err(|_| "Pi RPC process lock poisoned".to_string())?
+            .map_err(|_| "OMP RPC process lock poisoned".to_string())?
             .kill()
-            .map_err(|error| format!("Cannot stop Pi RPC process: {error}"))
+            .map_err(|error| format!("Cannot stop OMP RPC process: {error}"))
     }
 
     pub fn take_diagnostic(&self) -> Option<String> {
@@ -286,7 +286,7 @@ async fn read_frames(
         if raw.len() > max_frame_bytes {
             let _ = frames
                 .send(BridgeFrame::ProtocolError(format!(
-                    "Pi RPC frame exceeded {max_frame_bytes} bytes"
+                    "OMP RPC frame exceeded {max_frame_bytes} bytes"
                 )))
                 .await;
             continue;
@@ -296,7 +296,7 @@ async fn read_frames(
             Err(error) => {
                 let _ = frames
                     .send(BridgeFrame::ProtocolError(format!(
-                        "Invalid Pi RPC JSONL frame: {error}"
+                        "Invalid OMP RPC JSONL frame: {error}"
                     )))
                     .await;
                 continue;

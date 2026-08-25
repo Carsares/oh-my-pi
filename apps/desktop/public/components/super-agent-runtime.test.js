@@ -168,7 +168,7 @@ describe("super-agent-runtime", () => {
           status: "pending",
           title: "Feature: Agent Status Indicator",
           description:
-            "Add a real-time agent status indicator. ## Status States - 🟢 **Idle** — Pi is waiting for input - 🟡 **Working** — Pi is actively processing ## Goal Users should not switch panes. ## Implementation Hints 1. Detect state changes 2. Show the status dot",
+            "Add a real-time agent status indicator. ## Status States - 🟢 **Idle** — OMP is waiting for input - 🟡 **Working** — OMP is actively processing ## Goal Users should not switch panes. ## Implementation Hints 1. Detect state changes 2. Show the status dot",
           targetProject: "/Users/me/project",
         },
       ],
@@ -189,8 +189,8 @@ describe("super-agent-runtime", () => {
     expect(
       [...runtime.querySelectorAll(".runtime-task-list-item")].map((item) => item.textContent),
     ).toEqual([
-      "🟢 Idle — Pi is waiting for input",
-      "🟡 Working — Pi is actively processing",
+      "🟢 Idle — OMP is waiting for input",
+      "🟡 Working — OMP is actively processing",
       "Detect state changes",
       "Show the status dot",
     ]);

@@ -470,7 +470,7 @@ export function setupPackageManager(deps) {
     footerEl.appendChild(refreshBtn);
   }
 
-  // Restart the embedded pi subprocess for the current workspace/session so
+  // Restart the bundled OMP subprocess for the current workspace/session so
   // package enable/disable/update changes take effect immediately. On success
   // the caller re-bootstraps the session against the fresh runtime.
   async function runRestart() {

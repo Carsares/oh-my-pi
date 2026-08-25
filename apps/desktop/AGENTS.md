@@ -1,12 +1,12 @@
 # Picot agent guide
 
-This file contains repository-wide development rules. Product architecture,
-feature invariants, transport paths, security boundaries, and module ownership
-live in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+This file contains desktop-specific development rules. Product architecture,
+feature invariants, transport paths, and security boundaries live in
+[`CONTEXT.md`](CONTEXT.md) and [`docs/adr/`](docs/adr/).
 
 ## Read first
 
-- Read the applicable `ARCHITECTURE.md` section and its linked design documents
+- Read the applicable ADR and linked design documents
   before changing UI behavior, persistence, workspace I/O, or cross-process
   communication.
 - **Before porting any feature-v3 feature**, read and follow
@@ -14,22 +14,22 @@ live in [`ARCHITECTURE.md`](ARCHITECTURE.md).
   It documents the two-architecture identifier mapping, the verbatim-port
   protocol, and the seven most common pitfalls (missing CSS, missing backend
   routes, custom re-implementations that broke visual style, etc.).
-- Update `ARCHITECTURE.md` when an implementation materially changes its
+- Update `CONTEXT.md` or the relevant ADR when an implementation materially changes its
   architecture, invariants, lifecycle, security boundary, or validation
   contract. Changes to LAN access, cross-platform paths, or static serving also
   require the corresponding architecture update.
 
-Tauri wraps the web UI. Rust starts a native `HostServer` plus a managed `pi --mode rpc` subprocess using the embedded pi binary shipped in `src-tauri/resources/pi/` (downloaded by `scripts/fetch-pi-binary.js` from pi-mono releases at the version pinned in `scripts/pi-version.json`). The WebView talks to the Rust host over `/v2/ws`; the host bridges runtime requests to Pi over stdio RPC.
+Tauri wraps the web UI. Rust starts a native `HostServer` plus a managed `omp --mode rpc` subprocess using the OMP binary staged from this monorepo into `src-tauri/resources/omp/`. The WebView talks to the Rust host over `/v2/ws`; the host bridges runtime requests to OMP over stdio RPC.
 
 ```
 Picot .app
   resources/
     public/                       (frontend)
-    extensions/picot-bridge.mjs    (Picot-specific Pi commands)
-    pi/<bun-compiled pi binary + assets>
+    extensions/picot-bridge.mjs    (Picot-specific OMP commands)
+    omp/<bun-compiled OMP binary>
   Rust HostServer + NativePiManager
-    spawn pi --mode rpc --extension picot-bridge.mjs
-    WebView  →  /v2/ws  →  HostServer  →  stdio RPC  →  pi
+    spawn omp --mode rpc --extension picot-bridge.mjs
+    WebView  →  /v2/ws  →  HostServer  →  stdio RPC  →  OMP
 ```
 
 There are currently no custom Tauri IPC commands. Runtime, data, auth, and extension UI traffic goes through the native host protocol.
@@ -39,27 +39,26 @@ There are currently no custom Tauri IPC commands. Runtime, data, auth, and exten
 - Local desktop GUI: all projects and agents visible in one app
 - Multi-project: each project has its own window, isolated working directory, session history, and running agent
 - Multi-agent: spawn new agents per project; switch between sessions without leaving the app
-- Native runtime protocol: browser frames are routed by Rust over `/v2/ws`, then forwarded to the managed Pi process over stdio RPC.
+- Native runtime protocol: browser frames are routed by Rust over `/v2/ws`, then forwarded to the managed OMP process over stdio RPC.
 - Visualization: streaming chat, tool-call cards, thinking blocks, token/cost tracking per session
-- Fully self-contained desktop app: zero dependency on the user's PATH / shell environment / globally installed pi
+- Fully self-contained desktop app: zero dependency on the user's PATH / shell environment / globally installed OMP
 
 ### Constraints
 
 - Frontend: vanilla JS, no framework (`public/`)
 - Backend: Rust (Tauri) owns process lifecycle, the HTTP/WebSocket host, routing, and host data APIs
-- PI integration: always via embedded `pi --mode rpc` subprocess — never re-implement PI runtime logic
+- OMP integration: always via bundled `omp --mode rpc` subprocess — never re-implement OMP runtime logic
 - Session history and working directory are isolated per project/port
-- The embedded pi version is the source of truth: `pi --version` shown in the UI comes from `PI_STUDIO_PI_VERSION` (set by Rust at spawn time, populated from `scripts/pi-version.json`). A user-installed pi on `$PATH` is irrelevant and never touched.
-- User extensions under `~/.pi/agent/extensions/` and `<workspace>/.pi/extensions/` are still auto-loaded by the embedded pi (embedding doesn't disable user extensions).
+- The bundled OMP version is the source of truth. It comes from `packages/coding-agent/package.json`, is written to `src-tauri/resources/omp/.version`, and is exposed by Rust as `PICOT_OMP_VERSION`.
+- User extensions under `~/.omp/agent/extensions/` and `<workspace>/.omp/extensions/` are auto-loaded by bundled OMP.
 
-### PI references
+### OMP references
 
-Docs ship inside the embedded pi runtime at `src-tauri/resources/pi/docs/` (populated by `bun run fetch:pi`; see "Bumping the embedded pi version" below). Prefer these repo-relative paths over any globally-installed `pi-coding-agent` — a global install may not exist on a given machine or may be a different version than the one pinned in `scripts/pi-version.json`.
+The OMP source and protocol documentation live in this monorepo. Use these files instead of a globally installed package:
 
-- RPC protocol: `src-tauri/resources/pi/docs/rpc.md`
-- SDK: `src-tauri/resources/pi/docs/sdk.md`
-- Session format: `src-tauri/resources/pi/docs/session-format.md`
-- JSON mode: `src-tauri/resources/pi/docs/json.md`
+- RPC protocol: `../../docs/rpc.md`
+- SDK: `../../docs/sdk.md`
+- Runtime implementation: `../../packages/coding-agent/`
 
 ---
 
@@ -89,13 +88,14 @@ bun run <script>                # run package.json scripts
 ## Common commands
 
 ```bash
-bun run dev              # fetch embedded pi binary, then start tauri dev (hot reload)
+bun run dev              # stage the monorepo OMP binary, then start Tauri dev
 bun run test             # vitest run + check-tauri-permissions
 bun run test:watch       # vitest in watch mode
 bun run check:rust       # cargo check + clippy + fmt (use after every Rust edit)
-bun run fetch:pi         # download the locked pi binary into src-tauri/resources/pi/
+bun run stage:omp        # build and stage OMP into src-tauri/resources/omp/
+bun run smoke:omp-rpc    # verify the staged OMP RPC contract
 bun run build:extensions # compile picot-bridge and pi-chat extensions into extensions/dist/
-bun run build            # full release build (runs prebuild: fetch:pi + build:extensions)
+bun run build            # full desktop build using the staged monorepo OMP runtime
 ```
 
 Single test file: `bun run vitest run public/settings-save-status.test.js`
@@ -162,9 +162,9 @@ Picot is a Tauri v2 app. The three main layers:
 
 **1. Rust / Tauri (`src-tauri/`)** — process lifecycle, host protocol, and window management.
 
-- `src-tauri/src/native_pi_manager.rs` — spawns and supervises native `pi --mode rpc` processes.
+- `src-tauri/src/native_pi_manager.rs` — spawns and supervises bundled `omp --mode rpc` processes.
 - `src-tauri/src/host_server.rs` — owns the HTTP/WebSocket host (`/v2/ws`, `/v2/bootstrap`) and dispatches protocol frames.
-- `src-tauri/src/pi_launch.rs` — resolves the bundled pi binary and bundled Picot bridge extension.
+- `src-tauri/src/pi_launch.rs` — resolves the bundled OMP binary and bundled Picot bridge extension.
 
 **2. Frontend (`public/`)** — vanilla JS, no framework.
 
@@ -196,33 +196,27 @@ Cross-subdir import conventions:
 
 **Where to put a new `native/` module:** place it in the subdir whose responsibility best matches it. If a module is purely algorithmic/pure-function with no DOM, prefer `utils/`. If it spans two subdirs equally, prefer the subdir of its primary consumer.
 
-**3. Pi bridge extensions (`extensions/`)** — TypeScript compiled into `extensions/dist/`.
+**3. OMP bridge extensions (`extensions/`)** — TypeScript compiled into `extensions/dist/`.
 
-- `picot-bridge.ts` runs inside Pi and exposes Picot-specific commands.
+- `picot-bridge.ts` runs inside OMP and exposes Picot-specific commands.
 - `pi-chat` remains an optional bundled extension for chat integrations.
 
 ## Key data flows
 
-- User action → `native/transport/runtime-gateway.js` → `/v2/ws` → `HostServer` → `NativePiManager` → Pi stdio RPC.
-- Extension UI requests → Pi stdio RPC event → `HostServer` → `native/extensions/extension-ui-host.js` dialog host → response over `/v2/ws`.
+- User action → `native/transport/runtime-gateway.js` → `/v2/ws` → `HostServer` → `NativePiManager` → OMP stdio RPC.
+- Extension UI requests → OMP stdio RPC event → `HostServer` → `native/extensions/extension-ui-host.js` dialog host → response over `/v2/ws`.
 
-## Bumping the embedded pi version
+## Bundled OMP lifecycle
 
-1. Edit `scripts/pi-version.json` → `version`.
-2. `bun run fetch:pi` (re-downloads the platform tarball, replaces `src-tauri/resources/pi/`).
-3. Smoke test: `./src-tauri/resources/pi/pi --version` and `bun run dev`.
-4. Commit `scripts/pi-version.json`. Do **not** commit `src-tauri/resources/pi/`; it is gitignored.
+OMP and Picot are versioned in one monorepo. Do not maintain a separate desktop runtime pin.
 
-## Embedded pi: how it ends up inside the .app
+1. `bun run stage:omp` calls the root `scripts/stage-desktop-omp.ts` script.
+2. The staging script builds `packages/coding-agent`, copies the platform binary to `src-tauri/resources/omp/`, and writes `.version` from the coding-agent package version.
+3. Tauri's `beforeDevCommand` and `beforeBuildCommand` run staging before frontend and extension builds.
+4. `tauri.conf.json` bundles `src-tauri/resources/omp/` as the `omp` resource directory.
+5. `src-tauri/build.rs` rejects release builds when the staged binary or version marker is missing.
 
-End users never run `fetch:pi`. The flow that puts `pi` inside the shipped bundle is:
-
-1. **Pre-build hook.** `package.json` `prebuild` runs `bun run fetch:pi` before `tauri build`. Downloads the platform tarball into `src-tauri/resources/pi/` (idempotent; skipped if `.version` matches). Bun honors npm-style `pre*` / `post*` lifecycle hooks for `bun run`.
-2. **Tauri before-hooks.** `tauri.conf.json` `build.beforeBuildCommand` and `build.beforeDevCommand` BOTH run `bun run fetch:pi` first, so even invoking `tauri build` / `tauri dev` directly (no `bun run build`) still guarantees the binary is present.
-3. **Tauri bundling.** `tauri.conf.json` `bundle.resources` maps `./resources/pi` → `pi`, so the entire pi runtime tree is copied into `<App>.app/Contents/Resources/pi/` at package time.
-4. **Last-line guard (build.rs).** `src-tauri/build.rs` PANICS at compile time if `resources/pi/<bin>` is missing in a release profile. This prevents `cargo build --release` (or any IDE that bypasses bun) from silently producing a .app with no pi inside. Override only for local experiments via `PI_STUDIO_SKIP_BIN_CHECK=1`.
-
-Net effect: there is no path that ships a Picot release without the embedded pi binary. End users get a self-contained app — no PATH lookups, no `bun run fetch:pi`, no manual install of pi.
+The result is a self-contained desktop app whose OMP runtime comes from the same source revision as the GUI integration.
 
 ## Post-fix verification (Rust / Tauri)
 
@@ -257,7 +251,7 @@ bun run format:fix
 
 After editing `.js` or `.ts` under `public/` or `extensions/`, run `bun run check`.
 
-Picot uses the Tauri v2 updater plugin to fetch new releases from GitHub. The build side is wired into `.github/workflows/release.yml` via the `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets. See `docs/AUTO_UPDATER.md` for the one-time signing-key setup and how `latest.json` flows from CI → GitHub release → installed app.
+Picot uses the Tauri v2 updater plugin. Its endpoints target this monorepo's releases; release ownership belongs to the root repository rather than a nested desktop workflow.
 
 ## Module discipline
 
@@ -282,11 +276,9 @@ The WebView is vanilla JavaScript with no framework.
 - Do not claim completion with failing tests or undocumented intentional
   warnings.
 
-## Embedded Pi version
+## Bundled OMP version
 
-The embedded binary is the only Pi runtime Picot launches; do not rely on a
-user-installed `pi` from `$PATH`. To upgrade it, follow the verified procedure
-in [`ARCHITECTURE.md`](ARCHITECTURE.md#如何读这个仓库): change
-`scripts/pi-version.json`, run `bun run fetch:pi`, smoke-test the embedded
-binary and `bun run dev`, then commit only the version pin—not
-`src-tauri/resources/pi/`.
+The staged binary is the only OMP runtime Picot launches; do not rely on a
+user-installed `omp` from `$PATH`. Runtime upgrades arrive through normal OMP
+source merges, then `bun run stage:omp` and `bun run smoke:omp-rpc` verify the
+desktop bundle contract.

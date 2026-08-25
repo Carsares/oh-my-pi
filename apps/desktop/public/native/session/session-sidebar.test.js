@@ -193,7 +193,7 @@ describe("SessionSidebar.render", () => {
     expect(item.querySelector(".session-title").textContent).toBe("Generated title");
   });
 
-  it("renames a historical session through Pi SessionManager config", async () => {
+  it("renames a historical session through OMP SessionManager config", async () => {
     const { sidebar, container, config, runtime } = makeSidebar([
       {
         id: "s-history",
@@ -322,7 +322,7 @@ describe("SessionSidebar.render", () => {
       {
         id: "agent-inbox",
         timestamp: "2026-08-09T02:00:00.000Z",
-        projectPath: "/Users/me/.pi/agent/super-agent",
+        projectPath: "/Users/me/.omp/agent/super-agent",
         projectName: "super-agent",
         isCurrentWorkspace: false,
       },
@@ -644,7 +644,7 @@ describe("SessionSidebar.render", () => {
           id: "sa-old",
           timestamp: "2026-06-01T00:00:00.000Z",
           name: "Old Inbox",
-          projectPath: "/Users/me/.pi/agent/super-agent",
+          projectPath: "/Users/me/.omp/agent/super-agent",
           projectName: "super-agent",
           isCurrentWorkspace: false,
         },
@@ -652,7 +652,7 @@ describe("SessionSidebar.render", () => {
           id: "sa-new",
           timestamp: "2026-06-03T00:00:00.000Z",
           name: "New Inbox",
-          projectPath: "/Users/me/.pi/agent/super-agent",
+          projectPath: "/Users/me/.omp/agent/super-agent",
           projectName: "super-agent",
           isCurrentWorkspace: false,
         },
@@ -667,7 +667,7 @@ describe("SessionSidebar.render", () => {
         id: "sa-new",
         kind: "super-agent",
         name: "Agent Inbox",
-        projectPath: "/Users/me/.pi/agent/super-agent",
+        projectPath: "/Users/me/.omp/agent/super-agent",
       }),
     );
     expect(container.querySelector(".super-agent-pinned-group")).toBeNull();
@@ -686,7 +686,7 @@ describe("SessionSidebar.render", () => {
           id: "sa",
           timestamp: "2026-06-03T00:00:00.000Z",
           name: "Inbox",
-          projectPath: "/Users/me/.pi/agent/super-agent",
+          projectPath: "/Users/me/.omp/agent/super-agent",
           projectName: "super-agent",
           isCurrentWorkspace: false,
         },
@@ -713,7 +713,7 @@ describe("SessionSidebar.render", () => {
           id: "sa",
           timestamp: "2026-06-03T00:00:00.000Z",
           name: "Inbox",
-          projectPath: "/Users/me/.pi/agent/super-agent",
+          projectPath: "/Users/me/.omp/agent/super-agent",
           projectName: "super-agent",
           isCurrentWorkspace: false,
         },

@@ -2,13 +2,12 @@
 
 **English** | [中文](./README.zh.md)
 
-A local desktop GUI for the [Pi](https://github.com/badlogic/pi-mono) coding agent. No cloud, no account — runs entirely on your machine.
+A local desktop GUI for [Oh My Pi](https://github.com/can1357/oh-my-pi) (OMP). No cloud, no account — runs entirely on your machine.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Latest release](https://img.shields.io/github/v/release/shixin-guo/picot?include_prereleases&label=release)](https://github.com/shixin-guo/picot/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#install)
 
-Picot ships a known-good build of the `pi` runtime **inside the .app bundle**, so there's no separate `pi` install to manage, no PATH shenanigans, and no version drift between Picot and the agent it talks to. Open any project folder, start chatting with the agent, browse sessions and files — no terminal required. Multiple projects run in parallel, each in its own window with its own isolated agent process.
+Picot ships the OMP runtime from this monorepo **inside the desktop bundle**, so there is no separate OMP install to manage and no version drift between the GUI and its agent runtime. Open any project folder, start chatting with the agent, and browse sessions and files without opening a terminal. Multiple projects run in parallel, each in its own window with its own isolated agent process.
 
 <p align="center">
   <img width="1200" alt="Picot hero" src="docs/images/hero.webp" />
@@ -29,9 +28,9 @@ Picot ships a known-good build of the `pi` runtime **inside the .app bundle**, s
 
 ## Install
 
-[Download from GitHub Releases](https://github.com/shixin-guo/picot/releases)
+Build and launch Picot from this monorepo using the commands under [Build from source](#build-from-source).
 
-You **do not** need to install the `pi` CLI separately — Picot bundles its own pi runtime.
+You **do not** need to install the `omp` CLI separately. Picot stages and bundles the OMP runtime built from the same checkout.
 
 ---
 
@@ -39,9 +38,9 @@ You **do not** need to install the `pi` CLI separately — Picot bundles its own
 
 1. Launch **Picot**
 2. Click a project bubble or pick a folder
-3. Start chatting — the embedded pi agent starts automatically
+3. Start chatting — the bundled OMP agent starts automatically
 
-Provide your model credentials via `pi /login` inside any workspace, or by writing `~/.pi/agent/auth.json` directly. Picot doesn't manage credentials itself. The interface is available in English and Chinese.
+Configure model credentials in Settings > Providers or through OMP's supported provider environment variables. OMP stores managed credentials under `~/.omp/agent/agent.db`. The interface is available in English and Chinese.
 
 ---
 
@@ -74,7 +73,7 @@ Provide your model credentials via `pi /login` inside any workspace, or by writi
 <details>
 <summary><strong>🗂️ Multi-Session & Multi-Agent</strong></summary>
 
-- **Multiple agents in parallel** — each session spawns its own headless pi process; no new OS window, no interruption of running sessions
+- **Multiple agents in parallel** — each session spawns its own headless OMP process; no new OS window, no interruption of running sessions
 - Browse and resume any past session from the sidebar
 - Full-text search across all session history with highlighted snippets
 - Sessions sorted by creation time; live session marked with a green dot
@@ -127,7 +126,7 @@ Provide your model credentials via `pi /login` inside any workspace, or by writi
 </p>
 
 - Browse, install, and remove community packages from within the UI
-- Built on top of `pi install` — no separate package commands needed
+- Built on top of `omp plugin` — no separate package implementation in Picot
 
 </details>
 
@@ -189,7 +188,7 @@ Provide your model credentials via `pi /login` inside any workspace, or by writi
 - Thinking level toggle (off / low / medium / high)
 - Auto and manual **context compaction** with status display
 - Push notification toggle
-- **Skills management** — Settings → Skills: browse every discovered skill per source root and toggle individual skills or whole groups using Pi's `!`/`+`/`-` rule semantics (takes effect on next session/restart)
+- **Skills management** — Settings → Skills: browse every discovered skill per source root and toggle individual skills or whole groups using OMP's `!`/`+`/`-` rule semantics (takes effect on next session/restart)
 - **Auto-updater** — Settings → General → Updates for one-click in-app updates
 
 </details>
@@ -200,59 +199,59 @@ Provide your model credentials via `pi /login` inside any workspace, or by writi
 
 ### Architecture
 
-Picot starts a Rust `HostServer` and a managed native `pi --mode rpc` process. The WebView talks to `/v2/ws` on the host, and the host bridges those frames to Pi over stdio RPC. The bundled `picot-bridge.mjs` extension provides Picot-specific Pi commands; it does not serve the app UI.
+Picot starts a Rust `HostServer` and a managed bundled `omp --mode rpc` process. The WebView talks to `/v2/ws` on the host, and the host bridges those frames to OMP over stdio RPC. The bundled `picot-bridge.mjs` extension provides Picot-specific OMP commands; it does not serve the app UI.
 
 ```
 ┌──────────────────────────────────────────────────────┐
 │ Picot .app                                       │
 │                                                      │
 │   Tauri + native HostServer (Rust)                   │
-│      ├─► spawn  pi --mode rpc --extension picot-bridge.mjs │
+│      ├─► spawn  omp --mode rpc --extension picot-bridge.mjs │
 │      ├─► bridge stdio RPC frames over /v2/ws         │
 │      └─► OS Window ──► WebView ──► native host HTTP  │
 │                                                      │
 │   resources/                                         │
 │      ├─ public/             (frontend)               │
 │      ├─ extensions/         (picot-bridge.mjs)       │
-│      └─ pi/                 (bun-compiled pi binary) │
+│      └─ omp/                (bun-compiled OMP binary)│
 └──────────────────────────────────────────────────────┘
                        │
                        ▼ reads / writes
-              ~/.pi/agent/
+              ~/.omp/agent/
                  ├─ sessions/   (chat history)
-                 ├─ auth.json   (API keys)
-                 └─ settings.json
+                 ├─ agent.db    (managed credentials)
+                 └─ config.yml
 ```
 
 > This diagram is a public-facing summary. The source-of-truth version — kept in sync with this one — lives in [`AGENTS.md`](./AGENTS.md#architecture), which also covers goals, constraints, and per-module conventions for anyone contributing code.
 
-### Pi capabilities integrated
+### OMP capabilities integrated
 
-Picot does not re-implement agent logic — it embeds Pi and exposes its runtime capabilities through a native UI.
+Picot does not re-implement agent logic. It bundles OMP and exposes its runtime capabilities through a native UI.
 
-- **Embedded `pi --mode rpc` runtime** — one managed process per workspace, isolated by project
+- **Bundled `omp --mode rpc` runtime** — one managed process per workspace, isolated by project
 - **Streaming RPC bridge** — token-by-token output, tool-call events, and thinking blocks rendered live
 - **Session lifecycle APIs** — create, switch, and resume sessions; full per-project history
-- **Native host server** — Rust owns the HTTP/WebSocket surface and bridges browser frames to Pi RPC
-- **Extension compatibility** — user extensions from `~/.pi/agent/extensions/` and `.pi/extensions/` are auto-loaded
-- **Credential reuse** — reads Pi's existing `~/.pi/agent/auth.json`; no separate login needed
+- **Native host server** — Rust owns the HTTP/WebSocket surface and bridges browser frames to OMP RPC
+- **Extension compatibility** — user extensions from `~/.omp/agent/extensions/` and `.omp/extensions/` are auto-loaded
+- **Credential reuse** — the GUI and bundled OMP share `~/.omp/agent/agent.db`
 
 ### Build from source
 
 ```bash
-git clone https://github.com/shixin-guo/picot.git
-cd picot
+git clone https://github.com/Carsares/oh-my-pi.git
+cd oh-my-pi
 bun install --frozen-lockfile
-bun run dev      # fetch embedded pi binary + start tauri dev with hot reload
+bun --cwd apps/desktop run dev
 ```
 
 To make a release build:
 
 ```bash
-bun run build    # downloads embedded pi binary, then runs tauri build
+bun --cwd apps/desktop run build
 ```
 
-For the full command reference (tests, lint/format, Rust checks, bumping the embedded pi version), see [`AGENTS.md` → Common commands](./AGENTS.md#common-commands).
+For the full command reference (tests, lint/format, Rust checks, and OMP staging), see [`AGENTS.md` → Common commands](./AGENTS.md#common-commands).
 
 ### Project docs
 
@@ -265,10 +264,10 @@ For the full command reference (tests, lint/format, Rust checks, bumping the emb
 
 ## Upstream
 
-Picot is a maintained fork of **Tau**, adapted for Pi-first, local development workflows. Key additions:
+The desktop tree is imported from **Picot** and adapted to use this monorepo's OMP packages and runtime. Picot remains the UI upstream; `can1357/oh-my-pi` remains the runtime upstream.
 
-- **Native Pi runtime manager** — spawns and supervises `pi --mode rpc` processes
-- **Embedded pi runtime** — no separate global install; Picot ships its own binary
+- **Native OMP runtime manager** — spawns and supervises `omp --mode rpc` processes
+- **Bundled OMP runtime** — no separate global install; the desktop stages the local monorepo build
 - **Protocol v2 host bridge** — typed routing for runtime, data, auth, and extension UI frames
 - **Host data plane** — Rust serves session and workspace data directly to the native UI
 
@@ -277,6 +276,4 @@ Picot is a maintained fork of **Tau**, adapted for Pi-first, local development w
 ## License
 
 MIT
-
-
 

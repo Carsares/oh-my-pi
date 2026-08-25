@@ -1,13 +1,6 @@
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { BorderedLoader, DynamicBorder } from "@mariozechner/pi-coding-agent";
-import {
-  Container,
-  Key,
-  matchesKey,
-  type SelectItem,
-  SelectList,
-  Text,
-} from "@mariozechner/pi-tui";
+import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import { BorderedLoader, DynamicBorder, getSymbolTheme } from "@oh-my-pi/pi-coding-agent";
+import { Container, Key, matchesKey, type SelectItem, SelectList, Text } from "@oh-my-pi/pi-tui";
 
 export async function selectItem(
   ctx: ExtensionContext,
@@ -25,6 +18,7 @@ export async function selectItem(
       description: (text) => theme.fg("muted", text),
       scrollInfo: (text) => theme.fg("dim", text),
       noMatch: (text) => theme.fg("warning", text),
+      symbols: getSymbolTheme(),
     });
     list.onSelect = (item) => done(item.value);
     list.onCancel = () => done(null);
@@ -90,7 +84,7 @@ export async function runWithLoader<T>(
   };
   if (!ctx.hasUI) return runWork();
   const result = await ctx.ui.custom<{ value?: T; error?: string }>((tui, theme, _kb, done) => {
-    const loader = new BorderedLoader(tui, theme, message, { cancellable: false });
+    const loader = new BorderedLoader(tui, theme, message);
     void (async () => {
       done(await runWork());
     })();

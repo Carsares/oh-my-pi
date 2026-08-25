@@ -1,4 +1,4 @@
-// ABOUTME: Renders `ctx.ui.custom()` extension overlays bridged out of the pi process.
+// ABOUTME: Renders `ctx.ui.custom()` extension overlays bridged out of the OMP process.
 // ABOUTME: Uses xterm.js so the component's own ANSI output and keys work unchanged.
 
 import {

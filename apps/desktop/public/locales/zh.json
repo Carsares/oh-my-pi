@@ -1,7 +1,7 @@
 {
   "app": {
     "welcome": "欢迎使用 Picot",
-    "welcomeHint": "在下方输入消息开始与 Pi 对话，或从侧边栏选择一个会话。",
+    "welcomeHint": "在下方输入消息开始与 OMP 对话，或从侧边栏选择一个会话。",
     "currentWorkspace": "当前工作区："
   },
   "shortcuts": {
@@ -254,7 +254,7 @@
     "uninstallFailed": "卸载失败",
     "installFailedNote": "此扩展需要 npm。请确保已安装 npm 且 Picot 可访问，然后重试。",
     "uninstallFailedNote": "Picot 无法移除此扩展包。请检查错误详情，然后重试。",
-    "permissionDenied": "~/.pi/agent/npm 权限被拒绝（请检查所有者/权限）。",
+    "permissionDenied": "~/.omp/plugins 权限被拒绝（请检查所有者/权限）。",
     "browseCountZero": "0 / 共 {total}",
     "browseCountRange": "{start}–{end} / 共 {total}",
     "downloadsPerMonth": "{count}/月",
@@ -421,7 +421,7 @@
   "sidebar": {
     "loadingSessions": "正在加载会话...",
     "failedToLoadSessions": "加载会话失败。",
-    "failedToLoadSessionsRuntime": "加载会话失败。Pi 运行时可能不可用。",
+    "failedToLoadSessionsRuntime": "加载会话失败。OMP 运行时可能不可用。",
     "search": "搜索...",
     "clearSearch": "清除搜索",
     "openFolder": "打开文件夹作为工作区",
@@ -565,7 +565,7 @@
     "help": "这通常意味着安装不完整或已损坏。重新安装 Picot 通常可以解决。重新安装或重启后点击「重试启动」。",
     "retry": "重试启动",
     "tauriUnavailable": "此窗口中 Tauri 运行时不可用。",
-    "starting": "正在启动 Pi 运行时...",
+    "starting": "正在启动 OMP 运行时...",
     "startupFailed": "启动失败"
   },
   "settings": {
@@ -587,7 +587,7 @@
     "taskNotificationsDescription": "任务完成时显示操作系统通知。",
     "taskCompleteTitle": "任务已完成",
     "taskCompleteMessage": "你的任务已完成。",
-    "piVersion": "Pi 版本",
+    "piVersion": "OMP 版本",
     "picotVersion": "Picot 版本",
     "checkForUpdates": "检查更新",
     "status": "状态",
@@ -600,7 +600,7 @@
     "providersFile": "提供者文件",
     "llmProviders": "LLM 提供者",
     "browseCommunityPackages": "浏览社区包",
-    "browseHelp": "发现 Pi 生态系统中的扩展、技能、主题和提示词。一键安装。",
+    "browseHelp": "发现 OMP 生态系统中的扩展、技能、主题和提示词。一键安装。",
     "costDashboard": "成本面板",
     "loadingProviders": "正在加载提供者…",
     "thinkingLevel": "思考：{level}",
@@ -671,13 +671,13 @@
     },
     "skills": {
       "title": "技能",
-      "description": "管理 Pi 为当前工作区发现的技能。更改会写入对应的 settings.json，并且只有在新建会话或重启 Pi 后才会生效。",
+      "description": "管理 OMP 为当前工作区发现的技能。更改会写入对应的 config.yml，并且只有在新建会话或重启 OMP 后才会生效。",
       "rescan": "重新扫描",
       "global": "全局",
       "project": "当前项目",
       "loading": "正在加载技能…",
       "empty": "此范围内未发现技能。",
-      "projectUntrusted": "当前项目尚未受信任。Pi 不会加载项目技能，在受信任前开关保持禁用。",
+      "projectUntrusted": "当前项目尚未受信任。OMP 不会加载项目技能，在受信任前开关保持禁用。",
       "allEnabled": "全部启用",
       "allDisabled": "全部禁用",
       "enabledCount": "{enabled}/{total} 已启用",
@@ -685,16 +685,15 @@
       "enableGroup": "切换整个目录",
       "enableSkill": "切换技能",
       "shadowedBy": "被 {name} 遮蔽",
-      "customRules": "自定义包含/过滤规则（只读 — 请手动编辑 settings.json）",
-      "savedRestartRequired": "已保存。新建会话或重启 Pi 后生效。",
+      "customRules": "自定义包含/过滤规则（只读 — 请手动编辑 config.yml）",
+      "savedRestartRequired": "已保存。新建会话或重启 OMP 后生效。",
       "loadFailed": "加载技能失败。",
       "saveFailed": "保存技能设置失败。",
       "rescanFailed": "重新扫描技能失败。",
-      "ambiguousRuleTarget": "该目标同时命中多个根；请手动编辑 settings.json 来修改。",
+      "ambiguousRuleTarget": "该目标同时命中多个根；请手动编辑 config.yml 来修改。",
       "scopeSummary": "{total} 个 skill · {groups} 个目录",
       "discovered": "已发现",
       "install": "安装",
-      "packages": "软件包",
       "sectionsAriaLabel": "技能页面分区"
     },
     "installSkills": {
@@ -714,28 +713,9 @@
       "installing": "正在安装…",
       "installFailed": "安装已选技能失败。",
       "complete": "已安装 {added} 项；{skipped} 项已配置。",
-      "restartRequired": "已保存。新建会话或重启 Pi 后生效。",
+      "restartRequired": "已保存。新建会话或重启 OMP 后生效。",
       "skill": "技能",
       "group": "分组"
-    },
-    "packageSkills": {
-      "title": "包技能",
-      "description": "已配置 Pi 包中的内置 skill 候选。这些是只读候选；生效的启用/禁用状态由 Pi 计算且不在此展示。",
-      "bundledCandidates": "内置候选",
-      "refresh": "刷新",
-      "global": "全局",
-      "project": "当前项目",
-      "loading": "正在加载包技能…",
-      "retry": "重试",
-      "empty": "此范围内没有已配置的包。",
-      "loadFailed": "加载包技能失败。",
-      "projectUntrusted": "该项目不受信任。不显示项目包路径。",
-      "notInstalled": "未安装",
-      "package": "包",
-      "canonicalPath": "规范路径",
-      "candidateCount": "{count} 个候选",
-      "scopeSummary": "{count} 个包",
-      "enableAll": "全部启用"
     },
     "installedPackages": "已安装扩展包",
     "installedHelp": "管理为此安装配置的扩展包：启用、禁用、更新或移除。",
@@ -835,7 +815,7 @@
     "bootstrap": {
       "text": {
         "picotStartup": "Picot Startup",
-        "pi": "pi"
+        "pi": "OMP"
       }
     },
     "index": {
@@ -1022,7 +1002,7 @@
     "advancedRawConfig": "高级原始配置",
     "advancedHelpPre": "内部配置保存在",
     "advancedHelpPost": "。通常不需要手动编辑。",
-    "chatConfigPath": "~/.pi/agent/chat/config.json",
+    "chatConfigPath": "~/.omp/agent/chat/config.json",
     "saveRawConfig": "保存原始配置",
     "invalidJson": "JSON 无效",
     "savedRawConfig": "已保存原始配置。",

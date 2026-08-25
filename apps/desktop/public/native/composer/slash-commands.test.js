@@ -14,7 +14,7 @@ const catalog = buildCommandCatalog({
       sourceInfo: {
         source: "auto",
         scope: "project",
-        path: "/tmp/workspace/.pi/skills/project-probe/SKILL.md",
+        path: "/tmp/workspace/.omp/skills/project-probe/SKILL.md",
       },
     },
     {
@@ -24,7 +24,7 @@ const catalog = buildCommandCatalog({
       sourceInfo: {
         source: "auto",
         scope: "user",
-        path: "/tmp/home/.pi/agent/skills/user-probe/SKILL.md",
+        path: "/tmp/home/.omp/agent/skills/user-probe/SKILL.md",
       },
     },
     { name: "todos", description: "Show todos", source: "extension", location: "global" },

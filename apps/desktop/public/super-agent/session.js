@@ -1,6 +1,6 @@
 const SUPER_AGENT_KIND = "super-agent";
 const SUPER_AGENT_NAME = "Agent Inbox";
-const SUPER_AGENT_PATH_SUFFIX = "/.pi/agent/super-agent";
+const SUPER_AGENT_PATH_SUFFIX = "/.omp/agent/super-agent";
 
 function normalizePath(value) {
   return String(value || "")

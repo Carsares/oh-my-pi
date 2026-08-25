@@ -15,7 +15,7 @@ function inventory(overrides = {}) {
     trusted: true,
     roots: [
       {
-        sourceRoot: "/home/.pi/agent/skills",
+        sourceRoot: "/home/.omp/agent/skills",
         scope: "user",
         rootKind: "pi",
         children: [

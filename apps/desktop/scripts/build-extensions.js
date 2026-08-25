@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Bundle each pi extension TypeScript source under `extensions/` into a
- * self-contained CommonJS file under `extensions/dist/`.
+ * Bundle each OMP extension TypeScript source under `extensions/` into a
+ * self-contained ESM file under `extensions/dist/`.
  *
  * Why this exists
  * ---------------
- * pi loads extensions with jiti and resolves their `import` statements via
+ * OMP loads extensions with jiti and resolves their `import` statements via
  * Node's module algorithm at runtime. In dev that works because the source
  * lives next to this repo's `node_modules/`. Inside a packaged `.app`, the
  * raw `extensions/*.ts` is shipped without `node_modules`. Bundling here
@@ -14,13 +14,13 @@
  * Notes
  * - We keep node built-ins external (esbuild does this automatically with
  *   `platform: "node"`).
- * - The canonical `@oh-my-pi/pi-coding-agent` package and its legacy aliases
- *   are external too. The bundled OMP runtime provides those modules to loaded
+ * - The canonical `@oh-my-pi/*` runtime packages are external. The bundled OMP
+ *   runtime provides those modules to loaded
  *   extensions, including value-level imports such as the live settings API.
- * - Output is `.mjs` (ESM). pi's extension loader treats the module's
+ * - Output is `.mjs` (ESM). OMP's extension loader treats the module's
  *   `export default` as the factory function. Bundling as CJS hides the
  *   default behind `module.exports.default`, which jiti does not unwrap, so
- *   pi rejects it with "Extension does not export a valid factory function".
+ *   OMP rejects it with "Extension does not export a valid factory function".
  */
 
 const path = require("node:path");
@@ -36,13 +36,9 @@ const ENTRIES = [["picot-bridge.ts"], ["chat-inbox/extension-entry.ts", "pi-chat
 
 const EXTERNAL = [
   "@oh-my-pi/pi-coding-agent",
+  "@oh-my-pi/pi-coding-agent/*",
+  "@oh-my-pi/pi-tui",
   "@oh-my-pi/pi-utils",
-  "@earendil-works/pi-coding-agent",
-  "@earendil-works/pi-ai",
-  "@earendil-works/pi-tui",
-  "@mariozechner/pi-coding-agent",
-  "@mariozechner/pi-ai",
-  "@mariozechner/pi-tui",
   "@sinclair/typebox",
   "typebox",
 ];

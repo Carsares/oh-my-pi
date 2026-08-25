@@ -164,7 +164,7 @@ test("model switch handler reconciles thinking level via get_state (source contr
   // reconciliation, this test fails.
   //
   // Why get_state and not set_model's response: pi 0.83's set_model response
-  // is the Model object (src-tauri/resources/pi/docs/rpc.md), which has no
+  // is the Model object documented by OMP RPC, which has no
   // thinkingLevel field. The authoritative thinking level lives at the top
   // level of get_state's data. See the handler comment in app.js.
   const source = readFileSync(join(process.cwd(), "public/native/app.js"), "utf8");

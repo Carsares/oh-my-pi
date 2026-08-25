@@ -1,5 +1,5 @@
 // ABOUTME: L3 health check — verifies real connectivity to a model/provider
-// ABOUTME: by shelling out to the bundled `pi` CLI with an isolated config dir.
+// ABOUTME: by shelling out to the bundled OMP CLI with an isolated config dir.
 
 use crate::pi_launch::PiLaunchResolver;
 use serde::Serialize;
@@ -15,7 +15,7 @@ pub const DEFAULT_TEST_TIMEOUT: Duration = Duration::from_secs(20);
 #[derive(Debug, Clone)]
 pub struct ModelTestRequest {
     pub provider_name: String,
-    /// The provider config object as stored in models.json (baseUrl, api,
+    /// The provider config object as stored in models.yml (baseUrl, api,
     /// apiKey, headers, compat, ...). `models` is overwritten with a single
     /// entry built from `model`.
     pub provider: Value,
@@ -76,8 +76,8 @@ pub async fn run_model_test(
         object.insert("models".to_string(), json!([model_entry]));
     }
 
-    let models_json = json!({ "providers": { provider_name.clone(): provider_entry } });
-    let settings_json = json!({ "retry": { "enabled": false } });
+    let models_config = json!({ "providers": { provider_name.clone(): provider_entry } });
+    let agent_config = json!({ "retry": { "enabled": false } });
 
     let config_dir =
         std::env::temp_dir().join(format!("picot-model-test-{}", uuid::Uuid::new_v4()));
@@ -86,15 +86,15 @@ pub async fn run_model_test(
     let cleanup = TempDirGuard(config_dir.clone());
 
     std::fs::write(
-        config_dir.join("models.json"),
-        serde_json::to_vec_pretty(&models_json).unwrap_or_default(),
+        config_dir.join("models.yml"),
+        serde_yaml::to_string(&models_config).unwrap_or_default(),
     )
-    .map_err(|error| format!("Cannot write models.json: {error}"))?;
+    .map_err(|error| format!("Cannot write models.yml: {error}"))?;
     std::fs::write(
-        config_dir.join("settings.json"),
-        serde_json::to_vec_pretty(&settings_json).unwrap_or_default(),
+        config_dir.join("config.yml"),
+        serde_yaml::to_string(&agent_config).unwrap_or_default(),
     )
-    .map_err(|error| format!("Cannot write settings.json: {error}"))?;
+    .map_err(|error| format!("Cannot write config.yml: {error}"))?;
 
     let (pi_bin, path_env) = pi_launch.resolve_bundled_pi_for_spawn()?;
 
@@ -124,7 +124,7 @@ pub async fn run_model_test(
             drop(cleanup);
             return Ok(ModelTestOutcome::failure(
                 started_at.elapsed().as_millis() as u64,
-                format!("Failed to launch pi: {error}"),
+                format!("Failed to launch OMP: {error}"),
             ));
         }
     };
@@ -135,7 +135,7 @@ pub async fn run_model_test(
             drop(cleanup);
             return Ok(ModelTestOutcome::failure(
                 started_at.elapsed().as_millis() as u64,
-                format!("pi process failed: {error}"),
+                format!("OMP process failed: {error}"),
             ));
         }
         Err(_) => {
@@ -169,7 +169,7 @@ pub async fn run_model_test(
             } else if !stdout.trim().is_empty() {
                 stdout.trim().chars().take(500).collect()
             } else {
-                format!("pi exited with {}", output.status)
+                format!("OMP exited with {}", output.status)
             };
             Ok(ModelTestOutcome::failure(latency_ms, details))
         }

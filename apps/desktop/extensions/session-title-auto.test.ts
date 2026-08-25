@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { registerAutomaticSessionTitle } from "./session-title-auto";
 
+const titleGenerator = vi.hoisted(() => ({
+  generateSessionTitle: vi.fn(),
+}));
+vi.mock("@oh-my-pi/pi-coding-agent", () => ({
+  SessionManager: { open: vi.fn() },
+  settings: {},
+}));
+vi.mock("@oh-my-pi/pi-coding-agent/utils/title-generator", () => titleGenerator);
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((promiseResolve) => {
@@ -12,6 +21,7 @@ function deferred<T>() {
 function createHarness(generateTitle: (prompt: string) => Promise<string>) {
   let beforeAgentStart: ((event: { prompt: string }, ctx: { model?: unknown }) => void) | undefined;
   let sessionName: string | undefined;
+  const context = {};
   const pi = {
     getSessionName: vi.fn(() => sessionName),
     on: vi.fn((event, handler) => {
@@ -22,17 +32,17 @@ function createHarness(generateTitle: (prompt: string) => Promise<string>) {
     }),
   };
   registerAutomaticSessionTitle(pi as never, { generateTitle });
-  return { pi, run: (prompt: string) => beforeAgentStart?.({ prompt }, {}) };
+  return { pi, context, run: (prompt: string) => beforeAgentStart?.({ prompt }, context) };
 }
 
 describe("automatic session titles", () => {
   it("generates from the first prompt without blocking the main agent start", async () => {
     const title = deferred<string>();
     const generateTitle = vi.fn(() => title.promise);
-    const { pi, run } = createHarness(generateTitle);
+    const { pi, context, run } = createHarness(generateTitle);
 
     expect(run("Implement parallel session naming")).toBeUndefined();
-    expect(generateTitle).toHaveBeenCalledWith("Implement parallel session naming", undefined);
+    expect(generateTitle).toHaveBeenCalledWith("Implement parallel session naming", context);
     expect(pi.setSessionName).not.toHaveBeenCalled();
 
     title.resolve("Parallel Session Naming");

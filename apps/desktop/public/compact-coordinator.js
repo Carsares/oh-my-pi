@@ -1,5 +1,5 @@
 // ABOUTME: Coordinates user-requested context compaction across independent UI entry points.
-// ABOUTME: Distinguishes request acknowledgement from Pi's actual lifecycle completion event.
+// ABOUTME: Distinguishes request acknowledgement from OMP's actual lifecycle completion event.
 
 export function createCompactCoordinator({ send, onState = () => {} }) {
   let state = "idle";

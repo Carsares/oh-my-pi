@@ -230,6 +230,12 @@
   background: var(--accent);
 }
 
+:root[data-theme="night"] .settings-toggle.on,
+:root[data-theme="midnight"] .settings-toggle.on {
+  background: var(--success);
+  border-color: var(--success);
+}
+
 .settings-toggle.on::after {
   left: 20px;
   background: white;

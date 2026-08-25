@@ -48,4 +48,53 @@ describe("session store", () => {
     });
     expect(unchanged).toBe(hydrated);
   });
+
+  it("keeps maintenance runs working until the terminal agent end", () => {
+    const initial = createSessionStore(target);
+    const working = reduceSessionState(initial, {
+      type: "runtime_event",
+      target,
+      sequence: 1,
+      event: { type: "agent_start" },
+    });
+    const maintenanceEnd = reduceSessionState(working, {
+      type: "runtime_event",
+      target,
+      sequence: 2,
+      event: { type: "agent_end", isTerminal: false },
+    });
+    const terminalEnd = reduceSessionState(maintenanceEnd, {
+      type: "runtime_event",
+      target,
+      sequence: 3,
+      event: { type: "agent_end", isTerminal: true },
+    });
+
+    expect(maintenanceEnd.lifecycle).toBe("working");
+    expect(terminalEnd.lifecycle).toBe("idle");
+  });
+
+  it("maps OMP maintenance and configuration side-channel events", () => {
+    const initial = createSessionStore(target);
+    const compacting = reduceSessionState(initial, {
+      type: "runtime_event",
+      target,
+      sequence: 1,
+      event: { type: "auto_compaction_start" },
+    });
+    const configured = reduceSessionState(compacting, {
+      type: "runtime_event",
+      target,
+      sequence: 2,
+      event: {
+        type: "config_update",
+        model: { provider: "openai", id: "gpt-5" },
+        thinkingLevel: "high",
+      },
+    });
+
+    expect(compacting.compaction).toEqual({ status: "running" });
+    expect(configured.model).toEqual({ provider: "openai", id: "gpt-5" });
+    expect(configured.thinkingLevel).toBe("high");
+  });
 });

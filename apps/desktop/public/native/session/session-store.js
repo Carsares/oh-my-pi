@@ -34,8 +34,9 @@ function applyRuntimeEvent(state, event) {
     case "agent_start":
       return { ...state, lifecycle: "working" };
     case "agent_settled":
-    case "agent_end":
       return { ...state, lifecycle: "idle" };
+    case "agent_end":
+      return event.isTerminal === false ? state : { ...state, lifecycle: "idle" };
     case "queue_update":
       return {
         ...state,
@@ -45,9 +46,19 @@ function applyRuntimeEvent(state, event) {
         },
       };
     case "compaction_start":
+    case "auto_compaction_start":
       return { ...state, compaction: { status: "running" } };
     case "compaction_end":
+    case "auto_compaction_end":
       return { ...state, compaction: { status: "completed", result: event.result ?? null } };
+    case "config_update":
+      return {
+        ...state,
+        ...(Object.hasOwn(event, "model") ? { model: event.model } : {}),
+        ...(Object.hasOwn(event, "thinkingLevel") ? { thinkingLevel: event.thinkingLevel } : {}),
+      };
+    case "prompt_result":
+      return event.agentInvoked === false ? { ...state, lifecycle: "idle" } : state;
     case "auto_retry_start":
       return { ...state, retry: { status: "waiting", ...event } };
     case "auto_retry_end":

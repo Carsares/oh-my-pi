@@ -249,6 +249,7 @@ let streamingElement = null;
 let liveProcessGroup = null;
 let sidebar = null;
 let agentInboxNavSelectSession = null;
+let slashMenu = null;
 // Sidebar loading starts before bootstrap/runtime awaits complete. Keep every
 // state slot used by its callbacks initialized above that startup boundary so
 // a fast session-list response cannot hit a temporal dead zone.
@@ -793,7 +794,7 @@ const imageAttachments = setupComposerImageAttachments({
   dropTarget: composerCard,
   onError: showError,
 });
-const slashMenu = setupComposerSlashMenu({
+slashMenu = setupComposerSlashMenu({
   input,
   container: skillSlashMenu,
   getCommands: () => commandCatalog.values(),
@@ -1434,9 +1435,14 @@ async function handleBackgroundRuntimeEvent(frame) {
       sidebar?.markUnread(sessionId);
       break;
     case "agent_settled":
-    case "agent_end":
       sidebar?.setStreaming(sessionId, false);
       sidebar?.markUnread(sessionId);
+      break;
+    case "agent_end":
+      if (frame.event.isTerminal !== false) {
+        sidebar?.setStreaming(sessionId, false);
+        sidebar?.markUnread(sessionId);
+      }
       break;
     case "message_end":
       if (frame.event.message?.role === "assistant") {
@@ -1448,6 +1454,13 @@ async function handleBackgroundRuntimeEvent(frame) {
       break;
     case "session_info_changed":
       sidebar?.setSessionName(sessionId, frame.event.name);
+      break;
+    case "session_info_update":
+      if (frame.event.title) sidebar?.setSessionName(sessionId, frame.event.title);
+      break;
+    case "available_commands_update":
+      commandCatalog = buildCommandCatalog({ nativeCommands: frame.event.commands ?? [] });
+      slashMenu?.update();
       break;
   }
 }
@@ -1702,15 +1715,29 @@ async function handleRuntimeEvent(event) {
       hideLiveProcessIndicator();
       collapseCompletedTurn({ markDone: true });
       break;
+    case "agent_end":
+      if (event.isTerminal === false) break;
+      setStatus("connected");
+      contextUsage.setWorking(false);
+      sidebar?.setStreaming(target.sessionId, false);
+      hideLiveProcessIndicator();
+      collapseCompletedTurn({ markDone: true });
+      break;
     case "session_info_changed":
       sidebar?.setSessionName(target.sessionId, event.name);
       break;
+    case "session_info_update":
+      if (event.title) sidebar?.setSessionName(target.sessionId, event.title);
+      break;
     case "compaction_start":
+    case "auto_compaction_start":
       compactCoordinator.started();
       break;
-    case "compaction_end": {
+    case "compaction_end":
+    case "auto_compaction_end": {
       const succeeded =
-        !event.errorMessage && !event.error && !event.aborted && event.result !== null;
+        event.skipped ||
+        (!event.errorMessage && !event.error && !event.aborted && event.result !== null);
       compactCoordinator.ended({
         success: succeeded,
         error: event.errorMessage || event.error,
@@ -1726,6 +1753,25 @@ async function handleRuntimeEvent(event) {
       }
       break;
     }
+    case "available_commands_update":
+      commandCatalog = buildCommandCatalog({ nativeCommands: event.commands ?? [] });
+      slashMenu?.update();
+      break;
+    case "command_output":
+      if (event.text) messageRenderer.renderSystemMessage(event.text);
+      break;
+    case "config_update":
+      if (Object.hasOwn(event, "model")) updateComposerModel(event.model);
+      if (Object.hasOwn(event, "thinkingLevel")) updateComposerThinking(event.thinkingLevel);
+      break;
+    case "prompt_result":
+      if (event.agentInvoked === false) {
+        setStatus("connected");
+        contextUsage.setWorking(false);
+        sidebar?.setStreaming(target.sessionId, false);
+        hideLiveProcessIndicator();
+      }
+      break;
     case "message_start":
       if (event.message?.role === "user") {
         messageRenderer.renderUserMessage(event.message);

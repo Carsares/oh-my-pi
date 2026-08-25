@@ -31,17 +31,27 @@ function createMemoryStorage() {
 const localStorageImpl = createMemoryStorage();
 const sessionStorageImpl = createMemoryStorage();
 
-// Inject only when the environment hasn't already provided one (jsdom on a real
-// URL would). Configurable+writable so individual tests can still vi.stubGlobal
-// their own storage and restore via unstubAllGlobals.
-if (!globalThis.localStorage) {
+function hasStorageMethods(value) {
+  return (
+    value &&
+    typeof value.getItem === "function" &&
+    typeof value.setItem === "function" &&
+    typeof value.removeItem === "function" &&
+    typeof value.clear === "function"
+  );
+}
+
+// Node 25 exposes an incomplete storage placeholder when Vitest passes an
+// invalid `--localstorage-file`; treat it like missing storage. Configurable+
+// writable keeps individual tests free to vi.stubGlobal their own storage.
+if (!hasStorageMethods(globalThis.localStorage)) {
   Object.defineProperty(globalThis, "localStorage", {
     value: localStorageImpl,
     configurable: true,
     writable: true,
   });
 }
-if (!globalThis.sessionStorage) {
+if (!hasStorageMethods(globalThis.sessionStorage)) {
   Object.defineProperty(globalThis, "sessionStorage", {
     value: sessionStorageImpl,
     configurable: true,

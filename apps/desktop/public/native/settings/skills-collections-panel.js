@@ -13,6 +13,18 @@ import {
 
 const LOCAL_ALL = "local-all";
 
+function collectionName(collection) {
+  return collection?.collectionId === LOCAL_ALL
+    ? t("settings.skills.localAll")
+    : (collection?.name ?? collection?.collectionId);
+}
+
+function collectionDescription(collection) {
+  return collection?.collectionId === LOCAL_ALL
+    ? t("settings.skills.localAllDescription")
+    : collection?.description;
+}
+
 function collectionsState(payload) {
   return (
     payload?.state ?? payload ?? { revision: 0, defaultCollectionId: LOCAL_ALL, collections: [] }
@@ -254,7 +266,7 @@ export function setupSkillsCollectionsPanel({ container, client, showError, show
             onClick: () => void loadDetail(collection.collectionId),
           },
           [
-            skillElement("span", { text: collection.name ?? collection.collectionId }),
+            skillElement("span", { text: collectionName(collection) }),
             state.defaultCollectionId === collection.collectionId
               ? skillElement("span", { class: "ui-badge", text: t("settings.skills.default") })
               : null,
@@ -375,9 +387,12 @@ export function setupSkillsCollectionsPanel({ container, client, showError, show
     return skillElement("section", { class: "ui-panel skill-collection-detail" }, [
       skillElement("div", { class: "skill-management-row" }, [
         skillElement("div", { class: "skill-management-grow" }, [
-          skillElement("h3", { text: collection.name ?? collection.collectionId }),
-          collection.description
-            ? skillElement("p", { class: "skill-management-muted", text: collection.description })
+          skillElement("h3", { text: collectionName(collection) }),
+          collectionDescription(collection)
+            ? skillElement("p", {
+                class: "skill-management-muted",
+                text: collectionDescription(collection),
+              })
             : null,
         ]),
         state.defaultCollectionId !== collection.collectionId

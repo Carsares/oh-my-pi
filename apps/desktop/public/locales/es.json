@@ -706,6 +706,7 @@
       "allProviders": "Todos los proveedores",
       "sameNamePaths": "Mismo nombre · {count} rutas",
       "localAll": "Todo lo disponible en este espacio",
+      "localAllDescription": "Todas las habilidades actualmente disponibles y elegibles en este espacio de trabajo.",
       "newCollection": "Nueva",
       "default": "Predeterminada",
       "collectionSaved": "Colección guardada.",

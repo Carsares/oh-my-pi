@@ -706,6 +706,7 @@
       "allProviders": "All providers",
       "sameNamePaths": "Same name · {count} paths",
       "localAll": "All available in this workspace",
+      "localAllDescription": "All currently available and eligible skills in this workspace.",
       "newCollection": "New",
       "default": "Default",
       "collectionSaved": "Collection saved.",

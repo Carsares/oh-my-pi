@@ -706,6 +706,7 @@
       "allProviders": "全部来源",
       "sameNamePaths": "同名多来源 · {count} 个路径",
       "localAll": "当前工作区全部可用 Skills",
+      "localAllDescription": "当前工作区中所有可用且符合条件的技能。",
       "newCollection": "新建",
       "default": "默认",
       "collectionSaved": "技能集合已保存。",

@@ -706,6 +706,7 @@
       "allProviders": "すべてのプロバイダー",
       "sameNamePaths": "同名 · {count} パス",
       "localAll": "このワークスペースで利用可能なすべて",
+      "localAllDescription": "このワークスペースで現在利用可能かつ条件を満たすすべてのスキル。",
       "newCollection": "新規",
       "default": "デフォルト",
       "collectionSaved": "コレクションを保存しました。",

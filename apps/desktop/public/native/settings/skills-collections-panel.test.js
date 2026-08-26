@@ -90,6 +90,13 @@ describe("Skills Collections panel", () => {
     });
     await panel.activate();
 
+    expect(document.querySelector(".skill-collection-detail h3").textContent).toBe(
+      "settings.skills.localAll",
+    );
+    expect(document.querySelector(".skill-collection-detail p").textContent).toBe(
+      "settings.skills.localAllDescription",
+    );
+
     const newButton = [...document.querySelectorAll("button")].find((button) =>
       button.textContent.includes("settings.skills.newCollection"),
     );

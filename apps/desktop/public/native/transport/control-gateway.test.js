@@ -125,6 +125,29 @@ describe("HostControlGateway", () => {
     await expect(response).resolves.toBeUndefined();
   });
 
+  it("sends workspace-neutral configuration requests through the Host", async () => {
+    const adapter = createInMemoryRuntimeAdapter();
+    const control = new HostControlGateway(adapter);
+    const response = control.configManagementRequest({
+      operation: "list_model_catalog",
+      params: {},
+    });
+    const sent = adapter.takeSent();
+    expect(sent).toMatchObject({
+      type: "host_request",
+      operation: "config_management_request",
+      request: { operation: "list_model_catalog", params: {} },
+      cwd: "",
+    });
+    adapter.receive({
+      type: "host_response",
+      requestId: sent.requestId,
+      operation: "config_management_request",
+      data: { ok: true, data: { providers: [] } },
+    });
+    await expect(response).resolves.toEqual({ ok: true, data: { providers: [] } });
+  });
+
   it("returns the new instance id after a runtime restart", async () => {
     const adapter = createInMemoryRuntimeAdapter();
     const control = new HostControlGateway(adapter);

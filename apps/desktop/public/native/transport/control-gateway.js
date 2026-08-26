@@ -68,6 +68,11 @@ export class HostControlGateway {
     return frame?.data ?? frame;
   }
 
+  async configManagementRequest(request, { cwd = "" } = {}) {
+    const frame = await this.#request("config_management_request", { request, cwd });
+    return frame?.data ?? frame;
+  }
+
   async restartRuntime(workspaceId, sessionId) {
     const frame = await this.#request("restart_runtime", { workspaceId, sessionId });
     return frame?.instanceId ?? null;

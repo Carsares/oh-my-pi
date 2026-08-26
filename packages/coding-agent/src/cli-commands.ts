@@ -82,6 +82,11 @@ export const commands: CommandEntry[] = [
 		help: commandHelp.configHelp,
 	},
 	{
+		name: "config-request",
+		load: () => import("./commands/config-request").then(m => m.default),
+		help: commandHelp.configRequestHelp,
+	},
+	{
 		name: "dry-balance",
 		load: () => import("./commands/dry-balance").then(m => m.default),
 		help: commandHelp.dryBalanceHelp,

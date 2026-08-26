@@ -1,8 +1,20 @@
 // ABOUTME: Configures Picot's browser and build-script Vitest regression suites.
 // ABOUTME: Keeps distribution-asset checks alongside frontend behavior tests.
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  plugins: [
+    {
+      name: "bun-text-imports",
+      enforce: "pre",
+      load(id) {
+        const filePath = id.split("?", 1)[0];
+        if (!filePath.endsWith(".md")) return null;
+        return `export default ${JSON.stringify(readFileSync(filePath, "utf8"))};`;
+      },
+    },
+  ],
   test: {
     environment: "jsdom",
     setupFiles: ["./vitest.setup.js"],

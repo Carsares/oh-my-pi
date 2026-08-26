@@ -41,6 +41,8 @@ export const compressHelp = {
 
 export const configHelp = { description: "Manage configuration settings" } satisfies CommandMetadata;
 
+export const configRequestHelp = { hidden: true } satisfies CommandMetadata;
+
 export const dryBalanceHelp = {
 	description: "Dry-run OAuth account balancing across random session ids",
 } satisfies CommandMetadata;

@@ -273,6 +273,22 @@ describe("picot config skills operations", () => {
   });
 });
 
+describe("picot config chat operations", () => {
+  it("delegates session chat configuration to the runtime-independent service", async () => {
+    const { agentDir, handlePicotConfig } = await loadConfigWithTempHome();
+    const configPath = join(agentDir, "chat", "config.json");
+
+    await expect(handlePicotConfig("read_chat_config", {}, {})).resolves.toEqual({
+      ok: true,
+      data: { content: "{}", path: configPath },
+    });
+    await expect(
+      handlePicotConfig("write_chat_config", { content: '{"botName":"pi"}' }, {}),
+    ).resolves.toEqual({ ok: true, data: { path: configPath } });
+    expect(readFileSync(configPath, "utf8")).toBe('{"botName":"pi"}');
+  });
+});
+
 describe("picot config models operations", () => {
   it("derives provider auth state from the OMP model registry", async () => {
     const { handlePicotConfig } = await loadConfigWithTempHome();

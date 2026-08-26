@@ -16,7 +16,9 @@ and paired-device token hashes. OMP continues to own session JSONL, credentials,
 and project trust. Losing or resetting the Picot database cannot mutate OMP sessions or workspace files.
 
 Project Trust is a blocking, default-deny startup gate before project resources execute. Current-session
-settings use native RPC; project and global defaults atomically merge into OMP configuration while preserving
+settings use native RPC. Workspace-neutral global configuration requests use the Host's embedded OMP CLI,
+so the root page can manage OMP-owned credentials, configuration, and Agent Inbox chat settings without
+creating a runtime. Project and global defaults atomically merge into OMP configuration while preserving
 unknown keys.
 
 Remote pairing is QR-only. A single-use pairing token expires after five minutes and exchanges for a

@@ -71,10 +71,12 @@ describe("skills install tab", () => {
 
   it("scans and submits only opaque install authority", async () => {
     const client = transport();
+    const onInstalled = vi.fn(async () => {});
     const tab = setupSkillsInstallTab({
       container,
       transport: client,
       isProjectTrusted: () => true,
+      onInstalled,
     });
     await tab.activate();
     container.querySelector(".skills-install-choose").click();
@@ -94,6 +96,11 @@ describe("skills install tab", () => {
         { kind: "skill", id: "skill-2" },
       ],
     });
+    await vi.waitFor(() =>
+      expect(onInstalled).toHaveBeenCalledWith(
+        expect.objectContaining({ addedEntries: ["../skills"] }),
+      ),
+    );
   });
 
   it("updates group selection and disables untrusted project scope", async () => {

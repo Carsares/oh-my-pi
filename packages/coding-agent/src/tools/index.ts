@@ -185,7 +185,7 @@ export interface ToolSession {
 	/** Pre-loaded skills */
 	skills?: readonly Skill[];
 	/** Rediscover live session skills after a tool mutates their backing files. */
-	refreshSkills?: () => Promise<void>;
+	refreshSkills?: (change?: { action: "create" | "update" | "delete"; name: string }) => Promise<void>;
 	/** Pre-loaded prompt templates */
 	promptTemplates?: PromptTemplate[];
 	/** Pre-loaded rules (forwarded to subagents to skip re-discovery). */

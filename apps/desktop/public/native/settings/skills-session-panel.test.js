@@ -1,0 +1,138 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { setupSessionSkillsPanel } from "./skills-session-panel.js";
+
+afterEach(() => {
+  document.body.innerHTML = "";
+});
+
+function createState() {
+  return {
+    activeLeafId: "leaf-a",
+    profile: {
+      revision: 3,
+      updatedAt: "2026-08-26T00:00:00Z",
+      baseCollection: {
+        collectionId: "local-all",
+        collectionName: "All",
+        skillIds: ["skill-a", "skill-b"],
+      },
+      additionalCollections: [],
+    },
+    memberStates: [
+      {
+        skillId: "skill-a",
+        availability: "available",
+        eligibility: "eligible",
+        runtimeStatus: "active",
+        reasons: [],
+      },
+      {
+        skillId: "skill-b",
+        availability: "available",
+        eligibility: "eligible",
+        runtimeStatus: "shadowed",
+        reasons: ["same name"],
+      },
+    ],
+    resolved: {
+      activeSkillIds: ["skill-a"],
+      resolutions: [
+        {
+          name: "Review",
+          activeSkillId: "skill-a",
+          candidateSkillIds: ["skill-a", "skill-b"],
+          shadowedSkillIds: ["skill-b"],
+        },
+      ],
+      diagnostics: [],
+    },
+  };
+}
+
+describe("Session Skills panel", () => {
+  it("shows server winner states and sends activate plus revision-bound sync", async () => {
+    document.body.innerHTML = '<div id="session-skills"></div>';
+    const client = {
+      sessionGet: vi.fn(async () => createState()),
+      collectionsList: vi.fn(async () => ({
+        state: { revision: 6, defaultCollectionId: "local-all", collections: [] },
+        collections: [{ collectionId: "local-all", name: "All", skillIds: ["skill-a", "skill-b"] }],
+      })),
+      catalogList: vi.fn(async () => ({
+        entries: [
+          {
+            skillId: "skill-a",
+            name: "Review A",
+            canonicalPath: "/home/me/.agents/skills/review-a/SKILL.md",
+            effectiveSource: { providerId: "agents", level: "user", discoveryKind: "standard" },
+          },
+          {
+            skillId: "skill-b",
+            name: "Review B",
+            canonicalPath: "/project/.omp/skills/review-b/SKILL.md",
+            effectiveSource: { providerId: "native", level: "project", discoveryKind: "standard" },
+          },
+        ],
+      })),
+      sessionActivate: vi.fn(async () => createState()),
+      sessionSyncPreview: vi.fn(async () => ({
+        profileRevision: 3,
+        collectionsRevision: 6,
+        catalogRevision: 8,
+        addedSkillIds: ["skill-c"],
+        removedSkillIds: [],
+        newConflictNames: ["review"],
+        winnerChanges: [],
+      })),
+      sessionSync: vi.fn(async () => createState()),
+    };
+    const panel = setupSessionSkillsPanel({
+      container: document.getElementById("session-skills"),
+      client,
+    });
+    await panel.activate();
+
+    expect(document.body.textContent).not.toContain("null");
+    expect(document.body.textContent).toContain("active");
+    expect(document.body.textContent).toContain("shadowed");
+    expect(document.body.textContent).toContain("settings.skills.sessionConflictCount");
+    expect(document.body.textContent).toContain(".../skills/review-b/SKILL.md");
+    const shadowed = document.querySelector('[data-skill-id="skill-b"]');
+    const activate = [...shadowed.querySelectorAll("button")].find((button) =>
+      button.textContent.includes("settings.skills.activate"),
+    );
+    activate.click();
+    await vi.waitFor(() =>
+      expect(client.sessionActivate).toHaveBeenCalledWith({
+        expectedActiveLeafId: "leaf-a",
+        expectedRevision: 3,
+        skillId: "skill-b",
+      }),
+    );
+    let sync;
+    await vi.waitFor(() => {
+      expect(client.sessionGet).toHaveBeenCalledTimes(2);
+      sync = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent === "settings.skills.sync" && !button.disabled,
+      );
+      expect(sync).toBeDefined();
+    });
+    sync.click();
+    await vi.waitFor(() => expect(client.sessionSyncPreview).toHaveBeenCalledWith());
+    const confirm = [...document.querySelectorAll("button")].find((button) =>
+      button.textContent.includes("settings.skills.confirmSync"),
+    );
+    confirm.click();
+    await vi.waitFor(() =>
+      expect(client.sessionSync).toHaveBeenCalledWith({
+        expectedActiveLeafId: "leaf-a",
+        expectedRevision: 3,
+        previewRevisions: {
+          expectedProfileRevision: 3,
+          expectedCollectionsRevision: 6,
+          expectedCatalogRevision: 8,
+        },
+      }),
+    );
+  });
+});

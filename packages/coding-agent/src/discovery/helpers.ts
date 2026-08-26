@@ -15,7 +15,7 @@ import type { ExtensionModule } from "../capability/extension-module";
 import { invalidate as invalidateFsCache, readDirEntries, readFile } from "../capability/fs";
 import { parseRuleConditionAndScope, type Rule, type RuleFrontmatter } from "../capability/rule";
 import type { Skill, SkillFrontmatter } from "../capability/skill";
-import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
+import type { LoadContext, LoadIssue, LoadResult, SourceMeta } from "../capability/types";
 import { resolveClaudePaths } from "../config/claude-paths";
 import type { MCPRequestIdFormat } from "../mcp/types";
 import { type ConfiguredThinkingLevel, parseConfiguredThinkingLevel } from "../thinking";
@@ -378,16 +378,28 @@ export async function scanSkillsFromDir(
 ): Promise<LoadResult<Skill>> {
 	const items: Skill[] = [];
 	const warnings: string[] = [];
+	const issues: LoadIssue[] = [];
 	const { dir, level, providerId, requireDescription = false } = options;
+	const sourceRoot = path.resolve(dir);
 
 	let entries: fs.Dirent[];
 	try {
 		entries = await fs.promises.readdir(dir, { withFileTypes: true });
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+		const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
+		if (!missing) {
 			warnings.push(`Failed to read skills directory: ${dir} (${String(error)})`);
 		}
-		return { items, warnings };
+		return {
+			items,
+			warnings,
+			issues,
+			rootScans: [
+				missing
+					? { providerId, sourceRoot, status: "success" }
+					: { providerId, sourceRoot, status: "failed", error: String(error) },
+			],
+		};
 	}
 	const loadSkill = async (skillPath: string) => {
 		try {
@@ -397,12 +409,19 @@ export async function scanSkillsFromDir(
 			if (frontmatter.enabled === false) {
 				return;
 			}
-			if (requireDescription && !frontmatter.description) {
-				return;
-			}
 			const skillDirName = path.basename(path.dirname(skillPath));
 			const rawName = frontmatter.name;
 			const name = typeof rawName === "string" ? rawName.trim() || skillDirName : skillDirName;
+			if (requireDescription && !frontmatter.description) {
+				issues.push({
+					path: skillPath,
+					sourceRoot: path.resolve(dir),
+					message: "SKILL.md requires a description",
+					name,
+					_source: createSourceMeta(providerId, skillPath, level),
+				});
+				return;
+			}
 			items.push({
 				name,
 				path: skillPath,
@@ -411,8 +430,15 @@ export async function scanSkillsFromDir(
 				level,
 				_source: createSourceMeta(providerId, skillPath, level),
 			});
-		} catch {
+		} catch (error) {
 			warnings.push(`Failed to read skill file: ${skillPath}`);
+			issues.push({
+				path: skillPath,
+				sourceRoot: path.resolve(dir),
+				message: String(error),
+				name: path.basename(path.dirname(skillPath)),
+				_source: createSourceMeta(providerId, skillPath, level),
+			});
 		}
 	};
 
@@ -436,7 +462,7 @@ export async function scanSkillsFromDir(
 	// Deterministic ordering: async file reads complete nondeterministically, so sort after loading.
 	items.sort((a, b) => compareSkillOrder(a.name, a.path, b.name, b.path));
 
-	return { items, warnings };
+	return { items, warnings, issues, rootScans: [{ providerId, sourceRoot, status: "success" }] };
 }
 
 /**

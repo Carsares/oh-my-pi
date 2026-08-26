@@ -1747,7 +1747,8 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 			get skills() {
 				return session?.skills ?? skills;
 			},
-			refreshSkills: () => session.refreshSkills(),
+			refreshSkills: change =>
+				change ? session.handleManagedSkillChange(change.action, change.name) : session.refreshSkills(),
 			rules: allRules,
 			eventBus,
 			outputSchema: options.outputSchema,
@@ -2941,7 +2942,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 		const rebuildSystemPrompt = async (
 			toolNames: string[],
 			tools: Map<string, AgentTool>,
-			rebuildOptions?: { directToolNames?: readonly string[] },
+			rebuildOptions?: { directToolNames?: readonly string[]; skills?: readonly Skill[] },
 		): Promise<BuildSystemPromptResult> => {
 			const promptCwd = sessionManager.getCwd();
 			const activeRepoContext = hasSession
@@ -3030,7 +3031,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 					? xdevDocsAll(toolSession.xdev, settings.get("tools.xdevDocs"), settings.get("tools.xdevInlineDevices"))
 					: "",
 				resolvedCustomPrompt: options.customSystemPrompt,
-				skills: session?.skills ?? skills,
+				skills: rebuildOptions?.skills ?? session?.skills ?? skills,
 				contextFiles,
 				tools: promptTools,
 				toolNames,
@@ -4085,6 +4086,12 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 		}
 
 		startDeferredMCPDiscovery?.(session);
+
+		// Explicit SDK-provided Skills remain authoritative. Discovered top-level
+		// sessions use the shared Catalog, collection and branch Profile pipeline.
+		if (options.skills === undefined && taskDepth === 0) {
+			await session.initializeSkillManagement({ cwd, agentDir });
+		}
 
 		// Route the initial tool surface through the Code Mode-aware path when the
 		// session starts directly on a Codex Code Mode model (`codeMode` `on`, or

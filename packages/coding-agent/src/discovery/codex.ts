@@ -253,8 +253,10 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 
 	const items = results.flatMap(r => r.items);
 	const warnings = results.flatMap(r => r.warnings || []);
+	const issues = results.flatMap(r => r.issues ?? []);
+	const rootScans = results.flatMap(r => r.rootScans ?? []);
 
-	return { items, warnings };
+	return { items, warnings, issues, rootScans };
 }
 
 // =============================================================================

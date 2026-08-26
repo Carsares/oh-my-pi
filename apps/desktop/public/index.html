@@ -1816,15 +1816,39 @@
               >
                 <button
                   type="button"
-                  id="skills-page-tab-discovered"
+                  id="skills-page-tab-catalog"
                   class="skills-page-tab active"
                   role="tab"
                   aria-selected="true"
                   aria-controls="settings-skills"
-                  data-skills-page-tab="discovered"
-                  data-i18n="settings.skills.discovered"
+                  data-skills-page-tab="catalog"
+                  data-i18n="settings.skills.catalog"
                 >
-                  Discovered
+                  Catalog
+                </button>
+                <button
+                  type="button"
+                  id="skills-page-tab-collections"
+                  class="skills-page-tab"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="settings-skill-collections"
+                  data-skills-page-tab="collections"
+                  data-i18n="settings.skills.collections"
+                >
+                  Collections
+                </button>
+                <button
+                  type="button"
+                  id="skills-page-tab-session"
+                  class="skills-page-tab"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="settings-session-skills"
+                  data-skills-page-tab="session"
+                  data-i18n="settings.skills.session"
+                >
+                  Session
                 </button>
                 <button
                   type="button"
@@ -1843,7 +1867,21 @@
                 id="settings-skills"
                 class="skills-page"
                 role="tabpanel"
-                aria-labelledby="skills-page-tab-discovered"
+                aria-labelledby="skills-page-tab-catalog"
+                aria-live="polite"
+              ></section>
+              <section
+                id="settings-skill-collections"
+                class="skills-page hidden"
+                role="tabpanel"
+                aria-labelledby="skills-page-tab-collections"
+                aria-live="polite"
+              ></section>
+              <section
+                id="settings-session-skills"
+                class="skills-page hidden"
+                role="tabpanel"
+                aria-labelledby="skills-page-tab-session"
                 aria-live="polite"
               ></section>
               <section

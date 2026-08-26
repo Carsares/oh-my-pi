@@ -13,6 +13,20 @@ const MUTATION_TYPES = new Set([
   "set_auto_retry",
   "set_steering_mode",
   "set_follow_up_mode",
+  "skills_catalog_rescan",
+  "skills_collection_create",
+  "skills_collection_update",
+  "skills_collection_delete",
+  "skills_collection_set_default",
+  "session_skills_set_base_collection",
+  "session_skills_add_collection",
+  "session_skills_remove_collection",
+  "session_skills_add",
+  "session_skills_disable",
+  "session_skills_restore",
+  "session_skills_activate",
+  "session_skills_sync",
+  "session_skills_refresh",
 ]);
 
 function assertTarget(target) {
@@ -117,12 +131,23 @@ export class RuntimeGateway {
         const error =
           frame.error ??
           (frame.type === "runtime_response" && frame.response?.success === false
-            ? (frame.response.error ?? frame.response)
+            ? frame.response
             : null);
         if (error) {
+          const detail =
+            typeof error === "object" && error !== null ? (error.error ?? error) : error;
           const message =
-            typeof error === "string" ? error : (error.message ?? JSON.stringify(error));
-          pending.reject(new Error(message));
+            typeof detail === "string" ? detail : (detail.message ?? JSON.stringify(detail));
+          const failure = new Error(message);
+          if (typeof error === "object" && error !== null) {
+            if ("code" in error) failure.code = error.code;
+            if ("current" in error) failure.current = error.current;
+            if (typeof detail === "object" && detail !== null) {
+              if (!("code" in failure) && "code" in detail) failure.code = detail.code;
+              if (!("current" in failure) && "current" in detail) failure.current = detail.current;
+            }
+          }
+          pending.reject(failure);
         } else pending.resolve(frame);
         return;
       }

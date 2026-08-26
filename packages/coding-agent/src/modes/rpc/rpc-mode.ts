@@ -28,6 +28,7 @@ import { loadSlashCommands } from "../../extensibility/slash-commands";
 import { type Theme, theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import { SKILL_PROMPT_MESSAGE_TYPE, USER_INTERRUPT_LABEL } from "../../session/messages";
+import type { SkillManagementService } from "../../skills-management/service";
 import { executeAcpBuiltinSlashCommand } from "../../slash-commands/acp-builtins";
 import { buildAvailableSlashCommands } from "../../slash-commands/available-commands";
 import { defaultLoadModeForToolName } from "../../tools/essential-tools";
@@ -55,6 +56,7 @@ import type {
 	RpcHostUriResult,
 	RpcResponse,
 	RpcSessionState,
+	RpcSkillManagementCommand,
 	RpcSubagentSubscriptionLevel,
 } from "./rpc-types";
 
@@ -99,6 +101,130 @@ type RpcOutput = (
 		| RpcHostUriCancelRequest
 		| object,
 ) => void;
+
+function rpcSkillManagementError(command: RpcSkillManagementCommand, cause: unknown): RpcResponse {
+	const message = cause instanceof Error ? cause.message : String(cause);
+	const code = isRecord(cause) && typeof cause.code === "string" ? cause.code : undefined;
+	const current = isRecord(cause) && Object.hasOwn(cause, "current") ? cause.current : undefined;
+	return {
+		id: command.id,
+		type: "response",
+		command: command.type,
+		success: false,
+		error: message,
+		...(code === undefined ? {} : { code }),
+		...(current === undefined ? {} : { current }),
+	};
+}
+
+function collectionMutationContext(command: { expectedRevision: number }) {
+	return { expectedRevision: command.expectedRevision };
+}
+
+function sessionSkillsMutationContext(command: { expectedActiveLeafId: string | null; expectedRevision: number }) {
+	return { expectedActiveLeafId: command.expectedActiveLeafId, expectedRevision: command.expectedRevision };
+}
+
+/** Thin RPC adapter: service results pass through unchanged and update events are refresh hints only. */
+export async function handleSkillManagementRpcCommand(
+	command: RpcSkillManagementCommand,
+	service: SkillManagementService | undefined,
+	output: RpcOutput = () => {},
+): Promise<RpcResponse> {
+	if (!service) {
+		return {
+			id: command.id,
+			type: "response",
+			command: command.type,
+			success: false,
+			error: "Skill management is unavailable for this session",
+			code: "skill_management_unavailable",
+		};
+	}
+
+	try {
+		let data: object;
+		switch (command.type) {
+			case "skills_catalog_list":
+				data = await service.listCatalog(command.query);
+				break;
+			case "skills_catalog_get":
+				data = await service.getCatalogEntry(command.skillId);
+				break;
+			case "skills_catalog_rescan":
+				data = await service.rescanCatalog();
+				output({ type: "skills_catalog_update" });
+				break;
+			case "skills_collection_list":
+				data = await service.listCollections();
+				break;
+			case "skills_collection_get":
+				data = await service.getCollection(command.collectionId);
+				break;
+			case "skills_collection_create":
+				data = await service.createCollection(command.params, collectionMutationContext(command));
+				output({ type: "skills_collections_update" });
+				break;
+			case "skills_collection_update":
+				data = await service.updateCollection(command.params, collectionMutationContext(command));
+				output({ type: "skills_collections_update" });
+				break;
+			case "skills_collection_delete":
+				data = await service.deleteCollection(command.collectionId, collectionMutationContext(command));
+				output({ type: "skills_collections_update" });
+				break;
+			case "skills_collection_set_default":
+				data = await service.setDefaultCollection(command.collectionId, collectionMutationContext(command));
+				output({ type: "skills_collections_update" });
+				break;
+			case "session_skills_get":
+				data = await service.getSessionSkills();
+				break;
+			case "session_skills_set_base_collection":
+				data = await service.setBaseCollection(command.collectionId, sessionSkillsMutationContext(command));
+				output({ type: "session_skills_update" });
+				break;
+			case "session_skills_add_collection":
+				data = await service.addCollection(command.collectionId, sessionSkillsMutationContext(command));
+				output({ type: "session_skills_update" });
+				break;
+			case "session_skills_remove_collection":
+				data = await service.removeCollection(command.collectionId, sessionSkillsMutationContext(command));
+				output({ type: "session_skills_update" });
+				break;
+			case "session_skills_add":
+				data = await service.addSessionSkill(command.skillId, sessionSkillsMutationContext(command));
+				output({ type: "session_skills_update" });
+				break;
+			case "session_skills_disable":
+				data = await service.disableSessionSkill(command.skillId, sessionSkillsMutationContext(command));
+				output({ type: "session_skills_update" });
+				break;
+			case "session_skills_restore":
+				data = await service.restoreSessionSkill(command.skillId, sessionSkillsMutationContext(command));
+				output({ type: "session_skills_update" });
+				break;
+			case "session_skills_activate":
+				data = await service.activateSessionSkill(command.skillId, sessionSkillsMutationContext(command));
+				output({ type: "session_skills_update" });
+				break;
+			case "session_skills_sync_preview":
+				data = await service.previewSessionSync();
+				break;
+			case "session_skills_sync":
+				data = await service.syncSessionSkills(command.previewRevisions, sessionSkillsMutationContext(command));
+				output({ type: "session_skills_update" });
+				break;
+			case "session_skills_refresh":
+				data = await service.refreshSessionSkills();
+				output({ type: "session_skills_update" });
+				break;
+		}
+		return { id: command.id, type: "response", command: command.type, success: true, data };
+	} catch (cause) {
+		return rpcSkillManagementError(command, cause);
+	}
+}
 
 export type RpcSessionChangeCommand = Extract<
 	RpcCommand,
@@ -751,8 +877,22 @@ export async function runRpcMode(
 		return { id, type: "response", command, success: true, data } as RpcResponse;
 	};
 
-	const error = (id: string | undefined, command: string, message: string, code?: string): RpcResponse => {
-		return { id, type: "response", command, success: false, error: message, ...(code ? { code } : {}) };
+	const error = (
+		id: string | undefined,
+		command: string,
+		message: string,
+		code?: string,
+		current?: unknown,
+	): RpcResponse => {
+		return {
+			id,
+			type: "response",
+			command,
+			success: false,
+			error: message,
+			...(code ? { code } : {}),
+			...(current === undefined ? {} : { current }),
+		};
 	};
 
 	const extensionUserMessageTracker = new RpcExtensionUserMessageTracker();
@@ -1002,6 +1142,28 @@ export async function runRpcMode(
 		const id = command.id;
 
 		switch (command.type) {
+			case "skills_catalog_list":
+			case "skills_catalog_get":
+			case "skills_catalog_rescan":
+			case "skills_collection_list":
+			case "skills_collection_get":
+			case "skills_collection_create":
+			case "skills_collection_update":
+			case "skills_collection_delete":
+			case "skills_collection_set_default":
+			case "session_skills_get":
+			case "session_skills_set_base_collection":
+			case "session_skills_add_collection":
+			case "session_skills_remove_collection":
+			case "session_skills_add":
+			case "session_skills_disable":
+			case "session_skills_restore":
+			case "session_skills_activate":
+			case "session_skills_sync_preview":
+			case "session_skills_sync":
+			case "session_skills_refresh":
+				return handleSkillManagementRpcCommand(command, session.skillManagement, output);
+
 			case "negotiate_protocol": {
 				if (command.protocolVersion !== 2)
 					return error(id, "negotiate_protocol", `Unsupported RPC protocol version: ${command.protocolVersion}`);

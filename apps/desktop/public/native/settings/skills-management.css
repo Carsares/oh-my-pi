@@ -1,0 +1,212 @@
+.skill-management-toolbar,
+.skill-management-row,
+.skill-management-form-row,
+.skill-management-actions,
+.skill-management-sources,
+.skill-management-member,
+.skill-collection-select,
+.skill-collection-member-option {
+  display: flex;
+  align-items: center;
+}
+
+.skill-management-toolbar,
+.skill-management-form-row,
+.skill-management-actions,
+.skill-management-sources {
+  gap: var(--space-2);
+}
+
+.skill-management-toolbar {
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.skill-management-search {
+  min-width: min(100%, 240px);
+  flex: 1;
+}
+
+.skill-management-row,
+.skill-management-member,
+.skill-collection-select,
+.skill-collection-member-option {
+  gap: var(--space-3);
+}
+
+.skill-management-row {
+  justify-content: space-between;
+}
+
+.skill-management-grow {
+  min-width: 0;
+  flex: 1;
+}
+
+.skill-management-muted,
+.skill-management-path,
+.skill-management-message {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.skill-management-muted {
+  margin: var(--space-0-5) 0 0;
+}
+
+.skill-management-path {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-management-error,
+.skill-management-message--error {
+  color: var(--error);
+}
+
+.skill-management-warning {
+  margin: 0;
+  color: var(--warning);
+  font-size: var(--font-size-sm);
+}
+
+.skill-management-message {
+  padding: var(--space-4) 0;
+}
+
+.skill-management-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skill-catalog-entry,
+.skill-catalog-detail,
+.skill-collection-editor,
+.skill-collection-detail,
+.skill-session-collections,
+.skill-session-members,
+.skill-sync-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.skill-catalog-detail,
+.skill-sync-preview {
+  margin-bottom: var(--space-3);
+}
+
+.skill-management-sources {
+  flex-wrap: wrap;
+}
+
+.skill-management-status--available,
+.skill-management-status--eligible,
+.skill-management-status--active {
+  color: var(--success);
+}
+
+.skill-management-status--missing,
+.skill-management-status--invalid,
+.skill-management-status--blocked {
+  color: var(--error);
+}
+
+.skill-management-status--shadowed,
+.skill-management-status--out_of_scope,
+.skill-management-status--disabled {
+  color: var(--warning);
+}
+
+.skill-collections-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.skill-collections-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.skill-collection-select {
+  justify-content: space-between;
+  width: 100%;
+  min-height: var(--control-height-md);
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.skill-collection-select:hover,
+.skill-collection-select.active {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+}
+
+.skill-management-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.skill-collection-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-1);
+  max-height: 320px;
+  overflow: auto;
+}
+
+.skill-collection-member-option {
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-glass);
+}
+
+.skill-management-member {
+  justify-content: space-between;
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.skill-management-member:last-child {
+  border-bottom: 0;
+}
+
+.skill-session-header {
+  margin-bottom: var(--space-3);
+}
+
+.skill-session-collections,
+.skill-session-members {
+  margin-top: var(--space-4);
+}
+
+@media (max-width: 720px) {
+  .skill-collections-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .skill-management-form-row,
+  .skill-management-member {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .skill-management-actions {
+    flex-wrap: wrap;
+  }
+}

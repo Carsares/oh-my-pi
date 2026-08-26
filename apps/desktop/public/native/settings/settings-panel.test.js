@@ -22,7 +22,16 @@ function renderSettingsDom() {
           <div class="settings-section" id="pkg-manager-section"></div>
           <div class="settings-section" id="pkg-browse-section" hidden></div>
         </div>
-        <div class="settings-tab" data-settings-panel="skills"><div id="settings-skills"></div></div>
+        <div class="settings-tab" data-settings-panel="skills">
+          <button class="skills-page-tab active" data-skills-page-tab="catalog"></button>
+          <button class="skills-page-tab" data-skills-page-tab="collections"></button>
+          <button class="skills-page-tab" data-skills-page-tab="session"></button>
+          <button class="skills-page-tab" data-skills-page-tab="install"></button>
+          <div id="settings-skills"></div>
+          <div id="settings-skill-collections"></div>
+          <div id="settings-session-skills"></div>
+          <div id="settings-install-skills"></div>
+        </div>
         <div class="settings-tab" data-settings-panel="usage"></div>
         <div class="settings-tab" data-settings-panel="configuration"></div>
       </section>
@@ -121,22 +130,99 @@ describe("settings panel hash routing", () => {
     expect(document.getElementById("pkg-browse-section").hidden).toBe(false);
   });
 
-  it("opens the Skills tab through the Picot config gateway", async () => {
+  it("loads Skills lazily and refreshes matching runtime updates for the active target", async () => {
     const configGateway = { call: vi.fn(async () => ({ ok: true, data: {} })) };
-    const getTarget = () => ({ workspaceId: "workspace-a", sessionId: "session-a", instanceId: 1 });
+    let runtimeListener;
+    const runtime = {
+      request: vi.fn(async () => ({
+        response: { success: true, data: { revision: 1, entries: [] } },
+      })),
+      subscribe: vi.fn((listener) => {
+        runtimeListener = listener;
+        return () => {};
+      }),
+    };
+    let target = { workspaceId: "workspace-a", sessionId: "session-a", instanceId: 1 };
+    const getTarget = () => target;
 
-    const panel = setupSettingsPanel({ configGateway, runtime: {}, getTarget });
+    const panel = setupSettingsPanel({ configGateway, runtime, getTarget });
+    expect(runtime.request).not.toHaveBeenCalled();
     panel.openSettings("skills");
 
     expect(window.location.hash).toBe("#/settings/skills");
     expect(
       document.querySelector('[data-settings-panel="skills"]').classList.contains("active"),
     ).toBe(true);
-    expect(configGateway.call).toHaveBeenCalledWith("list_skill_inventory", { scope: "global" });
+    expect(runtime.request).toHaveBeenCalledWith(
+      { type: "skills_catalog_list" },
+      getTarget(),
+      undefined,
+    );
+    expect(configGateway.call).not.toHaveBeenCalledWith("list_skill_inventory", expect.anything());
     await vi.waitFor(() => {
       expect(document.getElementById("settings-skills").textContent).toContain(
         "settings.skills.empty",
       );
     });
+
+    runtime.request.mockClear();
+    runtimeListener({
+      type: "runtime_event",
+      target,
+      event: { type: "skills_catalog_update" },
+    });
+    expect(runtime.request).toHaveBeenCalledWith(
+      { type: "skills_catalog_list" },
+      target,
+      undefined,
+    );
+
+    runtime.request.mockClear();
+    runtimeListener({
+      type: "runtime_event",
+      target: { ...target, sessionId: "background-session" },
+      event: { type: "skills_catalog_update" },
+    });
+    expect(runtime.request).not.toHaveBeenCalled();
+
+    document.querySelector('[data-skills-page-tab="collections"]').click();
+    await vi.waitFor(() =>
+      expect(runtime.request).toHaveBeenCalledWith(
+        { type: "skills_collection_list" },
+        target,
+        undefined,
+      ),
+    );
+    runtime.request.mockClear();
+    runtimeListener({
+      type: "runtime_event",
+      target,
+      event: { type: "skills_collections_update" },
+    });
+    expect(runtime.request).toHaveBeenCalledWith(
+      { type: "skills_collection_list" },
+      target,
+      undefined,
+    );
+
+    document.querySelector('[data-skills-page-tab="session"]').click();
+    await vi.waitFor(() =>
+      expect(runtime.request).toHaveBeenCalledWith(
+        { type: "session_skills_get" },
+        target,
+        undefined,
+      ),
+    );
+    runtime.request.mockClear();
+    runtimeListener({
+      type: "runtime_event",
+      target,
+      event: { type: "session_skills_update" },
+    });
+    expect(runtime.request).toHaveBeenCalledWith({ type: "session_skills_get" }, target, undefined);
+
+    target = { workspaceId: "workspace-a", sessionId: "session-b", instanceId: 2 };
+    panel.targetChanged();
+    expect(runtime.request).toHaveBeenCalledWith({ type: "session_skills_get" }, target, undefined);
   });
 });

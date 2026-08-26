@@ -25,6 +25,26 @@ export interface LoadResult<T> {
 	items: T[];
 	/** Warnings encountered during loading (parse errors, etc.) */
 	warnings?: string[];
+	/** Structured invalid files retained for inventory consumers such as the Skill Catalog. */
+	issues?: LoadIssue[];
+	/** Root-level scan outcomes retained for inventory consumers such as the Skill Catalog. */
+	rootScans?: LoadRootScanResult[];
+}
+
+export interface LoadRootScanResult {
+	providerId: string;
+	sourceRoot: string;
+	status: "success" | "failed";
+	error?: string;
+}
+
+export interface LoadIssue {
+	path: string;
+	sourceRoot: string;
+	message: string;
+	name?: string;
+	description?: string;
+	_source: SourceMeta;
 }
 
 /**
@@ -116,6 +136,12 @@ export interface CapabilityResult<T> {
 	warnings: string[];
 	/** Which providers contributed items (IDs) */
 	providers: string[];
+	/** Invalid source files reported by providers without entering normal capability items. */
+	issues?: LoadIssue[];
+	/** Root-level scan outcomes reported by providers. */
+	rootScans?: LoadRootScanResult[];
+	/** Providers that failed before they could return root-level scan outcomes. */
+	providerErrors?: Array<{ providerId: string; error: string }>;
 }
 
 /**

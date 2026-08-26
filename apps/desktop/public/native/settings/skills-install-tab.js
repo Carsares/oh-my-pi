@@ -31,12 +31,13 @@ function collectCandidates(nodes) {
   );
 }
 
-/** @param {{container:HTMLElement, transport:{pickSkillSource:(workspaceId?:string|null)=>Promise<object|null>,scanSkillInstallSource:(sourceId:string)=>Promise<object>,installSkillLinks:(request:object)=>Promise<object>}, getWorkspaceId?:()=>string|null, isProjectTrusted:()=>boolean, showSuccess?:(message:string)=>void, showError?:(message:string)=>void}} opts */
+/** @param {{container:HTMLElement, transport:{pickSkillSource:(workspaceId?:string|null)=>Promise<object|null>,scanSkillInstallSource:(sourceId:string)=>Promise<object>,installSkillLinks:(request:object)=>Promise<object>}, getWorkspaceId?:()=>string|null, isProjectTrusted:()=>boolean, onInstalled?:(result:object)=>Promise<void>, showSuccess?:(message:string)=>void, showError?:(message:string|Error)=>void}} opts */
 export function setupSkillsInstallTab({
   container,
   transport,
   getWorkspaceId,
   isProjectTrusted,
+  onInstalled,
   showSuccess,
   showError,
 }) {
@@ -146,7 +147,19 @@ export function setupSkillsInstallTab({
       const result = await transport.installSkillLinks(pendingInstall);
       phase = "done";
       scan = { ...scan, result };
-      showSuccess?.(t("settings.installSkills.restartRequired"));
+      try {
+        await onInstalled?.(result);
+        showSuccess?.(
+          t(
+            onInstalled
+              ? "settings.installSkills.catalogRefreshed"
+              : "settings.installSkills.restartRequired",
+          ),
+        );
+      } catch (refreshError) {
+        showSuccess?.(t("settings.installSkills.catalogRefreshPending"));
+        showError?.(refreshError instanceof Error ? refreshError : String(refreshError));
+      }
     } catch (cause) {
       phase = "error";
       error = cause instanceof Error ? cause.message : t("settings.installSkills.installFailed");

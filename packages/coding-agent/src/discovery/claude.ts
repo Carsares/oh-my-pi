@@ -197,10 +197,14 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 
 	const items: Skill[] = [];
 	const warnings: string[] = [];
+	const issues: NonNullable<LoadResult<Skill>["issues"]> = [];
+	const rootScans: NonNullable<LoadResult<Skill>["rootScans"]> = [];
 
 	if (userResult.status === "fulfilled") {
 		items.push(...userResult.value.items);
 		warnings.push(...(userResult.value.warnings ?? []));
+		issues.push(...(userResult.value.issues ?? []));
+		rootScans.push(...(userResult.value.rootScans ?? []));
 	} else if (!isMissingDirectoryError(userResult.reason)) {
 		warnings.push(`Failed to scan Claude user skills in ${userSkillsDir}: ${String(userResult.reason)}`);
 	}
@@ -209,12 +213,14 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 		if (projectResult.status === "fulfilled") {
 			items.push(...projectResult.value.items);
 			warnings.push(...(projectResult.value.warnings ?? []));
+			issues.push(...(projectResult.value.issues ?? []));
+			rootScans.push(...(projectResult.value.rootScans ?? []));
 		} else if (!isMissingDirectoryError(projectResult.reason)) {
 			warnings.push(`Failed to scan Claude project skills: ${String(projectResult.reason)}`);
 		}
 	}
 
-	return { items, warnings };
+	return { items, warnings, issues, rootScans };
 }
 
 // =============================================================================

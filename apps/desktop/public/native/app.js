@@ -1893,6 +1893,7 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   streamingElement = null;
   liveProcessGroup = null;
   adapter.subscribeTarget(target);
+  settingsPanel?.targetChanged?.();
   sidebar?.setActive(target.sessionId);
   // When the workspace changes, the cached session list is stale — reload it
   // so the sidebar reflects the new project's sessions. Same-workspace

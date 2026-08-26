@@ -17,6 +17,7 @@ import type {
 	CapabilityInfo,
 	CapabilityResult,
 	LoadContext,
+	LoadIssue,
 	LoadOptions,
 	Provider,
 	ProviderInfo,
@@ -107,6 +108,9 @@ async function loadImpl<T>(
 	const allItems: Array<T & { _source: SourceMeta; _shadowed?: boolean }> = [];
 	const suppressedItems = new Set<T & { _source: SourceMeta; _shadowed?: boolean }>();
 	const allWarnings: string[] = [];
+	const allIssues: LoadIssue[] = [];
+	const allRootScans: NonNullable<CapabilityResult<T>["rootScans"]> = [];
+	const providerErrors: NonNullable<CapabilityResult<T>["providerErrors"]> = [];
 	const contributingProviders: string[] = [];
 	const disabledExtensionIds = options.includeDisabled
 		? new Set<string>()
@@ -132,6 +136,7 @@ async function loadImpl<T>(
 		const { provider } = entry;
 		if ("error" in entry) {
 			allWarnings.push(`[${provider.displayName}] Failed to load: ${entry.error}`);
+			providerErrors.push({ providerId: provider.id, error: String(entry.error) });
 			continue;
 		}
 
@@ -141,6 +146,15 @@ async function loadImpl<T>(
 		if (result.warnings) {
 			allWarnings.push(...result.warnings.map(w => `[${provider.displayName}] ${w}`));
 		}
+		if (result.issues) {
+			allIssues.push(
+				...result.issues.map(issue => ({
+					...issue,
+					_source: { ...issue._source, providerName: provider.displayName },
+				})),
+			);
+		}
+		if (result.rootScans) allRootScans.push(...result.rootScans);
 
 		let contributedItemCount = 0;
 		for (const item of result.items) {
@@ -229,6 +243,9 @@ async function loadImpl<T>(
 		all: suppressedItems.size > 0 ? allItems.filter(item => !suppressedItems.has(item)) : allItems,
 		warnings: allWarnings,
 		providers: contributingProviders,
+		issues: allIssues,
+		rootScans: allRootScans,
+		providerErrors,
 	};
 }
 

@@ -1,11 +1,11 @@
-// ABOUTME: Composes the three Settings > Skills tabs with accessible keyboard navigation.
-// ABOUTME: Keeps child tab state alive while lazy-activating a selected child exactly once.
+// ABOUTME: Composes the Settings > Skills tabs with accessible keyboard navigation.
+// ABOUTME: Keeps child tab state alive while activating the selected child on demand.
 
 export function setupSkillsTabShell({ tabs, panels, activate }) {
   const tabList = [...tabs];
   let selected = tabList.find((tab) => tab.classList.contains("active")) ?? tabList[0];
 
-  function select(tab, { focus = false } = {}) {
+  function select(tab, { focus = false, activatePanel = true } = {}) {
     if (!tabList.includes(tab)) return;
     selected = tab;
     const name = tab.dataset.skillsPageTab;
@@ -18,7 +18,7 @@ export function setupSkillsTabShell({ tabs, panels, activate }) {
     for (const [panelName, panel] of Object.entries(panels)) {
       panel?.classList.toggle("hidden", panelName !== name);
     }
-    void activate?.(name);
+    if (activatePanel) void activate?.(name);
     if (focus) tab.focus();
   }
 
@@ -39,9 +39,11 @@ export function setupSkillsTabShell({ tabs, panels, activate }) {
     });
   }
 
-  // Activate the default tab on init so its first panel (Discovered) loads
-  // its data instead of staying on the construction-time Loading placeholder.
-  select(selected);
+  select(selected, { activatePanel: false });
 
-  return { select, destroy: () => {} };
+  function refresh() {
+    if (selected) void activate?.(selected.dataset.skillsPageTab);
+  }
+
+  return { select, refresh, destroy: () => {} };
 }

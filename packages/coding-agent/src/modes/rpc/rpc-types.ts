@@ -11,6 +11,13 @@ import type { BashResult } from "../../exec/bash-executor";
 import type { ContextUsage } from "../../extensibility/extensions/types";
 import type { AgentSessionEvent, SessionStats } from "../../session/agent-session";
 import type { FileEntry } from "../../session/session-entries";
+import type {
+	CollectionMutationContext,
+	CreateCollectionParams,
+	UpdateCollectionParams,
+} from "../../skills-management/collections";
+import type { SessionSkillsMutationContext } from "../../skills-management/session";
+import type { SessionSkillsSyncRevisions, SkillCatalogQuery } from "../../skills-management/types";
 import type { AvailableSlashCommandSource } from "../../slash-commands/available-commands";
 import type {
 	AgentProgress,
@@ -47,6 +54,32 @@ export type RpcCommand =
 	| { id?: string; type: "set_subagent_subscription"; level: RpcSubagentSubscriptionLevel }
 	| { id?: string; type: "get_subagents" }
 	| { id?: string; type: "get_subagent_messages"; subagentId?: string; sessionFile?: string; fromByte?: number }
+
+	// Skill management
+	| { id?: string; type: "skills_catalog_list"; query?: SkillCatalogQuery }
+	| { id?: string; type: "skills_catalog_get"; skillId: string }
+	| { id?: string; type: "skills_catalog_rescan" }
+	| { id?: string; type: "skills_collection_list" }
+	| { id?: string; type: "skills_collection_get"; collectionId: string }
+	| ({ id?: string; type: "skills_collection_create"; params: CreateCollectionParams } & CollectionMutationContext)
+	| ({ id?: string; type: "skills_collection_update"; params: UpdateCollectionParams } & CollectionMutationContext)
+	| ({ id?: string; type: "skills_collection_delete"; collectionId: string } & CollectionMutationContext)
+	| ({ id?: string; type: "skills_collection_set_default"; collectionId: string } & CollectionMutationContext)
+	| { id?: string; type: "session_skills_get" }
+	| ({ id?: string; type: "session_skills_set_base_collection"; collectionId: string } & SessionSkillsMutationContext)
+	| ({ id?: string; type: "session_skills_add_collection"; collectionId: string } & SessionSkillsMutationContext)
+	| ({ id?: string; type: "session_skills_remove_collection"; collectionId: string } & SessionSkillsMutationContext)
+	| ({ id?: string; type: "session_skills_add"; skillId: string } & SessionSkillsMutationContext)
+	| ({ id?: string; type: "session_skills_disable"; skillId: string } & SessionSkillsMutationContext)
+	| ({ id?: string; type: "session_skills_restore"; skillId: string } & SessionSkillsMutationContext)
+	| ({ id?: string; type: "session_skills_activate"; skillId: string } & SessionSkillsMutationContext)
+	| { id?: string; type: "session_skills_sync_preview" }
+	| ({
+			id?: string;
+			type: "session_skills_sync";
+			previewRevisions: SessionSkillsSyncRevisions;
+	  } & SessionSkillsMutationContext)
+	| { id?: string; type: "session_skills_refresh" }
 
 	// Model
 	| { id?: string; type: "set_model"; provider: string; modelId: string }
@@ -92,6 +125,33 @@ export type RpcCommand =
 	| { id?: string; type: "get_login_providers" }
 	| { id?: string; type: "login"; providerId: string };
 
+export type RpcSkillManagementCommand = Extract<
+	RpcCommand,
+	{
+		type:
+			| "skills_catalog_list"
+			| "skills_catalog_get"
+			| "skills_catalog_rescan"
+			| "skills_collection_list"
+			| "skills_collection_get"
+			| "skills_collection_create"
+			| "skills_collection_update"
+			| "skills_collection_delete"
+			| "skills_collection_set_default"
+			| "session_skills_get"
+			| "session_skills_set_base_collection"
+			| "session_skills_add_collection"
+			| "session_skills_remove_collection"
+			| "session_skills_add"
+			| "session_skills_disable"
+			| "session_skills_restore"
+			| "session_skills_activate"
+			| "session_skills_sync_preview"
+			| "session_skills_sync"
+			| "session_skills_refresh";
+	}
+>;
+
 // ============================================================================
 // RPC State
 // ============================================================================
@@ -134,6 +194,12 @@ export interface RpcAvailableCommandsUpdateFrame {
 	type: "available_commands_update";
 	commands: RpcAvailableSlashCommand[];
 }
+
+/** Stateless refresh hints; clients fetch authoritative state through the matching get RPC. */
+export type RpcSkillManagementUpdateFrame =
+	| { type: "skills_catalog_update" }
+	| { type: "skills_collections_update" }
+	| { type: "session_skills_update" };
 
 export interface RpcPromptResultFrame {
 	type: "prompt_result";
@@ -338,8 +404,25 @@ export type RpcResponse =
 	  }
 	| { id?: string; type: "response"; command: "login"; success: true; data: { providerId: string } }
 
-	// Error response (any command can fail); `code` is an optional machine-readable reason.
-	| { id?: string; type: "response"; command: string; success: false; error: string; code?: string };
+	// Skill management service results are authoritative domain objects and are passed through unchanged.
+	| {
+			id?: string;
+			type: "response";
+			command: RpcSkillManagementCommand["type"];
+			success: true;
+			data: object;
+	  }
+
+	// Error response (any command can fail); optional fields preserve domain conflict details.
+	| {
+			id?: string;
+			type: "response";
+			command: string;
+			success: false;
+			error: string;
+			code?: string;
+			current?: unknown;
+	  };
 
 // ============================================================================
 // Subagent Events (stdout)
@@ -362,7 +445,7 @@ export interface RpcSubagentEventFrame {
 
 export type RpcSubagentFrame = RpcSubagentLifecycleFrame | RpcSubagentProgressFrame | RpcSubagentEventFrame;
 
-export type RpcSessionEventFrame = AgentSessionEvent | RpcSubagentFrame;
+export type RpcSessionEventFrame = AgentSessionEvent | RpcSubagentFrame | RpcSkillManagementUpdateFrame;
 
 // ============================================================================
 // Extension UI Events (stdout)

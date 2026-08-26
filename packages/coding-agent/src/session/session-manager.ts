@@ -18,6 +18,20 @@ import {
 	stringifyJson,
 	toError,
 } from "@oh-my-pi/pi-utils";
+import {
+	createSessionSkillsProfile,
+	reduceSessionSkillsProfile,
+	reduceSessionSkillsProfileEntries,
+	resolveSessionSkillIds,
+} from "../skills-management/session/profile";
+import {
+	type CreateSessionSkillsProfileParams,
+	type SessionSkillsMutationContext,
+	type SessionSkillsMutationResult,
+	SessionSkillsProfileError,
+	type SessionSkillsProfileMutation,
+	type SessionSkillsState,
+} from "../skills-management/session/types";
 import type { StructuredSubagentSchemaMode } from "../task/types";
 import { ArtifactManager } from "./artifacts";
 import { type BlobPutOptions, type BlobPutResult, BlobStore } from "./blob-store";
@@ -46,6 +60,7 @@ import {
 	type ModelChangeEntry,
 	type NewSessionOptions,
 	type ResetBoundaryEntry,
+	SESSION_SKILLS_PROFILE_CUSTOM_TYPE,
 	type ServiceTierChangeEntry,
 	type SessionEntry,
 	type SessionHeader,
@@ -379,6 +394,7 @@ export type ReadonlySessionManager = Pick<
 	| "getEntries"
 	| "getTree"
 	| "getUsageStatistics"
+	| "getSessionSkillsState"
 	| "putBlob"
 	| "putBlobSync"
 >;
@@ -510,6 +526,8 @@ export class SessionManager {
 	#diskFailureLogged = false;
 	/** FIFO reservation for atomic batches and authoritative recovery. */
 	#atomicPersistenceTail: Promise<void> = Promise.resolve();
+	/** Serializes version checks and Profile appends for the current Session Skills branch. */
+	#sessionSkillsMutationTail: Promise<void> = Promise.resolve();
 	/** Observer notifications withheld until their entries are proven durable. */
 	#pendingDurabilityNotifications: SessionEntry[] = [];
 	/** Bumped on every sync rewrite / chain reset so stale queued tasks become no-ops. */
@@ -2291,6 +2309,96 @@ export class SessionManager {
 		const entry: CustomEntry = { type: "custom", customType, data, ...this.#freshEntryFields() };
 		this.#recordEntry(entry);
 		return entry.id;
+	}
+
+	getSessionSkillsState(): SessionSkillsState {
+		return {
+			activeLeafId: this.#index.leafId(),
+			profile: reduceSessionSkillsProfileEntries(this.getBranch()),
+		};
+	}
+
+	initializeSessionSkillsProfile(
+		params: CreateSessionSkillsProfileParams,
+		context: SessionSkillsMutationContext,
+	): Promise<SessionSkillsMutationResult> {
+		const requestedSessionId = this.#sessionId;
+		return this.#enqueueSessionSkillsMutation(async () => {
+			this.#assertSessionSkillsMutationTarget(requestedSessionId, context);
+			const current = this.getSessionSkillsState();
+			if (current.profile !== undefined || context.expectedRevision !== 0) {
+				throw new SessionSkillsProfileError("stale_profile", "Session Skills Profile has already been initialized");
+			}
+			const profile = createSessionSkillsProfile(params);
+			const entryId = this.appendCustomEntry(SESSION_SKILLS_PROFILE_CUSTOM_TYPE, profile);
+			await this.ensureOnDisk();
+			const effectiveSkillIds = resolveSessionSkillIds(profile);
+			return {
+				changed: true,
+				entryId,
+				activeLeafId: entryId,
+				profile,
+				effectiveSkillIds,
+				diff: { addedSkillIds: effectiveSkillIds, removedSkillIds: [] },
+			};
+		});
+	}
+
+	updateSessionSkillsProfile(
+		mutation: SessionSkillsProfileMutation,
+		context: SessionSkillsMutationContext,
+		assertMutable?: () => void,
+	): Promise<SessionSkillsMutationResult> {
+		const requestedSessionId = this.#sessionId;
+		return this.#enqueueSessionSkillsMutation(async () => {
+			this.#assertSessionSkillsMutationTarget(requestedSessionId, context);
+			const current = this.getSessionSkillsState();
+			if (!current.profile) {
+				throw new SessionSkillsProfileError("profile_not_found", "Session Skills Profile has not been initialized");
+			}
+			if (current.profile.revision !== context.expectedRevision) {
+				throw new SessionSkillsProfileError("stale_profile", "Session Skills Profile revision is stale");
+			}
+			assertMutable?.();
+			const reduced = reduceSessionSkillsProfile(current.profile, mutation);
+			if (!reduced.changed) {
+				return {
+					changed: false,
+					activeLeafId: current.activeLeafId,
+					profile: reduced.profile,
+					effectiveSkillIds: reduced.effectiveSkillIds,
+					diff: reduced.diff,
+				};
+			}
+			const entryId = this.appendCustomEntry(SESSION_SKILLS_PROFILE_CUSTOM_TYPE, reduced.profile);
+			await this.ensureOnDisk();
+			return {
+				changed: true,
+				entryId,
+				activeLeafId: entryId,
+				profile: reduced.profile,
+				effectiveSkillIds: reduced.effectiveSkillIds,
+				diff: reduced.diff,
+			};
+		});
+	}
+
+	async #enqueueSessionSkillsMutation<T>(mutation: () => T | Promise<T>): Promise<T> {
+		const predecessor = this.#sessionSkillsMutationTail;
+		const turn = Promise.withResolvers<void>();
+		this.#sessionSkillsMutationTail = predecessor.catch(() => undefined).then(() => turn.promise);
+		await predecessor.catch(() => undefined);
+		try {
+			return await mutation();
+		} finally {
+			turn.resolve();
+		}
+	}
+
+	#assertSessionSkillsMutationTarget(requestedSessionId: string, context: SessionSkillsMutationContext): void {
+		if (requestedSessionId !== this.#sessionId || context.expectedActiveLeafId !== this.#index.leafId()) {
+			throw new SessionSkillsProfileError("stale_profile", "Session Skills Profile active leaf is stale");
+		}
 	}
 
 	/**

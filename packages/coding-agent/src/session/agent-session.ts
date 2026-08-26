@@ -184,6 +184,7 @@ import {
 	obfuscateProviderContext,
 } from "../secrets/message-transform";
 import type { SecretObfuscator } from "../secrets/obfuscator";
+import { SkillManagementService } from "../skills-management/service";
 import {
 	AUTO_THINKING,
 	type ConfiguredThinkingLevel,
@@ -345,7 +346,7 @@ import { SessionMemory, type SessionMemoryHost } from "./session-memory";
 import { buildSessionMetadata } from "./session-metadata";
 import { SessionProviderBoundary, type SessionProviderBoundaryHost } from "./session-provider-boundary";
 import { SessionStatsTracker, type SessionStatsTrackerHost } from "./session-stats";
-import { SessionTools, type SessionToolsHost } from "./session-tools";
+import { type PreparedSkillsUpdate, SessionTools, type SessionToolsHost } from "./session-tools";
 import type { ShakeMode, ShakeResult } from "./shake-types";
 import { skillPromptTitleInput } from "./skill-title-input";
 import { ToolChoiceQueue } from "./tool-choice-queue";
@@ -486,6 +487,7 @@ export class AgentSession {
 	readonly #models: ModelControls;
 	readonly #tools: SessionTools;
 	readonly #prewalk: PrewalkCoordinator;
+	#skillManagement: SkillManagementService | undefined;
 
 	readonly #providerBoundary: SessionProviderBoundary;
 	#promptTemplates: PromptTemplate[];
@@ -4713,7 +4715,48 @@ export class AgentSession {
 
 	/** Rediscovers reloadable skills and refreshes prompt metadata. */
 	refreshSkills(): Promise<void> {
-		return this.#tools.refreshSkills();
+		return this.#skillManagement
+			? this.#skillManagement.rescanCatalog().then(() => undefined)
+			: this.#tools.refreshSkills();
+	}
+
+	/** Apply a managed-skill filesystem change to Catalog and current-session membership. */
+	handleManagedSkillChange(action: "create" | "update" | "delete", name: string): Promise<void> {
+		return this.#skillManagement
+			? this.#skillManagement.handleManagedSkillChange(action, name)
+			: this.#tools.refreshSkills();
+	}
+
+	/** Initialize branch-scoped Skill management for a top-level discovered session. */
+	async initializeSkillManagement(options: { cwd: string; agentDir: string }): Promise<void> {
+		if (this.#skillManagement) return;
+		const service = new SkillManagementService(this, options);
+		await service.initialize();
+		this.#skillManagement = service;
+	}
+
+	async #refreshSessionSkills(): Promise<void> {
+		if (this.#skillManagement) await this.#skillManagement.refreshSessionSkills();
+	}
+
+	/** OMP-owned Skill management service used by native RPC clients. */
+	get skillManagement(): SkillManagementService | undefined {
+		return this.#skillManagement;
+	}
+
+	/** Apply one Resolver result to prompt, commands and skill:// lookup. */
+	applyResolvedSkills(skills: readonly Skill[], warnings: readonly SkillWarning[]): Promise<void> {
+		return this.#tools.applySkills(skills, warnings, this.settings.getGroup("skills"));
+	}
+
+	/** Prebuild one Resolver result without changing the current Skill runtime state. */
+	prepareResolvedSkills(skills: readonly Skill[], warnings: readonly SkillWarning[]): Promise<PreparedSkillsUpdate> {
+		return this.#tools.prepareSkills(skills, warnings, this.settings.getGroup("skills"));
+	}
+
+	/** Commit a prebuilt Resolver result without further asynchronous work. */
+	commitResolvedSkills(prepared: PreparedSkillsUpdate): void {
+		this.#tools.commitPreparedSkills(prepared);
 	}
 
 	/**
@@ -7034,6 +7077,7 @@ export class AgentSession {
 					previousSessionFile,
 				});
 			}
+			await this.#refreshSessionSkills();
 
 			return true;
 		} finally {
@@ -7123,6 +7167,7 @@ export class AgentSession {
 					previousSessionFile,
 				});
 			}
+			await this.#refreshSessionSkills();
 
 			return true;
 		} finally {
@@ -7134,6 +7179,7 @@ export class AgentSession {
 	async moveSession(newCwd: string, targetSessionDir?: string): Promise<void> {
 		this.#assertVibeSessionTransitionAllowed("move the session");
 		await this.sessionManager.moveTo(newCwd, targetSessionDir);
+		await this.#refreshSessionSkills();
 	}
 
 	// =========================================================================
@@ -8241,6 +8287,7 @@ export class AgentSession {
 				this.#advisors.restoreCost(await loadAdvisorTranscriptCosts(this.sessionFile));
 			}
 			this.#bash.finishSessionTransition(bashTransition, true);
+			await this.#refreshSessionSkills();
 			if (previousSessionState.sessionId !== this.sessionManager.getSessionId()) {
 				this.#notifySessionChangeCallbacks();
 			}
@@ -8405,6 +8452,7 @@ export class AgentSession {
 				this.#advisors.resetSessionState();
 				this.#closeCodexProviderSessionsForHistoryRewrite();
 			}
+			await this.#refreshSessionSkills();
 
 			this.#advisors.reattachRecorderFeeds();
 			advisorRecordersDetached = false;
@@ -8531,6 +8579,7 @@ export class AgentSession {
 			this.agent.replaceMessages(sessionContext.messages);
 			this.#advisors.resetSessionState();
 			this.#closeCodexProviderSessionsForHistoryRewrite();
+			await this.#refreshSessionSkills();
 			advisorRecordersDetached = false;
 
 			return { cancelled: false, sessionFile: this.sessionFile };
@@ -8834,6 +8883,7 @@ export class AgentSession {
 		} finally {
 			this.#bash.finishSessionTransition(bashTransition, branchTransitioned);
 		}
+		await this.#refreshSessionSkills();
 
 		// Update agent state — build display context to populate agent messages.
 		const stateContext = this.sessionManager.buildSessionContext();

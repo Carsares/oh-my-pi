@@ -86,7 +86,7 @@ interface SessionToolsOptions {
 	rebuildSystemPrompt?: (
 		toolNames: string[],
 		tools: Map<string, AgentTool>,
-		options?: { directToolNames?: readonly string[] },
+		options?: { directToolNames?: readonly string[]; skills?: readonly Skill[] },
 	) => Promise<{ systemPrompt: string[]; xdevCatalogNames?: readonly string[] }>;
 	getMcpServerInstructions?: () => Map<string, string> | undefined;
 	xdev?: XdevState;
@@ -96,6 +96,16 @@ interface SessionToolsOptions {
 	skillWarnings?: SkillWarning[];
 	skillsSettings?: SkillsSettings;
 	skillsReloadable?: boolean;
+}
+
+/** Fully validated Skill runtime state that can be committed without awaiting more work. */
+export interface PreparedSkillsUpdate {
+	readonly skills: readonly Skill[];
+	readonly warnings: readonly SkillWarning[];
+	readonly settings: SkillsSettings;
+	readonly systemPrompt?: readonly string[];
+	readonly xdevCatalogNames?: readonly string[];
+	readonly toolSignature?: string;
 }
 
 export interface MountedMCPToolRouteSource {
@@ -1184,15 +1194,76 @@ export class SessionTools {
 				cwd: this.#host.sessionManager.getCwd(),
 				disabledExtensions: this.#host.settings.get("disabledExtensions") ?? [],
 			});
-			this.#skills = discovered.skills;
-			this.#skillWarnings = discovered.warnings;
-			this.#skillsSettings = skillsSettings;
-
-			if (this.#host.agentKind() === "main") {
-				setActiveSkills(this.#skills);
-			}
+			await this.applySkills(discovered.skills, discovered.warnings, skillsSettings);
+			return;
 		}
 		await this.refreshBaseSystemPrompt();
+		this.#host.notifyCommandMetadataChanged();
+	}
+
+	/** Applies one authoritative Skill resolution to prompt, commands and skill:// lookup. */
+	async applySkills(
+		skills: readonly Skill[],
+		warnings: readonly SkillWarning[],
+		settings?: SkillsSettings,
+	): Promise<void> {
+		const prepared = await this.prepareSkills(skills, warnings, settings);
+		this.commitPreparedSkills(prepared);
+	}
+
+	/** Builds and validates the candidate prompt without changing current Skill runtime state. */
+	prepareSkills(
+		skills: readonly Skill[],
+		warnings: readonly SkillWarning[],
+		settings?: SkillsSettings,
+	): Promise<PreparedSkillsUpdate> {
+		return this.runToolRegistryMutation(async () => {
+			const prepared: PreparedSkillsUpdate = {
+				skills: [...skills],
+				warnings: [...warnings],
+				settings: settings ?? this.#host.settings.getGroup("skills"),
+			};
+			if (this.#host.isDisposed() || !this.#rebuildSystemPrompt) return prepared;
+
+			const activeToolNames = this.getActiveToolNames();
+			const promptToolNames =
+				this.#codeModeDirectWireSignature === undefined ? activeToolNames : this.getEnabledToolNames();
+			const directToolNames = this.#codeModeDirectWireSignature === undefined ? undefined : activeToolNames;
+			const built = await this.#rebuildSystemPrompt(promptToolNames, this.#toolRegistry, {
+				directToolNames,
+				skills: prepared.skills,
+			});
+			if (this.#host.isDisposed()) return prepared;
+			const promptTools = promptToolNames
+				.map(name => this.#toolRegistry.get(name))
+				.filter((tool): tool is AgentTool => tool != null);
+			return {
+				...prepared,
+				systemPrompt: [...built.systemPrompt],
+				xdevCatalogNames: [...(built.xdevCatalogNames ?? [])],
+				toolSignature: this.#computeAppliedToolSignature(promptToolNames, promptTools, directToolNames),
+			};
+		});
+	}
+
+	/** Commits a prepared Skill update using synchronous state replacement only. */
+	commitPreparedSkills(prepared: PreparedSkillsUpdate): void {
+		this.#skills = [...prepared.skills];
+		this.#skillWarnings = [...prepared.warnings];
+		this.#skillsSettings = prepared.settings;
+		if (this.#host.agentKind() === "main") setActiveSkills(this.#skills);
+		if (prepared.systemPrompt) {
+			const promptChanged =
+				this.#baseSystemPrompt.length !== prepared.systemPrompt.length ||
+				this.#baseSystemPrompt.some((part, index) => part !== prepared.systemPrompt?.[index]);
+			this.#baseSystemPrompt = [...prepared.systemPrompt];
+			this.#basePromptXdevNames = new Set(prepared.xdevCatalogNames);
+			this.#host.clearMemoryPromotionSnapshot();
+			if (promptChanged) this.#host.clearInheritedProviderPromptCacheKey();
+			this.#applyAgentSystemPrompt(this.#baseSystemPrompt);
+			this.#promptModelKey = this.#currentPromptModelKey();
+			this.#lastAppliedToolSignature = prepared.toolSignature;
+		}
 		this.#host.notifyCommandMetadataChanged();
 	}
 

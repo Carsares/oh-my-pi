@@ -204,6 +204,8 @@ async function resolvePluginDir(
 async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 	const items: Skill[] = [];
 	const warnings: string[] = [];
+	const issues: NonNullable<LoadResult<Skill>["issues"]> = [];
+	const rootScans: NonNullable<LoadResult<Skill>["rootScans"]> = [];
 	const { roots, warnings: rootWarnings } = await allowedRoots(ctx, "skills");
 	warnings.push(...rootWarnings);
 	const results = await Promise.all(
@@ -238,9 +240,11 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 		for (const result of scanResults) {
 			items.push(...result.items);
 			if (result.warnings) warnings.push(...result.warnings);
+			if (result.issues) issues.push(...result.issues);
+			if (result.rootScans) rootScans.push(...result.rootScans);
 		}
 	}
-	return { items, warnings };
+	return { items, warnings, issues, rootScans };
 }
 
 // =============================================================================

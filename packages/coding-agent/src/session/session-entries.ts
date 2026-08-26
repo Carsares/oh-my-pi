@@ -142,6 +142,8 @@ export interface ResetBoundaryEntry extends SessionEntryBase {
 	type: "reset_boundary";
 }
 
+export const SESSION_SKILLS_PROFILE_CUSTOM_TYPE = "omp.session.skills-profile";
+
 /**
  * Custom entry for extensions to store extension-specific data in the session.
  * Use customType to identify your extension's entries.

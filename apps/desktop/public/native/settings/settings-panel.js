@@ -7,8 +7,11 @@ import { setupPackageBrowse } from "./package-browse.js";
 import { setupPackageManager } from "./package-manager.js";
 import { setupSettingsConfig } from "./settings-config.js";
 import { setupSettingsToggles } from "./settings-toggles.js";
-import { setupDiscoveredSkillsTab } from "./skills-discovered-tab.js";
+import { setupSkillsCatalogPanel } from "./skills-catalog-panel.js";
+import { setupSkillsCollectionsPanel } from "./skills-collections-panel.js";
 import { setupSkillsInstallTab } from "./skills-install-tab.js";
+import { createSkillsRuntimeClient } from "./skills-runtime-client.js";
+import { setupSessionSkillsPanel } from "./skills-session-panel.js";
 import { setupSkillsTabShell } from "./skills-tab-shell.js";
 import { setupThinkingEffortControl } from "./thinking-effort-control.js";
 
@@ -81,60 +84,126 @@ export function setupSettingsPanel({
     onError,
     onRuntimeLevelChanged: onThinkingLevelChanged,
   });
-  const skillsRpc = async (command) => {
-    if (!configGateway) {
-      return { success: false, error: t("settings.skills.loadFailed") };
-    }
-    const { type, ...params } = command;
-    const result = await configGateway.call(type, params);
-    if (!result?.ok) {
-      return { success: false, error: result?.error || t("settings.skills.loadFailed") };
-    }
-    return { success: true, data: result.data };
-  };
+  const skillsClient =
+    runtime && getTarget ? createSkillsRuntimeClient({ runtime, getTarget }) : null;
   const showSkillsSuccess = notify
     ? (message) => notify({ type: "success", title: t("status.saved"), message })
     : undefined;
   const showSkillsError = notify
-    ? (message) => notify({ type: "error", title: t("settings.skills.saveFailed"), message })
-    : (message) => onError?.(message);
+    ? (error) =>
+        notify({
+          type: "error",
+          title: t("settings.skills.saveFailed"),
+          message: error instanceof Error ? error.message : String(error),
+        })
+    : (error) => onError?.(error);
 
-  const discoveredTab = setupDiscoveredSkillsTab({
-    container: document.getElementById("settings-skills"),
-    rpcCommand: skillsRpc,
-    showSuccess: showSkillsSuccess,
-    showError: showSkillsError,
-  });
+  const catalogTab = skillsClient
+    ? setupSkillsCatalogPanel({
+        container: document.getElementById("settings-skills"),
+        client: skillsClient,
+        showError: showSkillsError,
+      })
+    : null;
+  const collectionsTab = skillsClient
+    ? setupSkillsCollectionsPanel({
+        container: document.getElementById("settings-skill-collections"),
+        client: skillsClient,
+        showSuccess: showSkillsSuccess,
+        showError: showSkillsError,
+      })
+    : null;
+  const sessionSkillsTab = skillsClient
+    ? setupSessionSkillsPanel({
+        container: document.getElementById("settings-session-skills"),
+        client: skillsClient,
+        showSuccess: showSkillsSuccess,
+        showError: showSkillsError,
+      })
+    : null;
   const installTab = control
     ? setupSkillsInstallTab({
         container: document.getElementById("settings-install-skills"),
         transport: control,
         getWorkspaceId,
         isProjectTrusted: () => true,
+        onInstalled: skillsClient
+          ? async () => {
+              await skillsClient.catalogRescan();
+              await Promise.all([
+                catalogTab?.reload?.(),
+                collectionsTab?.reload?.(),
+                sessionSkillsTab?.reload?.(),
+              ]);
+            }
+          : undefined,
         showSuccess: showSkillsSuccess,
         showError: showSkillsError,
       })
     : null;
   const skillsTabs = Array.from(document.querySelectorAll("[data-skills-page-tab]"));
   const skillsPanels = {
-    discovered: document.getElementById("settings-skills"),
+    catalog: document.getElementById("settings-skills"),
+    collections: document.getElementById("settings-skill-collections"),
+    session: document.getElementById("settings-session-skills"),
     install: document.getElementById("settings-install-skills"),
   };
   const skillsShell = setupSkillsTabShell({
     tabs: skillsTabs,
     panels: skillsPanels,
     activate: (name) => {
-      if (name === "discovered") discoveredTab.activate?.();
+      if (name === "catalog") catalogTab?.activate?.();
+      else if (name === "collections") collectionsTab?.activate?.();
+      else if (name === "session") sessionSkillsTab?.activate?.();
       else if (name === "install") installTab?.activate?.();
     },
   });
 
-  // Backward-compatible alias: settings-panel calls skillsPage.activate() on tab switch
+  function skillsVisible() {
+    return (
+      !panel.classList.contains("hidden") &&
+      document.querySelector('[data-settings-panel="skills"]')?.classList.contains("active")
+    );
+  }
+
+  function currentSkillsTab() {
+    return skillsTabs.find((tab) => tab.getAttribute("aria-selected") === "true")?.dataset
+      .skillsPageTab;
+  }
+
+  function sameTarget(frameTarget) {
+    const activeTarget = getTarget?.();
+    return Boolean(
+      activeTarget &&
+        frameTarget?.workspaceId === activeTarget.workspaceId &&
+        frameTarget?.sessionId === activeTarget.sessionId &&
+        frameTarget?.instanceId === activeTarget.instanceId,
+    );
+  }
+
+  runtime?.subscribe?.((frame) => {
+    const updateType = frame?.type === "runtime_event" ? frame.event?.type : null;
+    if (
+      !skillsVisible() ||
+      !sameTarget(frame?.target) ||
+      !["skills_catalog_update", "skills_collections_update", "session_skills_update"].includes(
+        updateType,
+      )
+    )
+      return;
+
+    const tab = currentSkillsTab();
+    if (tab === "catalog" && updateType === "skills_catalog_update") void catalogTab?.reload?.();
+    else if (
+      tab === "collections" &&
+      ["skills_catalog_update", "skills_collections_update"].includes(updateType)
+    )
+      void collectionsTab?.reload?.();
+    else if (tab === "session") void sessionSkillsTab?.reload?.();
+  });
+
   const skillsPage = {
-    activate: () => {
-      skillsShell.select(skillsTabs[0]);
-      discoveredTab.activate?.();
-    },
+    activate: () => skillsShell.refresh(),
   };
   setupLanguageSelector();
   setupSettingsToggles({ configGateway, onError });
@@ -313,6 +382,10 @@ export function setupSettingsPanel({
     if (!panel.classList.contains("hidden")) closeSettings({ clearHash: false });
   }
 
+  function targetChanged() {
+    if (skillsVisible()) skillsShell.refresh();
+  }
+
   openBtn.addEventListener("click", () => openSettings());
   extensionsBtn?.addEventListener("click", () => openResourceDialog("extensions"));
   skillsBtn?.addEventListener("click", () => openResourceDialog("skills"));
@@ -331,5 +404,5 @@ export function setupSettingsPanel({
   window.addEventListener("hashchange", restoreFromHash);
   restoreFromHash();
 
-  return { openSettings, closeSettings, thinkingControl };
+  return { openSettings, closeSettings, targetChanged, thinkingControl };
 }

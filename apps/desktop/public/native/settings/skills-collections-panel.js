@@ -277,6 +277,7 @@ export function setupSkillsCollectionsPanel({ container, client, showError, show
       entries.map((entry) => {
         const checked = draft.skillIds.includes(entry.skillId);
         const path = skillDisplayPath(entry);
+        const description = entry.description ?? entry.lastKnownDescription ?? "";
         return skillElement("label", { class: "skill-collection-member-option" }, [
           skillElement("input", {
             type: "checkbox",
@@ -288,8 +289,17 @@ export function setupSkillsCollectionsPanel({ container, client, showError, show
               render();
             },
           }),
-          skillElement("span", { class: "skill-management-grow" }, [
-            skillElement("span", { text: skillDisplayName(entry) }),
+          skillElement("div", { class: "skill-collection-member-info" }, [
+            skillElement("strong", {
+              class: "skill-collection-member-name",
+              text: skillDisplayName(entry),
+            }),
+            description
+              ? skillElement("p", {
+                  class: "skill-collection-member-description",
+                  text: description,
+                })
+              : null,
             path
               ? skillElement("code", {
                   class: "skill-management-path",
@@ -298,8 +308,10 @@ export function setupSkillsCollectionsPanel({ container, client, showError, show
                 })
               : null,
           ]),
-          skillStatusBadge(entry.status),
-          entry.eligibility ? skillStatusBadge(entry.eligibility) : null,
+          skillElement("div", { class: "skill-collection-member-status" }, [
+            skillStatusBadge(entry.status),
+            entry.eligibility ? skillStatusBadge(entry.eligibility) : null,
+          ]),
         ]);
       }),
     );

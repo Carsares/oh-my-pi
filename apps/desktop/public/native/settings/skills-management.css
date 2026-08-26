@@ -161,18 +161,58 @@
 }
 
 .skill-collection-members {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: var(--space-1);
   max-height: 320px;
   overflow: auto;
 }
 
 .skill-collection-member-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  flex: 0 0 auto;
   min-height: var(--control-height-md);
-  padding: 0 var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--bg-glass);
+}
+
+.skill-collection-member-option > input {
+  margin-top: 0.2em;
+}
+
+.skill-collection-member-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.skill-collection-member-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-collection-member-description {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-collection-member-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
 }
 
 .skill-management-member {

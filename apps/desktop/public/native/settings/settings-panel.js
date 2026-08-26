@@ -218,8 +218,15 @@ export function setupSettingsPanel({
   let usageLoaded = false;
 
   function loadUsage() {
-    if (usageLoaded || !costDashboard || !data || !getWorkspaceId) return;
+    if (usageLoaded || !costDashboard) return;
     usageLoaded = true;
+    if (!data || !getWorkspaceId) {
+      const emptyState = document.createElement("div");
+      emptyState.className = "cost-dash-empty-state";
+      emptyState.textContent = t("cost.workspaceRequired");
+      costDashboard.replaceChildren(emptyState);
+      return;
+    }
     void loadCostDashboard(costDashboard, { data, getWorkspaceId });
   }
 

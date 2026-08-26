@@ -1,11 +1,14 @@
 import { initI18n, t } from "../i18n.js";
 import { applyTheme, getCurrentTheme } from "../themes.js";
+import { setupAppUpdater } from "./features/app-updater.js";
 import { resolveRemoteAuth } from "./features/remote-auth.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
 import { setupSettingsPanel } from "./settings/settings-panel.js";
 import { createSkillsGlobalClient } from "./settings/skills-runtime-client.js";
+import { signalConfigGatewayReady } from "./transport/config-gateway-readiness.js";
 import { HostControlGateway } from "./transport/control-gateway.js";
 import { HostDataGateway } from "./transport/data-gateway.js";
+import { HostConfigGateway } from "./transport/host-config-gateway.js";
 import { HostRuntimeAdapter, resolveHostWebSocketUrl } from "./transport/runtime-adapter.js";
 import { randomId } from "./utils/random-id.js";
 import { appRoutePath } from "./utils/router.js";
@@ -56,7 +59,7 @@ function homeClientId(clientType) {
   }
 }
 
-function createLazyHomeSkillsClient({ fetchImpl, location }) {
+function createLazyHomeControl({ fetchImpl, location }) {
   let controlPromise;
   const getControl = async () => {
     if (!controlPromise) {
@@ -77,13 +80,25 @@ function createLazyHomeSkillsClient({ fetchImpl, location }) {
     return controlPromise;
   };
 
-  return createSkillsGlobalClient({
-    control: {
-      skillManagementRequest: (request, options) =>
-        getControl().then((control) => control.skillManagementRequest(request, options)),
-    },
-    getCwd: () => "",
-  });
+  const callControl = (method, ...args) => getControl().then((control) => control[method](...args));
+
+  return {
+    listOmpPlugins: (...args) => callControl("listOmpPlugins", ...args),
+    installOmpPlugin: (...args) => callControl("installOmpPlugin", ...args),
+    uninstallOmpPlugin: (...args) => callControl("uninstallOmpPlugin", ...args),
+    updateOmpPlugin: (...args) => callControl("updateOmpPlugin", ...args),
+    setOmpPluginEnabled: (...args) => callControl("setOmpPluginEnabled", ...args),
+    skillManagementRequest: (...args) => callControl("skillManagementRequest", ...args),
+    configManagementRequest: (...args) => callControl("configManagementRequest", ...args),
+    restartRuntime: (...args) => callControl("restartRuntime", ...args),
+    listInstalledApps: (...args) => callControl("listInstalledApps", ...args),
+    openInApp: (...args) => callControl("openInApp", ...args),
+    openExternal: (...args) => callControl("openExternal", ...args),
+    deleteSessions: (...args) => callControl("deleteSessions", ...args),
+    pickSkillSource: (...args) => callControl("pickSkillSource", ...args),
+    scanSkillInstallSource: (...args) => callControl("scanSkillInstallSource", ...args),
+    installSkillLinks: (...args) => callControl("installSkillLinks", ...args),
+  };
 }
 
 export async function openHomeSession(
@@ -112,13 +127,16 @@ export async function startHomeApp({
   resolveWorkspace = resolveWorkspaceViaHost,
   navigate,
   invoke = globalThis.__TAURI__?.core?.invoke,
+  configGateway,
 } = {}) {
   applyTheme(getCurrentTheme());
   await initI18n();
   showHomeShell();
 
   const data = new HostDataGateway(null, { fetchImpl, location });
-  const globalSkillsClient = createLazyHomeSkillsClient({ fetchImpl, location });
+  const control = createLazyHomeControl({ fetchImpl, location });
+  const globalSkillsClient = createSkillsGlobalClient({ control, getCwd: () => "" });
+  const globalConfigGateway = configGateway ?? new HostConfigGateway(control);
   const container = document.getElementById("session-list");
   const sidebar = container
     ? new SessionSidebar(container, {
@@ -133,7 +151,15 @@ export async function startHomeApp({
       })
     : null;
 
-  setupSettingsPanel({ globalSkillsClient });
+  const settingsPanel = setupSettingsPanel({
+    control,
+    globalSkillsClient,
+    configGateway: globalConfigGateway,
+  });
+  window.__picotConfigCall = (operation, params, options) =>
+    globalConfigGateway.call(operation, params, options);
+  signalConfigGatewayReady();
+  setupAppUpdater({ settingsPanel });
   setupOpenFolderButton({
     onError: (error) => console.error("[Home] Failed to open workspace:", error),
   });

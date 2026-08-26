@@ -790,6 +790,7 @@
   "cost": {
     "documentTitle": "Picot - 使用量",
     "quickRange": "クイック範囲",
+    "workspaceRequired": "使用量を表示するには、ワークスペースを開いてください。",
     "noData": "データなし",
     "noDataInSelectedRange": "選択した範囲にデータがありません。",
     "overview": "概要",

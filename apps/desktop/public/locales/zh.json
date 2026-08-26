@@ -790,6 +790,7 @@
   "cost": {
     "documentTitle": "Picot - 使用量",
     "quickRange": "快捷范围",
+    "workspaceRequired": "打开工作区后即可查看使用量。",
     "noData": "无数据",
     "noDataInSelectedRange": "所选范围内无数据。",
     "overview": "概览",

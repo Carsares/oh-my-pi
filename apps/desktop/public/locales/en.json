@@ -790,6 +790,7 @@
   "cost": {
     "documentTitle": "Picot - Usage",
     "quickRange": "Quick range",
+    "workspaceRequired": "Open a workspace to view usage.",
     "noData": "No data",
     "noDataInSelectedRange": "No data in selected range.",
     "overview": "Overview",

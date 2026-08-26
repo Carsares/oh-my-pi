@@ -790,6 +790,7 @@
   "cost": {
     "documentTitle": "Picot - Uso",
     "quickRange": "Rango rápido",
+    "workspaceRequired": "Abre un espacio de trabajo para ver el uso.",
     "noData": "Sin datos",
     "noDataInSelectedRange": "No hay datos en el rango seleccionado.",
     "overview": "Resumen",

@@ -32,7 +32,9 @@ function renderSettingsDom() {
           <div id="settings-session-skills"></div>
           <div id="settings-install-skills"></div>
         </div>
-        <div class="settings-tab" data-settings-panel="usage"></div>
+        <div class="settings-tab" data-settings-panel="usage">
+          <cost-dashboard id="settings-cost-dashboard"></cost-dashboard>
+        </div>
         <div class="settings-tab" data-settings-panel="configuration"></div>
       </section>
     </div>
@@ -56,6 +58,29 @@ describe("settings panel hash routing", () => {
 
     expect(window.location.hash).toBe("#/settings/usage");
     expect(document.getElementById("settings-panel").classList.contains("hidden")).toBe(false);
+  });
+
+  it("shows a no-workspace state without requesting Usage data on the root page", () => {
+    const data = { costDashboard: vi.fn() };
+    const panel = setupSettingsPanel({ data });
+
+    panel.openSettings("usage");
+
+    const dashboard = document.getElementById("settings-cost-dashboard");
+    expect(dashboard.querySelector(".cost-dash-empty-state").textContent).toBe(
+      "cost.workspaceRequired",
+    );
+    expect(data.costDashboard).not.toHaveBeenCalled();
+  });
+
+  it("keeps loading Usage through the active workspace data gateway", async () => {
+    const data = { costDashboard: vi.fn(async () => ({ dashboard: {} })) };
+    const getWorkspaceId = vi.fn(() => "workspace-a");
+    const panel = setupSettingsPanel({ data, getWorkspaceId });
+
+    panel.openSettings("usage");
+
+    await vi.waitFor(() => expect(data.costDashboard).toHaveBeenCalledWith("workspace-a"));
   });
 
   it("clears the hash when settings is closed", () => {

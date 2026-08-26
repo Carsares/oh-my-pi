@@ -52,6 +52,11 @@ export function setupSessionSkillsPanel({ container, client, showError, showSucc
     const sequence = ++loadSequence;
     busy = true;
     render();
+    if (!client) {
+      busy = false;
+      render();
+      return;
+    }
     try {
       const [nextState, nextCollections, nextCatalog] = await Promise.all([
         client.sessionGet(),

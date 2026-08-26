@@ -86,6 +86,19 @@ impl PiLaunchResolver {
             .map_err(|error| format!("OMP plugin list returned invalid JSON: {error}"))
     }
 
+    /// Execute one workspace-neutral Skill Catalog/Collection request.
+    pub fn skill_management_request(
+        &self,
+        request: &serde_json::Value,
+        cwd: Option<&str>,
+    ) -> Result<serde_json::Value, String> {
+        let request_json = serde_json::to_string(request)
+            .map_err(|error| format!("Skill Management request could not be encoded: {error}"))?;
+        let output = self.run_omp_command(&["skills", "--request", &request_json], cwd)?;
+        serde_json::from_str(&output)
+            .map_err(|error| format!("Skill Management returned invalid JSON: {error}"))
+    }
+
     pub fn install_omp_plugin(&self, source: &str, cwd: &str) -> Result<(), String> {
         self.run_omp_command(&["plugin", "install", source], Some(cwd))
             .map(|_| ())

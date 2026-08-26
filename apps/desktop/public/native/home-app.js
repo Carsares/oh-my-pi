@@ -1,8 +1,13 @@
 import { initI18n, t } from "../i18n.js";
 import { applyTheme, getCurrentTheme } from "../themes.js";
+import { resolveRemoteAuth } from "./features/remote-auth.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
 import { setupSettingsPanel } from "./settings/settings-panel.js";
+import { createSkillsGlobalClient } from "./settings/skills-runtime-client.js";
+import { HostControlGateway } from "./transport/control-gateway.js";
 import { HostDataGateway } from "./transport/data-gateway.js";
+import { HostRuntimeAdapter, resolveHostWebSocketUrl } from "./transport/runtime-adapter.js";
+import { randomId } from "./utils/random-id.js";
 import { appRoutePath } from "./utils/router.js";
 import { resolveWorkspaceViaHost, setupOpenFolderButton } from "./workspace/workspace-actions.js";
 
@@ -38,6 +43,49 @@ function setupHomeSessionSearch(sidebar) {
   });
 }
 
+function homeClientId(clientType) {
+  const key = "picot:host-client-id";
+  try {
+    const existing = sessionStorage.getItem(key);
+    if (existing) return existing;
+    const created = `${clientType}-${randomId()}`;
+    sessionStorage.setItem(key, created);
+    return created;
+  } catch {
+    return `${clientType}-${randomId()}`;
+  }
+}
+
+function createLazyHomeSkillsClient({ fetchImpl, location }) {
+  let controlPromise;
+  const getControl = async () => {
+    if (!controlPromise) {
+      controlPromise = (async () => {
+        const authLocation = location?.href ? location : window.location;
+        const auth = await resolveRemoteAuth({ location: authLocation, fetchImpl });
+        const adapter = new HostRuntimeAdapter({
+          url: resolveHostWebSocketUrl({ location: authLocation }),
+          clientId: homeClientId(auth.clientType),
+          clientType: auth.clientType,
+          deviceToken: auth.deviceToken,
+        });
+        adapter.connect();
+        await adapter.ready();
+        return new HostControlGateway(adapter);
+      })();
+    }
+    return controlPromise;
+  };
+
+  return createSkillsGlobalClient({
+    control: {
+      skillManagementRequest: (request, options) =>
+        getControl().then((control) => control.skillManagementRequest(request, options)),
+    },
+    getCwd: () => "",
+  });
+}
+
 export async function openHomeSession(
   session,
   {
@@ -70,6 +118,7 @@ export async function startHomeApp({
   showHomeShell();
 
   const data = new HostDataGateway(null, { fetchImpl, location });
+  const globalSkillsClient = createLazyHomeSkillsClient({ fetchImpl, location });
   const container = document.getElementById("session-list");
   const sidebar = container
     ? new SessionSidebar(container, {
@@ -84,7 +133,7 @@ export async function startHomeApp({
       })
     : null;
 
-  setupSettingsPanel();
+  setupSettingsPanel({ globalSkillsClient });
   setupOpenFolderButton({
     onError: (error) => console.error("[Home] Failed to open workspace:", error),
   });

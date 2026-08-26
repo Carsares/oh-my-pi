@@ -225,4 +225,33 @@ describe("settings panel hash routing", () => {
     panel.targetChanged();
     expect(runtime.request).toHaveBeenCalledWith({ type: "session_skills_get" }, target, undefined);
   });
+
+  it("uses the global Skills client without an active session", async () => {
+    const globalSkillsClient = {
+      catalogList: vi.fn(async () => ({ revision: 1, entries: [] })),
+      collectionsList: vi.fn(async () => ({
+        state: { revision: 1, defaultCollectionId: "local-all", collections: [] },
+        collections: [{ collectionId: "local-all", name: "All", skillIds: [], virtual: true }],
+      })),
+      collectionGet: vi.fn(async () => ({
+        state: { revision: 1, defaultCollectionId: "local-all", collections: [] },
+        collection: { collectionId: "local-all", name: "All", skillIds: [], virtual: true },
+      })),
+    };
+
+    const panel = setupSettingsPanel({ globalSkillsClient });
+    panel.openSettings("skills");
+
+    await vi.waitFor(() => expect(globalSkillsClient.catalogList).toHaveBeenCalledTimes(1));
+    document.querySelector('[data-skills-page-tab="session"]').click();
+    expect(document.getElementById("settings-session-skills").textContent).toContain(
+      "settings.skills.sessionUnavailable",
+    );
+
+    document.querySelector('[data-skills-page-tab="collections"]').click();
+    await vi.waitFor(() => expect(globalSkillsClient.collectionsList).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(globalSkillsClient.collectionGet).toHaveBeenCalledWith("local-all"),
+    );
+  });
 });

@@ -63,6 +63,11 @@ export class HostControlGateway {
     await this.#request("set_omp_plugin_enabled", { pluginId, kind, scope, enabled, cwd });
   }
 
+  async skillManagementRequest(request, { cwd = "" } = {}) {
+    const frame = await this.#request("skill_management_request", { request, cwd });
+    return frame?.data ?? frame;
+  }
+
   async restartRuntime(workspaceId, sessionId) {
     const frame = await this.#request("restart_runtime", { workspaceId, sessionId });
     return frame?.instanceId ?? null;

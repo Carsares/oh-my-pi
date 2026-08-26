@@ -1625,6 +1625,35 @@ async fn dispatch_host_operation(
     frame: &Value,
 ) -> Result<Value, (&'static str, String)> {
     match operation {
+        "skill_management_request" => {
+            let request = frame
+                .get("request")
+                .filter(|value| value.is_object())
+                .ok_or((
+                    "invalid_skill_request",
+                    "request must be an object".into(),
+                ))?
+                .clone();
+            let cwd = frame
+                .get("cwd")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned);
+            let resolver = state.pi_launch.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                resolver.skill_management_request(&request, cwd.as_deref())
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?
+            .map_err(|message| ("skill_management_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": "skill_management_request",
+                "data": result,
+            }))
+        }
         "list_omp_plugins" => {
             let cwd = frame
                 .get("cwd")

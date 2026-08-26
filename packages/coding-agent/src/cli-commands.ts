@@ -158,6 +158,11 @@ export const commands: CommandEntry[] = [
 		help: commandHelp.setupHelp,
 	},
 	{
+		name: "skills",
+		load: () => import("./commands/skills").then(m => m.default),
+		help: commandHelp.skillsHelp,
+	},
+	{
 		name: "shell",
 		load: () => import("./commands/shell").then(m => m.default),
 		help: commandHelp.shellHelp,

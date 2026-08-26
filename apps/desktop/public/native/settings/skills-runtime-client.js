@@ -59,3 +59,32 @@ export function createSkillsRuntimeClient({ runtime, getTarget, createId = rando
     sessionRefresh: () => call("session_skills_refresh"),
   };
 }
+
+/** Creates the workspace-neutral client used by the root page. */
+export function createSkillsGlobalClient({ control, getCwd = () => "" }) {
+  async function call(operation, params = {}) {
+    if (!control?.skillManagementRequest) {
+      throw new Error("Global Skill Management is unavailable");
+    }
+    return responseData(
+      await control.skillManagementRequest({ operation, ...params }, { cwd: getCwd?.() ?? "" }),
+    );
+  }
+
+  return {
+    call,
+    catalogList: (query) => call("catalog_list", query ? { query } : undefined),
+    catalogGet: (skillId) => call("catalog_get", { skillId }),
+    catalogRescan: () => call("catalog_rescan"),
+    collectionsList: () => call("collection_list"),
+    collectionGet: (collectionId) => call("collection_get", { collectionId }),
+    collectionCreate: ({ expectedRevision, ...params }) =>
+      call("collection_create", { params, expectedRevision }),
+    collectionUpdate: ({ expectedRevision, ...params }) =>
+      call("collection_update", { params, expectedRevision }),
+    collectionDelete: ({ expectedRevision, ...params }) =>
+      call("collection_delete", { ...params, expectedRevision }),
+    collectionSetDefault: ({ expectedRevision, ...params }) =>
+      call("collection_set_default", { ...params, expectedRevision }),
+  };
+}

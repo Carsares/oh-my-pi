@@ -10,6 +10,7 @@ import { setupSettingsToggles } from "./settings-toggles.js";
 import { setupSkillsCatalogPanel } from "./skills-catalog-panel.js";
 import { setupSkillsCollectionsPanel } from "./skills-collections-panel.js";
 import { setupSkillsInstallTab } from "./skills-install-tab.js";
+import { renderSkillPanelMessage } from "./skills-management-ui.js";
 import { createSkillsRuntimeClient } from "./skills-runtime-client.js";
 import { setupSessionSkillsPanel } from "./skills-session-panel.js";
 import { setupSkillsTabShell } from "./skills-tab-shell.js";
@@ -33,6 +34,7 @@ export function setupSettingsPanel({
   onModelConfigurationChanged,
   runtime,
   getTarget,
+  globalSkillsClient,
   onError,
   notify,
   onRestarted,
@@ -84,8 +86,9 @@ export function setupSettingsPanel({
     onError,
     onRuntimeLevelChanged: onThinkingLevelChanged,
   });
-  const skillsClient =
+  const sessionSkillsClient =
     runtime && getTarget ? createSkillsRuntimeClient({ runtime, getTarget }) : null;
+  const skillsClient = sessionSkillsClient ?? globalSkillsClient;
   const showSkillsSuccess = notify
     ? (message) => notify({ type: "success", title: t("status.saved"), message })
     : undefined;
@@ -113,34 +116,39 @@ export function setupSettingsPanel({
         showError: showSkillsError,
       })
     : null;
-  const sessionSkillsTab = skillsClient
-    ? setupSessionSkillsPanel({
-        container: document.getElementById("settings-session-skills"),
-        client: skillsClient,
-        showSuccess: showSkillsSuccess,
-        showError: showSkillsError,
-      })
-    : null;
-  const installTab = control
-    ? setupSkillsInstallTab({
-        container: document.getElementById("settings-install-skills"),
-        transport: control,
-        getWorkspaceId,
-        isProjectTrusted: () => true,
-        onInstalled: skillsClient
-          ? async () => {
-              await skillsClient.catalogRescan();
-              await Promise.all([
-                catalogTab?.reload?.(),
-                collectionsTab?.reload?.(),
-                sessionSkillsTab?.reload?.(),
-              ]);
-            }
-          : undefined,
-        showSuccess: showSkillsSuccess,
-        showError: showSkillsError,
-      })
-    : null;
+  const sessionSkillsTab = setupSessionSkillsPanel({
+    container: document.getElementById("settings-session-skills"),
+    client: sessionSkillsClient,
+    showSuccess: showSkillsSuccess,
+    showError: showSkillsError,
+  });
+  const installTab =
+    control && getWorkspaceId
+      ? setupSkillsInstallTab({
+          container: document.getElementById("settings-install-skills"),
+          transport: control,
+          getWorkspaceId,
+          isProjectTrusted: () => true,
+          onInstalled: skillsClient
+            ? async () => {
+                await skillsClient.catalogRescan();
+                await Promise.all([
+                  catalogTab?.reload?.(),
+                  collectionsTab?.reload?.(),
+                  sessionSkillsTab?.reload?.(),
+                ]);
+              }
+            : undefined,
+          showSuccess: showSkillsSuccess,
+          showError: showSkillsError,
+        })
+      : {
+          activate: () =>
+            renderSkillPanelMessage(
+              document.getElementById("settings-install-skills"),
+              t("settings.skills.sessionUnavailable"),
+            ),
+        };
   const skillsTabs = Array.from(document.querySelectorAll("[data-skills-page-tab]"));
   const skillsPanels = {
     catalog: document.getElementById("settings-skills"),

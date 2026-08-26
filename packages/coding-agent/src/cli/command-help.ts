@@ -99,6 +99,10 @@ export const setupHelp = {
 	description: "Run onboarding setup or install dependencies for optional features",
 } satisfies CommandMetadata;
 
+export const skillsHelp = {
+	description: "Manage the workspace-neutral Skill Catalog and Collections",
+} satisfies CommandMetadata;
+
 export const shellHelp = { description: "Interactive shell console" } satisfies CommandMetadata;
 
 export const sshHelp = { description: "Manage SSH host configurations" } satisfies CommandMetadata;

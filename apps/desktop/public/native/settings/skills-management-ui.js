@@ -1,6 +1,8 @@
 // ABOUTME: Small DOM primitives shared by the native Skill Management panels.
 // ABOUTME: Keeps all server-provided labels and paths in text nodes rather than HTML interpolation.
 
+import { t } from "../../i18n.js";
+
 export function skillElement(tag, props = {}, children = []) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(props)) {
@@ -22,9 +24,15 @@ export function skillElement(tag, props = {}, children = []) {
 }
 
 export function skillStatusBadge(status) {
+  const label =
+    status === "available"
+      ? t("settings.skills.statusAvailable")
+      : status === "eligible"
+        ? t("settings.skills.statusEligible")
+        : status || "unknown";
   return skillElement("span", {
     class: `ui-badge skill-management-status skill-management-status--${status || "unknown"}`,
-    text: status || "unknown",
+    text: label,
   });
 }
 

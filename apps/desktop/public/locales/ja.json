@@ -744,7 +744,9 @@
       "sessionProfile": "セッションスキルプロファイル",
       "profileRevision": "リビジョン {revision} · 更新 {updatedAt}",
       "refresh": "内容を更新",
-      "sync": "同期"
+      "sync": "同期",
+      "statusAvailable": "利用可能",
+      "statusEligible": "適格"
     },
     "installSkills": {
       "title": "Install skills",

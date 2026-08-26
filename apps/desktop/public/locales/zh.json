@@ -744,7 +744,9 @@
       "sessionProfile": "会话技能配置",
       "profileRevision": "版本 {revision} · 更新于 {updatedAt}",
       "refresh": "刷新内容",
-      "sync": "同步"
+      "sync": "同步",
+      "statusAvailable": "可用",
+      "statusEligible": "符合条件"
     },
     "installSkills": {
       "title": "安装技能",

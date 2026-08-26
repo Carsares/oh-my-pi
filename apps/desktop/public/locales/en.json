@@ -744,7 +744,9 @@
       "sessionProfile": "Session skill profile",
       "profileRevision": "Revision {revision} · Updated {updatedAt}",
       "refresh": "Refresh content",
-      "sync": "Sync"
+      "sync": "Sync",
+      "statusAvailable": "Available",
+      "statusEligible": "Eligible"
     },
     "installSkills": {
       "title": "Install skills",

@@ -41,7 +41,7 @@ use std::sync::{Arc, Mutex};
 use tauri::image::Image;
 #[cfg(target_os = "macos")]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_dialog::MessageDialogKind;
 use tauri_plugin_updater::UpdaterExt;
@@ -52,6 +52,9 @@ type SkillSourceRegistryState = Arc<SkillSourceRegistry>;
 
 #[cfg(target_os = "macos")]
 const MENU_NEW_SESSION_ID: &str = "picot-new-session";
+#[cfg(target_os = "macos")]
+const MENU_RESTART_ID: &str = "picot-restart";
+const NATIVE_HOME_WINDOW_LABEL: &str = "native-home";
 const BETA_UPDATE_ENDPOINT: &str =
     "https://github.com/Carsares/oh-my-pi/releases/download/beta/latest.json";
 
@@ -264,6 +267,29 @@ fn spawn_fresh_runtime(
     Ok(target)
 }
 
+fn is_native_home_window_label(label: &str) -> bool {
+    label == NATIVE_HOME_WINDOW_LABEL
+}
+
+fn is_workspace_window<R: Runtime, M: Manager<R>>(window: &M, label: &str) -> bool {
+    if label.starts_with("native-workspace-") {
+        return true;
+    }
+    window
+        .try_state::<WindowWorkspaceState>()
+        .and_then(|state| state.0.lock().ok().map(|windows| windows.contains_key(label)))
+        .unwrap_or(false)
+}
+
+fn can_reuse_workspace_window(window: &WebviewWindow) -> bool {
+    is_workspace_window(window, window.label()) || is_native_home_window_label(window.label())
+}
+
+fn is_unbound_native_home_window(window: &WebviewWindow) -> bool {
+    is_native_home_window_label(window.label())
+        && !is_workspace_window(window, window.label())
+}
+
 fn open_fresh_session_at_path(
     app: &AppHandle,
     source_window: Option<&WebviewWindow>,
@@ -286,14 +312,24 @@ fn open_fresh_session_at_path(
 
     host.register_workspace(&workspace_id, cwd.to_path_buf())?;
     let target = spawn_fresh_runtime(&runtimes, &launcher.launch, cwd, workspace_id.clone())?;
-    if let Some(window) =
-        source_window.filter(|window| window.label().starts_with("native-workspace-"))
-    {
-        return navigate_workspace_window(app, window, host.origin(), &target, true);
+    // An unbound home shell hands off to an existing workspace window; bound
+    // workspace windows retain the original source-first switching behavior.
+    let source_is_home = source_window
+        .map(is_unbound_native_home_window)
+        .unwrap_or(false);
+    if !source_is_home {
+        if let Some(window) = source_window.filter(|window| can_reuse_workspace_window(window)) {
+            return navigate_workspace_window(app, window, host.origin(), &target, true);
+        }
     }
     let label = format!("native-workspace-{workspace_id}");
     if let Some(existing) = app.get_webview_window(&label) {
         return navigate_workspace_window(app, &existing, host.origin(), &target, true);
+    }
+    if source_is_home {
+        if let Some(window) = source_window.filter(|window| can_reuse_workspace_window(window)) {
+            return navigate_workspace_window(app, window, host.origin(), &target, true);
+        }
     }
     if let Err(error) = open_native_workspace_window(app, host.origin(), &target) {
         let _ = runtimes.stop(&target);
@@ -337,16 +373,21 @@ fn open_workspace_at_path(
         None => spawn_fresh_runtime(&runtimes, &launcher.launch, cwd, workspace_id.clone())?,
     };
 
-    if let Some(window) =
-        source_window.filter(|window| window.label().starts_with("native-workspace-"))
-    {
-        return navigate_workspace_window(
-            app,
-            window,
-            host.origin(),
-            &target,
-            resume_session_id.is_none(),
-        );
+    // An unbound home shell hands off to an existing workspace window; bound
+    // workspace windows retain the original source-first switching behavior.
+    let source_is_home = source_window
+        .map(is_unbound_native_home_window)
+        .unwrap_or(false);
+    if !source_is_home {
+        if let Some(window) = source_window.filter(|window| can_reuse_workspace_window(window)) {
+            return navigate_workspace_window(
+                app,
+                window,
+                host.origin(),
+                &target,
+                resume_session_id.is_none(),
+            );
+        }
     }
 
     let label = format!("native-workspace-{workspace_id}");
@@ -358,6 +399,18 @@ fn open_workspace_at_path(
             &target,
             resume_session_id.is_none(),
         );
+    }
+
+    if source_is_home {
+        if let Some(window) = source_window.filter(|window| can_reuse_workspace_window(window)) {
+            return navigate_workspace_window(
+                app,
+                window,
+                host.origin(),
+                &target,
+                resume_session_id.is_none(),
+            );
+        }
     }
 
     if let Err(error) = open_native_workspace_window(app, host.origin(), &target) {
@@ -445,7 +498,7 @@ fn open_fresh_session_for_focused_workspace(app: &AppHandle) -> Result<(), Strin
         .webview_windows()
         .into_values()
         .find(|window| {
-            window.label().starts_with("native-workspace-") && window.is_focused().unwrap_or(false)
+            is_workspace_window(window, window.label()) && window.is_focused().unwrap_or(false)
         })
         .or_else(|| {
             // No window reports OS focus (e.g. focus was on the menu bar at
@@ -490,6 +543,13 @@ fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         Some("CmdOrCtrl+N"),
     )?;
+    let restart = MenuItem::with_id(
+        app,
+        MENU_RESTART_ID,
+        "Restart Picot",
+        true,
+        Some("CmdOrCtrl+Shift+R"),
+    )?;
     let file = Submenu::with_items(
         app,
         "File",
@@ -532,6 +592,8 @@ fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         &[
             &PredefinedMenuItem::about(app, None, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &restart,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::services(app, None)?,
             &PredefinedMenuItem::separator(app)?,
@@ -749,103 +811,69 @@ fn extract_session_cwd(session_path: &Path) -> Option<String> {
     None
 }
 
-fn find_latest_session_boot_target() -> Option<(String, String)> {
-    let sessions_root = omp_paths::sessions_dir().ok()?;
-    if !sessions_root.exists() {
-        log::info!(
-            "[picot-native] startup target skipped: sessions dir not found at {}",
-            sessions_root.display()
-        );
-        return None;
+fn native_home_url(host_origin: &str) -> Result<tauri::Url, String> {
+    format!("{host_origin}/")
+        .parse()
+        .map_err(|error| format!("Invalid native Host home URL: {error}"))
+}
+
+/// Open the workspace-neutral home page; session runtimes are started only
+/// after the user selects an existing session or explicitly creates one.
+fn open_native_home_window(app: &AppHandle, host_origin: &str) -> Result<(), String> {
+    let url = native_home_url(host_origin)?;
+    if let Some(window) = app.get_webview_window(NATIVE_HOME_WINDOW_LABEL) {
+        window.navigate(url).map_err(|error| error.to_string())?;
+        let _ = window.set_focus();
+        return Ok(());
     }
 
-    let latest = list_session_files(&sessions_root)
-        .into_iter()
-        .filter_map(|path| {
-            let mtime = fs::metadata(&path).ok()?.modified().ok()?;
-            Some((mtime, path))
-        })
-        .max_by_key(|(mtime, _)| *mtime)?;
-    let session_path = latest.1;
-    let cwd = extract_session_cwd(&session_path)?;
-    Some((cwd, session_path.to_string_lossy().to_string()))
+    let icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
+        .map_err(|error| format!("Failed to load window icon: {error}"))?;
+    WebviewWindowBuilder::new(
+        app,
+        NATIVE_HOME_WINDOW_LABEL,
+        WebviewUrl::External(url),
+    )
+    .title("Picot")
+    .inner_size(1300.0, 860.0)
+    .min_inner_size(800.0, 600.0)
+    .icon(icon)
+    .map_err(|error| error.to_string())?
+    .decorations(true)
+    .build()
+    .map_err(|error| error.to_string())?;
+    Ok(())
 }
 
-fn select_fresh_startup_target(
-    home_cwd: String,
-    latest_session: Option<(String, String)>,
-) -> (String, Option<String>) {
-    let cwd = latest_session
-        .map(|(session_cwd, _session_path)| session_cwd)
-        .unwrap_or(home_cwd);
-    (cwd, None)
-}
-
-fn setup_native_runtime(app: &mut tauri::App, static_dir: PathBuf) -> Result<(), String> {
-    let home_cwd = dirs::home_dir()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned();
-    let (cwd, session_path) =
-        select_fresh_startup_target(home_cwd, find_latest_session_boot_target());
+/// Start the local Host and desktop services without creating a workspace or
+/// OMP runtime. Workspace/session state is resolved lazily after user action.
+fn setup_native_host(app: &mut tauri::App, static_dir: PathBuf) -> Result<(), String> {
     let metadata_path = app
         .path()
         .app_data_dir()
         .map_err(|error| format!("Cannot resolve Picot app data directory: {error}"))?
         .join("picot.sqlite3");
     let metadata = Arc::new(Mutex::new(MetadataStore::open(&metadata_path)?));
-    let workspace_id = metadata
-        .lock()
-        .map_err(|_| "Picot metadata store is unavailable".to_string())?
-        .workspace_id_for_path(Path::new(&cwd))?;
-    let session_id = format!("temporary-{}", uuid::Uuid::new_v4().simple());
-    let target = RuntimeTarget::new(
-        workspace_id,
-        session_id,
-        format!("instance-{}", uuid::Uuid::new_v4().simple()),
-    );
     let launch_resolver = PiLaunchResolver::new(static_dir.clone());
-    let launch = launch_resolver.native_launch_spec(&cwd, session_path.as_deref())?;
     let runtimes = NativePiManager::new(256);
     let remote_auth = Arc::new(Mutex::new(RemoteAuth::new(metadata.clone())));
     let host = tauri::async_runtime::block_on(async {
-        let host = HostServer::start_with_workspaces(
-            static_dir,
-            runtimes.clone(),
-            remote_auth,
-            std::collections::HashMap::from([(target.workspace_id.clone(), PathBuf::from(&cwd))]),
-            Some(app.handle().clone()),
-        )
-        .await?;
-        runtimes.spawn(target.clone(), launch)?;
-        host.set_active_runtime(&target)?;
-        Ok::<HostServer, String>(host)
+        HostServer::start(static_dir, runtimes.clone(), remote_auth, Some(app.handle().clone()))
+            .await
     })?;
-    if let Err(error) = open_native_workspace_window(app.handle(), host.origin(), &target) {
+    if let Err(error) = open_native_home_window(app.handle(), host.origin()) {
         runtimes.stop_all();
         return Err(error);
     }
-    log::info!(
-        "[picot-native] started workspace_id={} session_id={} instance_id={} origin={}",
-        target.workspace_id,
-        target.session_id,
-        target.instance_id,
-        host.origin()
-    );
+    log::info!("[picot-native] started Host without an active runtime: origin={}", host.origin());
     app.manage(runtimes);
     app.manage(host);
     app.manage(WorkspaceLauncher {
         metadata,
         launch: launch_resolver,
     });
-    app.manage(FocusedWorkspaceState(Mutex::new(Some(
-        target.workspace_id.clone(),
-    ))));
-    let window_workspaces = HashMap::from([(
-        format!("native-workspace-{}", target.workspace_id),
-        target.workspace_id.clone(),
-    )]);
-    app.manage(WindowWorkspaceState(Mutex::new(window_workspaces)));
+    app.manage(FocusedWorkspaceState(Mutex::new(None)));
+    app.manage(WindowWorkspaceState(Mutex::new(HashMap::new())));
     Ok(())
 }
 
@@ -857,13 +885,21 @@ fn main() {
     let builder = tauri::Builder::default();
     #[cfg(target_os = "macos")]
     let builder = builder.menu(build_app_menu).on_menu_event(|app, event| {
-        if event.id().as_ref() == MENU_NEW_SESSION_ID {
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = open_fresh_session_for_focused_workspace(&app) {
-                    log::error!("[picot-native] failed to open new session from menu: {error}");
-                }
-            });
+        match event.id().as_ref() {
+            MENU_NEW_SESSION_ID => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = open_fresh_session_for_focused_workspace(&app) {
+                        log::error!("[picot-native] failed to open new session from menu: {error}");
+                    }
+                });
+            }
+            MENU_RESTART_ID => {
+                // The exit callback stops all OMP runtimes before Tauri relaunches Picot.
+                log::info!("[picot-native] restarting Picot and its OMP runtimes");
+                app.request_restart();
+            }
+            _ => {}
         }
     });
     builder
@@ -891,7 +927,7 @@ fn main() {
         )
         .setup(|app| {
             let static_dir = find_static_dir(app);
-            if let Err(error) = setup_native_runtime(app, static_dir) {
+            if let Err(error) = setup_native_host(app, static_dir) {
                 log::error!("[picot-native] startup failed: {error}");
                 if let Err(window_error) = open_bootstrap_window(&app.handle().clone(), &error) {
                     log::error!(
@@ -899,7 +935,7 @@ fn main() {
                     );
                     app.dialog()
                         .message(format!(
-                            "Picot could not start the bundled OMP runtime.\n\n{error}\n\nThe Picot installation may be incomplete or corrupted. Please reinstall Picot and try again."
+                            "Picot could not start its local Host.\n\n{error}\n\nThe Picot installation may be incomplete or corrupted. Please reinstall Picot and try again."
                         ))
                         .title("Picot startup failed")
                         .kind(MessageDialogKind::Error)
@@ -911,7 +947,9 @@ fn main() {
         .on_window_event(|window, event| {
             let label = window.label();
             match event {
-                tauri::WindowEvent::Focused(true) if label.starts_with("native-workspace-") => {
+                tauri::WindowEvent::Focused(true)
+                    if is_workspace_window(window, window.label()) =>
+                {
                     let workspace_id = window
                         .try_state::<WindowWorkspaceState>()
                         .and_then(|state| {
@@ -930,7 +968,7 @@ fn main() {
                         }
                     }
                 }
-                tauri::WindowEvent::Destroyed if label.starts_with("native-workspace-") => {
+                tauri::WindowEvent::Destroyed if is_workspace_window(window, window.label()) => {
                     let workspace_id = window
                         .try_state::<WindowWorkspaceState>()
                         .and_then(|state| {
@@ -970,7 +1008,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_static_dir, select_fresh_startup_target};
+    use super::{is_native_home_window_label, native_home_url, resolve_static_dir};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1006,14 +1044,14 @@ mod tests {
     }
 
     #[test]
-    fn keeps_the_latest_workspace_but_never_resumes_its_session_on_app_start() {
-        let selected = select_fresh_startup_target(
-            "/home/user".to_string(),
-            Some((
-                "/work/project".to_string(),
-                "/sessions/old-session.jsonl".to_string(),
-            )),
-        );
-        assert_eq!(selected, ("/work/project".to_string(), None));
+    fn native_home_url_points_to_host_root() {
+        assert_eq!(native_home_url("http://127.0.0.1:57620").unwrap().as_str(), "http://127.0.0.1:57620/");
+    }
+
+    #[test]
+    fn native_home_window_identity_is_not_confused_with_workspace_windows() {
+        assert!(is_native_home_window_label("native-home"));
+        assert!(!is_native_home_window_label("native-workspace-workspace-a"));
+        assert!(!is_native_home_window_label("bootstrap"));
     }
 }

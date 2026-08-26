@@ -351,10 +351,6 @@ impl HostServer {
             .map_err(|error| format!("Cannot resolve workspace path: {error:?}"))
     }
 
-    pub fn set_active_runtime(&self, target: &RuntimeTarget) -> Result<(), String> {
-        record_active_runtime(&self.state, target)
-    }
-
     pub fn origin(&self) -> &str {
         &self.origin
     }

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { startHomeApp } from "./home-app.js";
+import { openHomeSession, startHomeApp } from "./home-app.js";
 
 const enMessages = JSON.parse(readFileSync(join(process.cwd(), "public/locales/en.json"), "utf8"));
 
@@ -27,18 +27,12 @@ afterEach(() => {
   document.documentElement.replaceChildren();
 });
 
-test("home redirects to the most recently active runtime", async () => {
+test("home always renders the main page without checking for an active runtime", async () => {
   const fetchImpl = vi.fn(async (input) => {
-    if (String(input) === "http://127.0.0.1:57620/v2/active-runtime") {
-      return new Response(
-        JSON.stringify({
-          target: {
-            workspaceId: "workspace-a",
-            sessionId: "session-a",
-            instanceId: "instance-a",
-          },
-        }),
-      );
+    const url = String(input);
+    if (url.includes("/locales/en.json")) return new Response(JSON.stringify(enMessages));
+    if (url === "http://127.0.0.1:57620/v2/sessions") {
+      return new Response(JSON.stringify({ sessions: [] }));
     }
     return new Response(JSON.stringify({}), { status: 404 });
   });
@@ -50,9 +44,23 @@ test("home redirects to the most recently active runtime", async () => {
     navigate,
   });
 
-  expect(navigate).toHaveBeenCalledWith("/app/workspaces/workspace-a/sessions/session-a");
-  expect(result).toEqual({ sidebar: null, redirected: true });
-  expect(fetchImpl).toHaveBeenCalledTimes(1);
+  expect(navigate).not.toHaveBeenCalled();
+  expect(result).toEqual({ sidebar: expect.any(Object), redirected: false });
+  expect(fetchImpl.mock.calls.some(([input]) => String(input).includes("/v2/active-runtime"))).toBe(
+    false,
+  );
+  result.sidebar.destroy();
+});
+
+test("native home opens an existing session through the desktop workspace command", async () => {
+  const invoke = vi.fn().mockResolvedValue(undefined);
+
+  await openHomeSession({ id: "session-a", projectPath: "/projects/example" }, { invoke });
+
+  expect(invoke).toHaveBeenCalledWith("open_session_in_project", {
+    projectPath: "/projects/example",
+    sessionId: "session-a",
+  });
 });
 
 test("home remains workspace-neutral when no runtime is active", async () => {

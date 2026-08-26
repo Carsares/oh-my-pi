@@ -2,7 +2,6 @@ import { initI18n, t } from "../i18n.js";
 import { applyTheme, getCurrentTheme } from "../themes.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
 import { setupSettingsPanel } from "./settings/settings-panel.js";
-import { getActiveRuntime } from "./transport/active-runtime.js";
 import { HostDataGateway } from "./transport/data-gateway.js";
 import { appRoutePath } from "./utils/router.js";
 import { resolveWorkspaceViaHost, setupOpenFolderButton } from "./workspace/workspace-actions.js";
@@ -44,9 +43,17 @@ export async function openHomeSession(
   {
     resolveWorkspace = resolveWorkspaceViaHost,
     navigate = (path) => window.location.assign(path),
+    invoke = globalThis.__TAURI__?.core?.invoke,
   } = {},
 ) {
   if (!session?.id || !session?.projectPath) throw new Error("Session route is incomplete");
+  if (invoke) {
+    await invoke("open_session_in_project", {
+      projectPath: session.projectPath,
+      sessionId: session.id,
+    });
+    return;
+  }
   const workspaceId = session.workspaceId || (await resolveWorkspace(session.projectPath));
   navigate(appRoutePath({ name: "session", workspaceId, sessionId: session.id }));
 }
@@ -56,18 +63,8 @@ export async function startHomeApp({
   location = window.location,
   resolveWorkspace = resolveWorkspaceViaHost,
   navigate,
+  invoke = globalThis.__TAURI__?.core?.invoke,
 } = {}) {
-  const activeTarget = await getActiveRuntime({ fetchImpl, location });
-  if (activeTarget) {
-    const path = appRoutePath({
-      name: "session",
-      workspaceId: activeTarget.workspaceId,
-      sessionId: activeTarget.sessionId,
-    });
-    (navigate ?? ((targetPath) => window.location.assign(targetPath)))(path);
-    return { sidebar: null, redirected: true };
-  }
-
   applyTheme(getCurrentTheme());
   await initI18n();
   showHomeShell();
@@ -80,7 +77,7 @@ export async function startHomeApp({
         getTarget: () => null,
         workspaceNeutral: true,
         onSelect: (session) => {
-          void openHomeSession(session, { resolveWorkspace, navigate }).catch((error) => {
+          void openHomeSession(session, { resolveWorkspace, navigate, invoke }).catch((error) => {
             console.error("[Home] Failed to open session:", error);
           });
         },

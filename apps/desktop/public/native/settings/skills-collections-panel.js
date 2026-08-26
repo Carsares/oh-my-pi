@@ -5,6 +5,7 @@ import { onLocaleChange, t } from "../../i18n.js";
 import {
   compactSkillPath,
   renderSkillPanelMessage,
+  skillDisplayDescription,
   skillDisplayName,
   skillDisplayPath,
   skillElement,
@@ -289,7 +290,7 @@ export function setupSkillsCollectionsPanel({ container, client, showError, show
       entries.map((entry) => {
         const checked = draft.skillIds.includes(entry.skillId);
         const path = skillDisplayPath(entry);
-        const description = entry.description ?? entry.lastKnownDescription ?? "";
+        const description = skillDisplayDescription(entry);
         return skillElement("label", { class: "skill-collection-member-option" }, [
           skillElement("input", {
             type: "checkbox",
@@ -302,21 +303,24 @@ export function setupSkillsCollectionsPanel({ container, client, showError, show
             },
           }),
           skillElement("div", { class: "skill-collection-member-info" }, [
-            skillElement("strong", {
-              class: "skill-collection-member-name",
-              text: skillDisplayName(entry),
-            }),
+            skillElement("div", { class: "skill-management-member-header" }, [
+              skillElement("strong", {
+                class: "skill-collection-member-name skill-management-member-name",
+                text: skillDisplayName(entry),
+              }),
+              path
+                ? skillElement("code", {
+                    class: "skill-management-path skill-management-member-path",
+                    text: compactSkillPath(path),
+                    title: path,
+                  })
+                : null,
+            ]),
             description
               ? skillElement("p", {
                   class: "skill-collection-member-description",
                   text: description,
-                })
-              : null,
-            path
-              ? skillElement("code", {
-                  class: "skill-management-path",
-                  text: compactSkillPath(path),
-                  title: path,
+                  title: description,
                 })
               : null,
           ]),
@@ -412,16 +416,28 @@ export function setupSkillsCollectionsPanel({ container, client, showError, show
         (collection.skillIds ?? []).map((skillId) => {
           const entry = catalogEntry(skillId);
           const path = skillDisplayPath(entry);
+          const description = skillDisplayDescription(entry);
           return skillElement("div", { class: "skill-management-member" }, [
             skillElement("div", { class: "skill-management-grow" }, [
-              skillElement("strong", { text: skillDisplayName(entry) || skillId }),
-              path
-                ? skillElement("code", {
-                    class: "skill-management-path",
-                    text: compactSkillPath(path),
-                    title: path,
+              skillElement("div", { class: "skill-management-member-header" }, [
+                skillElement("strong", {
+                  class: "skill-management-member-name",
+                  text: skillDisplayName(entry) || skillId,
+                }),
+                skillElement("code", {
+                  class: "skill-management-path skill-management-member-path",
+                  text: path ? compactSkillPath(path) : skillId,
+                  title: path || skillId,
+                }),
+              ]),
+              description
+                ? skillElement("p", {
+                    class:
+                      "skill-collection-member-description skill-management-member-description",
+                    text: description,
+                    title: description,
                   })
-                : skillElement("code", { class: "skill-management-path", text: skillId }),
+                : null,
               ...(entry?.reasons ?? []).map((reason) =>
                 skillElement("p", { class: "skill-management-muted", text: reason }),
               ),

@@ -5,6 +5,7 @@ import { onLocaleChange, t } from "../../i18n.js";
 import {
   compactSkillPath,
   renderSkillPanelMessage,
+  skillDisplayDescription,
   skillDisplayName,
   skillDisplayPath,
   skillElement,
@@ -127,7 +128,7 @@ export function setupSkillsCatalogPanel({ container, client, showError }) {
 
   function renderEntry(entry, duplicateCounts) {
     const name = skillDisplayName(entry);
-    const description = entry.description ?? entry.lastKnownDescription ?? "";
+    const description = skillDisplayDescription(entry);
     const path = skillDisplayPath(entry);
     const duplicateCount = duplicateCounts.get(name) ?? 0;
     return skillElement(
@@ -136,9 +137,22 @@ export function setupSkillsCatalogPanel({ container, client, showError }) {
       [
         skillElement("div", { class: "skill-management-row" }, [
           skillElement("div", { class: "skill-management-grow" }, [
-            skillElement("strong", { text: name }),
+            skillElement("div", { class: "skill-management-member-header" }, [
+              skillElement("strong", { class: "skill-management-member-name", text: name }),
+              path
+                ? skillElement("code", {
+                    class: "skill-management-path skill-management-member-path",
+                    text: compactSkillPath(path),
+                    title: path,
+                  })
+                : null,
+            ]),
             description
-              ? skillElement("p", { class: "skill-management-muted", text: description })
+              ? skillElement("p", {
+                  class: "skill-management-muted skill-management-member-description",
+                  text: description,
+                  title: description,
+                })
               : null,
           ]),
           skillStatusBadge(entry.status),
@@ -155,13 +169,6 @@ export function setupSkillsCatalogPanel({ container, client, showError }) {
             onClick: () => void showDetails(entry.skillId),
           }),
         ]),
-        path
-          ? skillElement("code", {
-              class: "skill-management-path",
-              text: compactSkillPath(path),
-              title: path,
-            })
-          : null,
         skillElement(
           "div",
           { class: "skill-management-sources" },
@@ -180,11 +187,32 @@ export function setupSkillsCatalogPanel({ container, client, showError }) {
 
   function renderDetails() {
     if (!selectedEntry) return null;
+    const description = skillDisplayDescription(selectedEntry);
+    const path = skillDisplayPath(selectedEntry);
     return skillElement("section", { class: "ui-panel skill-catalog-detail" }, [
       skillElement("div", { class: "skill-management-row" }, [
-        skillElement("strong", {
-          text: selectedEntry.name ?? selectedEntry.lastKnownName ?? selectedEntry.skillId,
-        }),
+        skillElement("div", { class: "skill-management-grow" }, [
+          skillElement("div", { class: "skill-management-member-header" }, [
+            skillElement("strong", {
+              class: "skill-management-member-name",
+              text: selectedEntry.name ?? selectedEntry.lastKnownName ?? selectedEntry.skillId,
+            }),
+            path
+              ? skillElement("code", {
+                  class: "skill-management-path skill-management-member-path",
+                  text: compactSkillPath(path),
+                  title: path,
+                })
+              : null,
+          ]),
+          description
+            ? skillElement("p", {
+                class: "skill-management-muted skill-management-member-description",
+                text: description,
+                title: description,
+              })
+            : null,
+        ]),
         skillElement("button", {
           type: "button",
           class: "ui-button ui-button--sm ui-button--ghost",
@@ -198,10 +226,6 @@ export function setupSkillsCatalogPanel({ container, client, showError }) {
       selectedEntry.parseError
         ? skillElement("p", { class: "skill-management-error", text: selectedEntry.parseError })
         : null,
-      skillElement("code", {
-        class: "skill-management-path",
-        text: skillDisplayPath(selectedEntry),
-      }),
       ...(selectedEntry.reasons ?? []).map((reason) =>
         skillElement("p", { class: "skill-management-muted", text: reason }),
       ),

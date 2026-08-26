@@ -63,12 +63,14 @@ describe("Session Skills panel", () => {
           {
             skillId: "skill-a",
             name: "Review A",
+            description: "Review active skill",
             canonicalPath: "/home/me/.agents/skills/review-a/SKILL.md",
             effectiveSource: { providerId: "agents", level: "user", discoveryKind: "standard" },
           },
           {
             skillId: "skill-b",
             name: "Review B",
+            description: "Review shadowed skill",
             canonicalPath: "/project/.omp/skills/review-b/SKILL.md",
             effectiveSource: { providerId: "native", level: "project", discoveryKind: "standard" },
           },
@@ -98,6 +100,12 @@ describe("Session Skills panel", () => {
     expect(document.body.textContent).toContain("settings.skills.sessionConflictCount");
     expect(document.body.textContent).toContain(".../skills/review-b/SKILL.md");
     const shadowed = document.querySelector('[data-skill-id="skill-b"]');
+    expect(shadowed.querySelector(".skill-management-member-header strong").textContent).toBe(
+      "Review B",
+    );
+    expect(shadowed.querySelector(".skill-management-member-description").title).toBe(
+      "Review shadowed skill",
+    );
     const activate = [...shadowed.querySelectorAll("button")].find((button) =>
       button.textContent.includes("settings.skills.activate"),
     );

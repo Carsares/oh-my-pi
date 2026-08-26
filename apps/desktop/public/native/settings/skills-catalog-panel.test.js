@@ -45,7 +45,15 @@ describe("Skills Catalog panel", () => {
     expect(document.body.textContent).toContain("Review changes");
     expect(document.body.textContent).toContain("/skills/review");
     expect(document.body.textContent).toContain("settings.skills.sameNamePaths");
-    expect(document.querySelector('[data-skill-id="skill-a"]')).not.toBeNull();
+    const entry = document.querySelector('[data-skill-id="skill-a"]');
+    expect(entry).not.toBeNull();
+    expect(entry.querySelector(".skill-management-member-header strong").textContent).toBe(
+      "Review",
+    );
+    expect(entry.querySelector(".skill-management-member-path").textContent).toBe("/skills/review");
+    expect(entry.querySelector(".skill-management-member-description").title).toBe(
+      "Review changes",
+    );
 
     document.querySelector(".skills-rescan, .skill-management-toolbar .ui-button").click();
     await vi.waitFor(() => expect(client.catalogRescan).toHaveBeenCalledOnce());

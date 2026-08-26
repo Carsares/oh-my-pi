@@ -18,6 +18,12 @@ describe("Skills Collections panel", () => {
         .map((match) => match[1])
         .find((body) => body.includes("display: grid")) ?? "";
     expect(memberRule).toContain("flex: 0 0 auto");
+    const descriptionRule =
+      css.match(/\.skill-management-member-description\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(descriptionRule).toContain("margin: var(--space-1) 0 0;");
+    const editorMembersRule =
+      css.match(/\.skill-collection-editor \.skill-collection-members\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(editorMembersRule).toContain("max-height: none;");
   });
 
   it("creates a collection with the latest revision and selects the server-issued ID", async () => {
@@ -61,6 +67,7 @@ describe("Skills Collections panel", () => {
             skillId: "skill-a",
             name: "Review",
             description: "Review changes",
+            path: { displayPath: "/Users/me/.agents/skills/review/SKILL.md" },
             status: "available",
             eligibility: "eligible",
           },
@@ -68,6 +75,7 @@ describe("Skills Collections panel", () => {
             skillId: "skill-b",
             name: "Review",
             description: "Review another source",
+            path: { displayPath: "/Users/me/.agents/skills/alternative/SKILL.md" },
             status: "available",
             eligibility: "eligible",
           },
@@ -96,6 +104,19 @@ describe("Skills Collections panel", () => {
     expect(document.querySelector(".skill-collection-detail p").textContent).toBe(
       "settings.skills.localAllDescription",
     );
+    const member = document.querySelector(".skill-management-member");
+    expect(member.querySelector(".skill-management-member-header strong").textContent).toBe(
+      "Review",
+    );
+    expect(member.querySelector(".skill-management-member-path").textContent).toBe(
+      ".../skills/review/SKILL.md",
+    );
+    expect(member.querySelector(".skill-management-member-description").textContent).toBe(
+      "Review changes",
+    );
+    expect(member.querySelector(".skill-management-member-description").title).toBe(
+      "Review changes",
+    );
 
     const newButton = [...document.querySelectorAll("button")].find((button) =>
       button.textContent.includes("settings.skills.newCollection"),
@@ -108,6 +129,16 @@ describe("Skills Collections panel", () => {
     expect(document.querySelectorAll(".skill-collection-member-option")).toHaveLength(2);
     expect(document.querySelectorAll(".skill-collection-member-description")).toHaveLength(2);
     expect(document.body.textContent).toContain("Review changes");
+    const editorMember = document.querySelector(".skill-collection-member-option");
+    expect(editorMember.querySelector(".skill-management-member-header strong").textContent).toBe(
+      "Review",
+    );
+    expect(editorMember.querySelector(".skill-management-member-path").textContent).toBe(
+      ".../skills/review/SKILL.md",
+    );
+    expect(editorMember.querySelector(".skill-collection-member-description").title).toBe(
+      "Review changes",
+    );
     members[0].click();
     document.querySelectorAll('.skill-collection-editor input[type="checkbox"]')[1].click();
     expect(document.body.textContent).toContain("settings.skills.collectionConflictSummary");

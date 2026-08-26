@@ -36,3 +36,16 @@ test("skills sub-tabs use the settings body type scale", () => {
   expect(tab).toContain("font: inherit");
   expect(tab).toContain("font-size: var(--font-size-md)");
 });
+
+test("skills settings fills the available panel height", () => {
+  const css = readFileSync(
+    resolve(process.cwd(), "public/native/settings/skills-page.css"),
+    "utf8",
+  );
+  const settings = [...css.matchAll(/\.skills-settings\s*\{([^}]*)\}/g)]
+    .map((match) => match[1])
+    .join("\n");
+  expect(settings).toContain("display: flex");
+  expect(settings).toContain("min-height: 100%");
+  expect(css).toContain('.settings-tab[data-settings-panel="skills"] > .settings-body');
+});

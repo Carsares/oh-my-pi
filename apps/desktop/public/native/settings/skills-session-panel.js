@@ -5,6 +5,7 @@ import { onLocaleChange, t } from "../../i18n.js";
 import {
   compactSkillPath,
   renderSkillPanelMessage,
+  skillDisplayDescription,
   skillDisplayName,
   skillDisplayPath,
   skillElement,
@@ -214,6 +215,7 @@ export function setupSessionSkillsPanel({ container, client, showError, showSucc
       catalogEntries(catalog).find((candidate) => candidate.skillId === member.skillId) ??
       member.entry;
     const name = skillDisplayName(entry) || member.name || member.skillId;
+    const description = skillDisplayDescription(entry) || member.description || "";
     const path = skillDisplayPath(entry);
     const source = entry?.effectiveSource;
     const unavailable = member.availability !== "available" || member.eligibility !== "eligible";
@@ -264,20 +266,29 @@ export function setupSessionSkillsPanel({ container, client, showError, showSucc
       { class: "skill-management-member", dataset: { skillId: member.skillId } },
       [
         skillElement("div", { class: "skill-management-grow" }, [
-          skillElement("strong", { text: name }),
+          skillElement("div", { class: "skill-management-member-header" }, [
+            skillElement("strong", { class: "skill-management-member-name", text: name }),
+            path
+              ? skillElement("code", {
+                  class: "skill-management-path skill-management-member-path",
+                  text: compactSkillPath(path),
+                  title: path,
+                })
+              : null,
+          ]),
+          description
+            ? skillElement("p", {
+                class: "skill-management-muted skill-management-member-description",
+                text: description,
+                title: description,
+              })
+            : null,
           source
             ? skillElement("span", {
                 class: "skill-management-muted",
                 text: [source.providerId, source.level, source.discoveryKind]
                   .filter(Boolean)
                   .join(" · "),
-              })
-            : null,
-          path
-            ? skillElement("code", {
-                class: "skill-management-path",
-                text: compactSkillPath(path),
-                title: path,
               })
             : null,
           skillElement("div", { class: "skill-management-sources" }, [

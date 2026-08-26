@@ -4,6 +4,7 @@
 .skill-management-actions,
 .skill-management-sources,
 .skill-management-member,
+.skill-management-member-header,
 .skill-collection-select,
 .skill-collection-member-option {
   display: flex;
@@ -126,6 +127,14 @@
   display: grid;
   grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);
   gap: var(--space-4);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.skill-collection-editor,
+.skill-collection-detail {
+  height: 100%;
+  min-height: 0;
 }
 
 .skill-collections-list {
@@ -168,6 +177,12 @@
   overflow: auto;
 }
 
+.skill-collection-editor .skill-collection-members {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
 .skill-collection-member-option {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -199,7 +214,7 @@
 }
 
 .skill-collection-member-description {
-  margin: 0;
+  margin: var(--space-1) 0 0;
   overflow: hidden;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
@@ -220,6 +235,32 @@
   min-width: 0;
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--border);
+}
+
+.skill-management-member-header {
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.skill-management-member-name,
+.skill-management-member-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-management-member-name {
+  flex: 0 1 auto;
+}
+
+.skill-management-member-path {
+  flex: 1 1 auto;
+}
+
+.skill-management-member-description {
+  margin: var(--space-1) 0 0;
+  max-width: 100%;
 }
 
 .skill-management-member:last-child {

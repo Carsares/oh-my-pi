@@ -40,6 +40,10 @@ export function skillDisplayName(entry) {
   return entry?.name ?? entry?.lastKnownName ?? entry?.skillId ?? "";
 }
 
+export function skillDisplayDescription(entry) {
+  return entry?.description ?? entry?.lastKnownDescription ?? "";
+}
+
 export function skillDisplayPath(entry) {
   return (
     entry?.path?.displayPath ??

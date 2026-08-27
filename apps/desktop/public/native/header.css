@@ -347,9 +347,14 @@
   border-color: var(--border);
 }
 
-.thinking-tag:hover {
+.thinking-tag:hover:not(:disabled) {
   background: var(--bg-glass-hover);
   border-color: var(--border-hover);
+}
+
+.thinking-tag:disabled {
+  cursor: not-allowed;
+  opacity: var(--disabled-opacity);
 }
 
 /* Status */

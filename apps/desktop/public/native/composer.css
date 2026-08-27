@@ -173,7 +173,7 @@
   align-items: center;
 }
 
-.composer-toolbar .thinking-tag:hover {
+.composer-toolbar .thinking-tag:hover:not(:disabled) {
   background: var(--bg-glass-hover);
 }
 

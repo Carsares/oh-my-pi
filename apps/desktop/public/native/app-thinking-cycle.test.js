@@ -117,14 +117,49 @@ afterEach(() => {
 });
 
 test("thinking button asks the server to cycle levels and applies the returned level", async () => {
+  const send = vi.spyOn(FakeWebSocket.prototype, "send");
   await import("./app.js?thinking-cycle-regression");
   await vi.waitFor(() => {
     expect(liveSockets.some((socket) => socket.onmessage)).toBe(true);
   });
   handshakeSockets();
-  const send = vi.spyOn(FakeWebSocket.prototype, "send");
 
-  document.getElementById("thinking-btn").click();
+  const btn = document.getElementById("thinking-btn");
+  const target = {
+    workspaceId: "workspace-a",
+    sessionId: "session-a",
+    instanceId: "pending-bootstrap",
+  };
+
+  deliverToRuntimeSocket({
+    type: "runtime_event",
+    target,
+    sequence: 1,
+    event: {
+      type: "config_update",
+      model: { id: "fixed-reasoning", reasoning: true },
+      thinkingLevel: "high",
+    },
+  });
+  await vi.waitFor(() => expect(btn.disabled).toBe(true));
+
+  deliverToRuntimeSocket({
+    type: "runtime_event",
+    target,
+    sequence: 2,
+    event: {
+      type: "config_update",
+      model: {
+        id: "adjustable-reasoning",
+        reasoning: true,
+        thinking: { mode: "effort", efforts: ["low", "high", "max"], requiresEffort: true },
+      },
+      thinkingLevel: "high",
+    },
+  });
+  await vi.waitFor(() => expect(btn.disabled).toBe(false));
+
+  btn.click();
 
   let cycleFrame;
   await vi.waitFor(() => {
@@ -143,10 +178,17 @@ test("thinking button asks the server to cycle levels and applies the returned l
     response: { command: "cycle_thinking_level", success: true, data: { level: "high" } },
   });
 
-  const btn = document.getElementById("thinking-btn");
   await vi.waitFor(() => {
     expect(btn.textContent.trim()).toContain("high");
   });
+
+  deliverToRuntimeSocket({
+    type: "runtime_event",
+    target,
+    sequence: 3,
+    event: { type: "thinking_level_changed", thinkingLevel: "low", configured: "auto" },
+  });
+  await vi.waitFor(() => expect(btn.textContent.trim()).toContain("auto"));
 });
 
 test("model switch handler reconciles thinking level via get_state (source contract)", async () => {
@@ -182,7 +224,9 @@ test("model switch handler reconciles thinking level via get_state (source contr
   expect(handlerBody).toContain('"set_model"');
   // ...followed by a get_state fetch of the server's thinking level...
   expect(handlerBody).toContain('"get_state"');
-  // ...consumed from response.data.thinkingLevel via updateComposerThinking.
+  // ...consumed from response.data.thinkingLevel via updateComposerThinking,
+  // including undefined so a model switch cannot retain a stale level.
   expect(handlerBody).toMatch(/response\?\.data\?\.thinkingLevel/);
   expect(handlerBody).toContain("updateComposerThinking(level)");
+  expect(handlerBody).not.toContain("if (level) updateComposerThinking(level)");
 });

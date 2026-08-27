@@ -31,6 +31,7 @@ import { setupComposerSlashMenu } from "./composer/composer-slash-menu.js";
 import { setupComposerSubmitHandling } from "./composer/composer-submit.js";
 import { renderQueuedMessages } from "./composer/queued-messages.js";
 import { buildCommandCatalog, resolveComposerInput } from "./composer/slash-commands.js";
+import { canAdjustModelThinking } from "./composer/thinking-control.js";
 import { setupCommandPalette } from "./extensions/command-palette.js";
 import { CustomUiPanel } from "./extensions/custom-ui-panel.js";
 import { showNativeDialog } from "./extensions/dialog.js";
@@ -178,6 +179,7 @@ function formatThinkingLevelLabel(level) {
   return label === key ? normalizedLevel : label;
 }
 let currentThinkingLevel = "off";
+let currentModel = null;
 let currentModelId = null;
 
 // Session UI state: persists per-session model + thinking level and input draft
@@ -1773,6 +1775,9 @@ async function handleRuntimeEvent(event) {
     case "command_output":
       if (event.text) messageRenderer.renderSystemMessage(event.text);
       break;
+    case "thinking_level_changed":
+      updateComposerThinking(event.configured ?? event.thinkingLevel);
+      break;
     case "config_update":
       if (Object.hasOwn(event, "model")) {
         updateComposerModel(event.model);
@@ -2263,6 +2268,7 @@ function showError(error) {
 // ── Composer model dropdown & thinking button (functions & event wiring) ────────
 
 function updateComposerModel(model) {
+  currentModel = model ?? null;
   currentModelId = model?.id ?? null;
   // Persist the model change to session UI state
   sessionUiState
@@ -2278,6 +2284,26 @@ function updateComposerModel(model) {
   if (modelDropdownLabel) {
     modelDropdownLabel.textContent = formatModelName(model) || "model";
   }
+  renderComposerThinking();
+}
+
+function renderComposerThinking() {
+  if (thinkingBtn) {
+    const levelLabel = formatThinkingLevelLabel(currentThinkingLevel);
+    const adjustable = canAdjustModelThinking(currentModel);
+    thinkingBtn.textContent = t("settings.thinkingCompact", { level: levelLabel });
+    thinkingBtn.className = `thinking-tag${currentThinkingLevel === "off" ? " off" : ""}`;
+    thinkingBtn.disabled = !adjustable;
+    thinkingBtn.title = adjustable
+      ? t("settings.thinkingTitle")
+      : t("settings.thinkingLevel", { level: levelLabel });
+    thinkingBtn.setAttribute(
+      "aria-label",
+      adjustable
+        ? t("settings.thinkingAriaLabel", { level: levelLabel })
+        : t("settings.thinkingLevel", { level: levelLabel }),
+    );
+  }
 }
 
 function updateComposerThinking(level) {
@@ -2289,13 +2315,7 @@ function updateComposerThinking(level) {
       thinkingLevel: currentThinkingLevel,
     })
     .catch(() => {});
-  if (thinkingBtn) {
-    const levelLabel = formatThinkingLevelLabel(currentThinkingLevel);
-    thinkingBtn.textContent = t("settings.thinkingCompact", { level: levelLabel });
-    thinkingBtn.className = `thinking-tag${currentThinkingLevel === "off" ? " off" : ""}`;
-    thinkingBtn.title = t("settings.thinkingTitle");
-    thinkingBtn.setAttribute("aria-label", t("settings.thinkingAriaLabel", { level: levelLabel }));
-  }
+  renderComposerThinking();
 }
 
 async function loadAvailableModels() {
@@ -2397,18 +2417,18 @@ function buildModelDropdownItem(model) {
   item.addEventListener("click", async () => {
     closeModelDropdown();
     try {
-      await runtime.request(
+      const setModelResult = await runtime.request(
         { type: "set_model", provider: model.provider, modelId: model.id },
         target,
         { idempotencyKey: randomId() },
       );
-      updateComposerModel(model);
+      updateComposerModel(setModelResult?.response?.data ?? model);
       // Reconcile the thinking level after a model switch. pi 0.83's set_model
       // response is the Model object (no thinkingLevel field, see rpc.md); the
       // server's effective thinking level for the new model lives in get_state.
       const stateResult = await runtime.request({ type: "get_state" }, target);
       const level = stateResult?.response?.data?.thinkingLevel;
-      if (level) updateComposerThinking(level);
+      updateComposerThinking(level);
     } catch (error) {
       showError(error);
     }
@@ -2505,7 +2525,7 @@ document.addEventListener("click", (event) => {
 });
 
 onLocaleChange(() => {
-  updateComposerThinking(currentThinkingLevel);
+  renderComposerThinking();
   renderStatus();
 });
 

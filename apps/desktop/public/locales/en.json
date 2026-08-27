@@ -72,6 +72,7 @@
     "costSub": "{amount} (sub)",
     "sessionUsageTitle": "Session tokens (input / output / cache)",
     "summary": "In {in} · Out {out} · Cache {cache}",
+    "messageSummary": "Input {input} · Output {output} · Cache rate {cache}",
     "inputSummary": "In {in}",
     "outputSummary": "Out {out}",
     "input": "IN",

@@ -5,6 +5,7 @@
  */
 
 import { onLocaleChange, t } from "../i18n.js";
+import { formatTokens } from "./context-viz.js";
 import { initImageLightbox } from "./image-lightbox.js";
 import { renderMarkdown, renderStreamingMarkdown, renderUserMarkdown } from "./markdown.js";
 
@@ -69,6 +70,9 @@ export class MessageRenderer {
       });
       this.container.querySelectorAll(".thinking-label-text").forEach((el) => {
         el.textContent = t("messages.thinking");
+      });
+      this.container.querySelectorAll("[data-message-usage-summary]").forEach((el) => {
+        this._updateMessageUsageSummary(el);
       });
       if (this.container.querySelector(".welcome")) {
         this.renderWelcome(this.lastWelcomeOptions || {});
@@ -227,7 +231,6 @@ export class MessageRenderer {
     div.dataset.messageId = message.id || "streaming";
 
     let contentHtml = "";
-    let usageHtml = "";
     let rawStreamingText = "";
     let hasThinking = false;
 
@@ -256,26 +259,27 @@ export class MessageRenderer {
 
     const hasText = rawStreamingText.trim().length > 0;
     const isProcessMessage = targetContainer !== null;
-    if (!isProcessMessage && message.usage?.cost && !hasThinking) {
-      const cost = message.usage.cost.total;
-      if (cost > 0) {
-        usageHtml = `<span class="message-usage">$${cost.toFixed(4)}</span>`;
-      }
-    }
+    const hasUsage = !isProcessMessage && Boolean(message.usage);
 
     const streamingClass = isStreaming ? " streaming" : "";
 
     if (!isStreaming && isHistory && !contentHtml) return null;
 
-    const showFooter = !isStreaming && !isProcessMessage && (hasText || usageHtml);
+    const showFooter = !isStreaming && !isProcessMessage && (hasText || hasUsage);
     const footerHtml = showFooter
-      ? `<div class="message-footer">${hasText ? `<button class="message-copy-btn" aria-label="${this.escapeHtml(t("messages.copyMessage"))}" title="${this.escapeHtml(t("messages.copyMessage"))}">${COPY_ICON}</button>` : ""}${usageHtml}</div>`
+      ? `<div class="message-footer">${hasText ? `<button class="message-copy-btn" aria-label="${this.escapeHtml(t("messages.copyMessage"))}" title="${this.escapeHtml(t("messages.copyMessage"))}">${COPY_ICON}</button>` : ""}</div>`
       : "";
 
     this._replaceMarkup(
       div,
       `<div class="message-content${streamingClass}">${contentHtml}</div>${footerHtml}`,
     );
+
+    const footer = div.querySelector(".message-footer");
+    if (footer && message.usage) {
+      footer.appendChild(this._createMessageUsageSummary(message.usage));
+      if (!hasThinking) this._appendMessageCost(footer, message.usage);
+    }
 
     this._setupThinkingToggles(div);
     this._setupCodeCopyButtons(div);
@@ -284,6 +288,41 @@ export class MessageRenderer {
     if (!isHistory) this.scrollToBottom();
 
     return div;
+  }
+
+  _createMessageUsageSummary(usage) {
+    const input = Math.max(0, Number(usage?.input) || 0);
+    const output = Math.max(0, Number(usage?.output) || 0);
+    const cacheRead = Math.max(0, Number(usage?.cacheRead) || 0);
+    const cacheWrite = Math.max(0, Number(usage?.cacheWrite) || 0);
+    // Match Stats: cache writes count toward prompt input, but not the hit-rate denominator.
+    const cacheRateBase = input + cacheRead;
+    const element = document.createElement("span");
+    element.className = "message-usage";
+    element.dataset.messageUsageSummary = "true";
+    element.dataset.input = formatTokens(input + cacheRead + cacheWrite);
+    element.dataset.output = formatTokens(output);
+    element.dataset.cache =
+      cacheRateBase > 0 ? `${((cacheRead / cacheRateBase) * 100).toFixed(1)}%` : "--";
+    this._updateMessageUsageSummary(element);
+    return element;
+  }
+
+  _updateMessageUsageSummary(element) {
+    element.textContent = t("usage.messageSummary", {
+      input: element.dataset.input,
+      output: element.dataset.output,
+      cache: element.dataset.cache,
+    });
+  }
+
+  _appendMessageCost(footer, usage) {
+    const cost = Number(usage?.cost?.total) || 0;
+    if (cost <= 0) return;
+    const element = document.createElement("span");
+    element.className = "message-usage";
+    element.textContent = `$${cost.toFixed(4)}`;
+    footer.appendChild(element);
   }
 
   renderThinkingBlock(thinking, cost) {
@@ -412,8 +451,7 @@ export class MessageRenderer {
 
     if (!messageElement.querySelector(".message-footer")) {
       const copyableText = this.getCopyableText(messageElement);
-      const hasUsage = Boolean(usage?.cost && usage.cost.total > 0 && !finalThinking);
-      if (!copyableText && !hasUsage) {
+      if (!copyableText && !usage) {
         messageElement.remove();
         return;
       }
@@ -423,11 +461,9 @@ export class MessageRenderer {
 
       if (copyableText) footer.appendChild(this._createCopyButton());
 
-      if (hasUsage) {
-        const span = document.createElement("span");
-        span.className = "message-usage";
-        span.textContent = `$${usage.cost.total.toFixed(4)}`;
-        footer.appendChild(span);
+      if (usage) {
+        footer.appendChild(this._createMessageUsageSummary(usage));
+        if (!finalThinking) this._appendMessageCost(footer, usage);
       }
 
       messageElement.appendChild(footer);

@@ -107,6 +107,7 @@
 .message-usage {
   display: inline-block;
   font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
   opacity: 0.5;
 }
 
@@ -410,12 +411,13 @@ body.hide-thinking .thinking-block {
 /* ═══════════════════════════════════════════════════════
 
 /* ═══════════════════════════════════════════════════════
-   Message footer: cost + copy button (inline row)
+   Message footer: usage + cost + copy button (inline row)
    ═══════════════════════════════════════════════════════ */
 
 .message-footer {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
 }

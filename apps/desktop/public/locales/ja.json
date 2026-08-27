@@ -75,6 +75,7 @@
     "cache": "cache",
     "costTitle": "costTitle",
     "summary": "In {in} · Out {out} · Cache {cache}",
+    "messageSummary": "入力 {input} · 出力 {output} · キャッシュ率 {cache}",
     "inputSummary": "In {in}",
     "outputSummary": "Out {out}",
     "sessionUsageTitle": "Session tokens (input / output / cache)"

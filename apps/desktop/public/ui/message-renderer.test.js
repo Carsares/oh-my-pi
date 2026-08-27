@@ -16,6 +16,9 @@ const enMessages = {
     currentWorkspace: "Current workspace:",
   },
   shortcuts: { focusInput: "Focus input", abort: "Abort" },
+  usage: {
+    messageSummary: "Input {input} · Output {output} · Cache rate {cache}",
+  },
 };
 const zhMessages = {
   messages: {
@@ -31,6 +34,9 @@ const zhMessages = {
     currentWorkspace: "当前工作区：",
   },
   shortcuts: { focusInput: "聚焦输入", abort: "中止" },
+  usage: {
+    messageSummary: "输入 {input} · 输出 {output} · 缓存利用率 {cache}",
+  },
 };
 
 beforeEach(async () => {
@@ -105,6 +111,39 @@ describe("MessageRenderer streaming markdown preview", () => {
 
     expect(el.querySelector(".message-footer")).toBeNull();
     expect(el.querySelector(".message-copy-btn")).toBeNull();
+  });
+
+  it("renders token usage and cache rate when a streaming response completes", () => {
+    const el = renderer.renderAssistantMessage({ content: "" }, true);
+    renderer.updateStreamingMessage(el, "Done");
+
+    renderer.finalizeStreamingMessage(el, {
+      input: 200,
+      output: 120,
+      cacheRead: 800,
+      cacheWrite: 100,
+      cost: { total: 0.0042 },
+    });
+
+    expect(el.querySelector("[data-message-usage-summary]").textContent).toBe(
+      "Input 1.1k · Output 120 · Cache rate 80.0%",
+    );
+    expect(el.querySelector(".message-footer").textContent).toContain("$0.0042");
+  });
+
+  it("renders usage for restored assistant messages", () => {
+    const el = renderer.renderAssistantMessage(
+      {
+        content: "Restored answer",
+        usage: { input: 0, output: 42, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } },
+      },
+      false,
+      true,
+    );
+
+    expect(el.querySelector("[data-message-usage-summary]").textContent).toBe(
+      "Input 0 · Output 42 · Cache rate --",
+    );
   });
 
   it("keeps a partial code block previewing as a code block", () => {
@@ -283,6 +322,23 @@ describe("MessageRenderer locale change", () => {
     expect(copyBtn.title).toBe("复制消息");
     // Content must not be re-rendered on locale change.
     expect(el.querySelector(".message-content").innerHTML).toBe(contentHtmlBefore);
+  });
+
+  it("updates completed message usage text when the locale changes", async () => {
+    const el = renderer.renderAssistantMessage(
+      {
+        content: "hello",
+        usage: { input: 250, output: 50, cacheRead: 750, cacheWrite: 0, cost: { total: 0 } },
+      },
+      false,
+      true,
+    );
+    const summary = el.querySelector("[data-message-usage-summary]");
+    expect(summary.textContent).toBe("Input 1.0k · Output 50 · Cache rate 75.0%");
+
+    await setLocale("zh");
+
+    expect(summary.textContent).toBe("输入 1.0k · 输出 50 · 缓存利用率 75.0%");
   });
 
   it("toggles thinking content within its own message element", () => {

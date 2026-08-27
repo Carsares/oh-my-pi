@@ -72,6 +72,7 @@
     "costSub": "{amount}（订阅）",
     "sessionUsageTitle": "会话令牌（输入 / 输出 / 缓存）",
     "summary": "入 {in} · 出 {out} · 缓存 {cache}",
+    "messageSummary": "输入 {input} · 输出 {output} · 缓存利用率 {cache}",
     "inputSummary": "入 {in}",
     "outputSummary": "出 {out}",
     "cache": "CACHE",

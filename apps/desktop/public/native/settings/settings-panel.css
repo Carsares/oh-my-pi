@@ -32,12 +32,15 @@
   z-index: 259;
 }
 
-/* design-token-ignore: desktop dialog geometry mirrors pi-web's resource manager. */
+/* design-token-ignore: viewport-fraction geometry keeps the dialog proportional
+   to the app window instead of mirroring pi-web's fixed-width resource manager. */
 .settings-panel.resource-dialog {
   position: fixed;
   inset: 50% auto auto 50%;
-  width: min(860px, calc(100vw - 32px));
-  height: min(76vh, calc(100vh - 32px));
+  /* One shared fraction on both axes locks the dialog's aspect ratio to the
+     app window's; splitting fractions (or px caps) would break that lock. */
+  width: 85vw;
+  height: 85vh;
   transform: translate(-50%, -50%);
   z-index: 260;
   grid-template-columns: 1fr;

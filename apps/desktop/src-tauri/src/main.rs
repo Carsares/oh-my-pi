@@ -54,6 +54,8 @@ type SkillSourceRegistryState = Arc<SkillSourceRegistry>;
 const MENU_NEW_SESSION_ID: &str = "picot-new-session";
 #[cfg(target_os = "macos")]
 const MENU_RESTART_ID: &str = "picot-restart";
+#[cfg(target_os = "macos")]
+const MENU_REFRESH_MODEL_CACHES_ID: &str = "picot-refresh-model-caches";
 #[cfg(all(target_os = "macos", debug_assertions))]
 const MENU_REBUILD_RESTART_ID: &str = "picot-rebuild-restart";
 const NATIVE_HOME_WINDOW_LABEL: &str = "native-home";
@@ -554,6 +556,13 @@ fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         Some("CmdOrCtrl+Shift+R"),
     )?;
+    let refresh_model_caches = MenuItem::with_id(
+        app,
+        MENU_REFRESH_MODEL_CACHES_ID,
+        "Refresh Model Caches",
+        true,
+        None::<&str>,
+    )?;
     #[cfg(debug_assertions)]
     let rebuild_restart = MenuItem::with_id(
         app,
@@ -608,6 +617,7 @@ fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::separator(app)?,
             &restart,
             &rebuild_restart,
+            &refresh_model_caches,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::services(app, None)?,
             &PredefinedMenuItem::separator(app)?,
@@ -626,6 +636,7 @@ fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::about(app, None, None)?,
             &PredefinedMenuItem::separator(app)?,
             &restart,
+            &refresh_model_caches,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::services(app, None)?,
             &PredefinedMenuItem::separator(app)?,
@@ -943,6 +954,42 @@ fn restart_application(app: &AppHandle) {
     app.request_restart();
 }
 
+#[cfg(target_os = "macos")]
+fn refresh_model_caches_and_restart(app: &AppHandle) {
+    let Some(resolver) = app
+        .try_state::<WorkspaceLauncher>()
+        .map(|launcher| launcher.launch.clone())
+    else {
+        app.dialog()
+            .message("Picot services are not ready yet.")
+            .title("Model cache refresh failed")
+            .kind(MessageDialogKind::Error)
+            .show(|_| {});
+        return;
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let result = tauri::async_runtime::spawn_blocking(move || resolver.refresh_model_caches())
+            .await
+            .map_err(|error| format!("Model cache refresh task failed: {error}"))
+            .and_then(|result| result);
+        match result {
+            Ok(()) => {
+                log::info!("[picot-native] refreshed all OMP model caches; restarting Picot");
+                restart_application(&app);
+            }
+            Err(error) => {
+                log::error!("[picot-native] failed to refresh OMP model caches: {error}");
+                app.dialog()
+                    .message(error)
+                    .title("Model cache refresh failed")
+                    .kind(MessageDialogKind::Error)
+                    .show(|_| {});
+            }
+        }
+    });
+}
+
 #[cfg(debug_assertions)]
 fn rebuild_and_restart_application(app: &AppHandle) {
     if !request_development_restart(app, "full") {
@@ -970,6 +1017,10 @@ fn main() {
             MENU_RESTART_ID => {
                 log::info!("[picot-native] restarting Picot and its OMP runtimes");
                 restart_application(app);
+            }
+            MENU_REFRESH_MODEL_CACHES_ID => {
+                log::info!("[picot-native] refreshing all OMP model caches");
+                refresh_model_caches_and_restart(app);
             }
             #[cfg(debug_assertions)]
             MENU_REBUILD_RESTART_ID => {

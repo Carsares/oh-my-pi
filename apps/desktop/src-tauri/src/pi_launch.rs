@@ -80,6 +80,12 @@ impl PiLaunchResolver {
         ))
     }
 
+    /// Refresh every provider model cache used by the embedded OMP service.
+    pub fn refresh_model_caches(&self) -> Result<(), String> {
+        self.run_omp_command(&["models", "refresh"], None)
+            .map(|_| ())
+    }
+
     pub fn list_omp_plugins(&self, cwd: &str) -> Result<serde_json::Value, String> {
         let output = self.run_omp_command(&["plugin", "list", "--json"], Some(cwd))?;
         serde_json::from_str(&output)

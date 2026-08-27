@@ -166,7 +166,7 @@ describe("SkillManagementService", () => {
 		const service = new SkillManagementService(sessionStub as unknown as AgentSession, { catalog, collections });
 
 		const initial = await service.getSessionSkills();
-		expect(initial.profile.baseCollection.collectionId).toBe("local-all");
+		expect(initial.profile.baseCollection?.collectionId).toBe("local-all");
 		expect(initial.memberStates).toHaveLength(2);
 		expect(initial.resolved.resolutions[0].candidateSkillIds).toHaveLength(2);
 		const initialWinner = initial.resolved.resolutions[0].activeSkillId;
@@ -364,5 +364,100 @@ describe("SkillManagementService", () => {
 
 		expect(sessionManager.getEntries()).toHaveLength(entryCount);
 		expect(sessionManager.getSessionSkillsState().profile?.revision).toBe(initial.profile.revision);
+	});
+
+	test("keeps an explicitly empty collection scope across refresh, rescan, and sync", async () => {
+		const { service } = await createServiceFixture();
+		const initial = await service.getSessionSkills();
+		const baseCollectionId = initial.profile.baseCollection?.collectionId;
+		if (!baseCollectionId) throw new Error("Expected the new session to inherit a default collection");
+
+		const removed = await service.removeCollection(baseCollectionId, {
+			expectedActiveLeafId: initial.activeLeafId,
+			expectedRevision: initial.profile.revision,
+		});
+		expect(removed.profile.baseCollection).toBeNull();
+		expect(removed.memberStates).toEqual([]);
+
+		const refreshed = await service.refreshSessionSkills({ rescanCatalog: false });
+		expect(refreshed.profile.baseCollection).toBeNull();
+		expect(refreshed.memberStates).toEqual([]);
+
+		await service.rescanCatalog();
+		const rescanned = await service.getSessionSkills();
+		expect(rescanned.profile.baseCollection).toBeNull();
+		expect(rescanned.memberStates).toEqual([]);
+
+		const preview = await service.previewSessionSync();
+		expect(preview).toMatchObject({ addedSkillIds: [], removedSkillIds: [], winnerChanges: [] });
+		const synced = await service.syncSessionSkills(
+			{
+				expectedProfileRevision: preview.profileRevision,
+				expectedCollectionsRevision: preview.collectionsRevision,
+				expectedCatalogRevision: preview.catalogRevision,
+			},
+			{ expectedActiveLeafId: rescanned.activeLeafId, expectedRevision: rescanned.profile.revision },
+		);
+		expect(synced.profile.baseCollection).toBeNull();
+		expect(synced.profile.revision).toBe(removed.profile.revision);
+		expect(synced.memberStates).toEqual([]);
+	});
+
+	test("keeps a manually added Skill when its collection is removed", async () => {
+		const { service } = await createServiceFixture();
+		const initial = await service.getSessionSkills();
+		const baseCollectionId = initial.profile.baseCollection?.collectionId;
+		const skillId = initial.memberStates[0]?.skillId;
+		if (!baseCollectionId || !skillId) throw new Error("Expected the default collection to contain a Skill");
+
+		const added = await service.addSessionSkill(skillId, {
+			expectedActiveLeafId: initial.activeLeafId,
+			expectedRevision: initial.profile.revision,
+		});
+		const removed = await service.removeCollection(baseCollectionId, {
+			expectedActiveLeafId: added.activeLeafId,
+			expectedRevision: added.profile.revision,
+		});
+
+		expect(removed.profile.baseCollection).toBeNull();
+		expect(removed.profile.addedSkillIds).toEqual([skillId]);
+		expect(removed.memberStates.map(member => member.skillId)).toEqual([skillId]);
+	});
+
+	test("uses a changed global default only for subsequently initialized sessions", async () => {
+		const { root, skillRoot, catalog, collections, service } = await createServiceFixture();
+		const existing = await service.getSessionSkills();
+		const collectionState = await collections.getSnapshot();
+		const created = await collections.create(
+			{ name: "No default Skills", skillIds: [] },
+			{ expectedRevision: collectionState.state.revision },
+		);
+		const collectionId = created.collection?.collectionId;
+		if (!collectionId) throw new Error("Expected a persisted collection");
+		await service.setDefaultCollection(collectionId, { expectedRevision: created.state.revision });
+
+		const unchanged = await service.getSessionSkills();
+		expect(unchanged.profile.baseCollection?.collectionId).toBe(existing.profile.baseCollection?.collectionId);
+
+		const nextSessionManager = SessionManager.inMemory(root);
+		const nextSession = {
+			settings: Settings.isolated({ "skills.customDirectories": [skillRoot] }),
+			sessionManager: nextSessionManager,
+			skills: [] as readonly Skill[],
+			isStreaming: false,
+			isCompacting: false,
+			applyResolvedSkills(): Promise<void> {
+				return Promise.resolve();
+			},
+			prepareResolvedSkills(skills: readonly Skill[]): Promise<{ skills: readonly Skill[] }> {
+				return Promise.resolve({ skills });
+			},
+			commitResolvedSkills(): void {},
+		};
+		const nextService = new SkillManagementService(nextSession as unknown as AgentSession, { catalog, collections });
+
+		const initialized = await nextService.getSessionSkills();
+		expect(initialized.profile.baseCollection?.collectionId).toBe(collectionId);
+		expect(initialized.memberStates).toEqual([]);
 	});
 });

@@ -7,9 +7,9 @@ export type CollectionSnapshot = {
 };
 
 export type SessionSkillsProfile = {
-	schemaVersion: 1;
+	schemaVersion: 2;
 	revision: number;
-	baseCollection: CollectionSnapshot;
+	baseCollection: CollectionSnapshot | null;
 	additionalCollections: CollectionSnapshot[];
 	addedSkillIds: string[];
 	disabledSkillIds: string[];
@@ -35,7 +35,7 @@ export type SessionSkillsMutationContext = {
 };
 
 export type SessionSkillsSyncInput = {
-	baseCollection: CollectionSnapshot;
+	baseCollection: CollectionSnapshot | null;
 	additionalCollections: readonly CollectionSnapshot[];
 };
 

@@ -20,7 +20,7 @@ function cloneCollection(collection: CollectionSnapshot): CollectionSnapshot {
 export function cloneSessionSkillsProfile(profile: SessionSkillsProfile): SessionSkillsProfile {
 	return {
 		...profile,
-		baseCollection: cloneCollection(profile.baseCollection),
+		baseCollection: profile.baseCollection ? cloneCollection(profile.baseCollection) : null,
 		additionalCollections: profile.additionalCollections.map(cloneCollection),
 		addedSkillIds: [...profile.addedSkillIds],
 		disabledSkillIds: [...profile.disabledSkillIds],
@@ -29,9 +29,9 @@ export function cloneSessionSkillsProfile(profile: SessionSkillsProfile): Sessio
 
 function normalizeAdditionalCollections(
 	collections: readonly CollectionSnapshot[],
-	baseCollectionId: string,
+	baseCollectionId: string | undefined,
 ): CollectionSnapshot[] {
-	const seen = new Set<string>([baseCollectionId]);
+	const seen = new Set<string>(baseCollectionId ? [baseCollectionId] : []);
 	const result: CollectionSnapshot[] = [];
 	for (const collection of collections) {
 		if (seen.has(collection.collectionId)) continue;
@@ -58,26 +58,54 @@ function isCollectionSnapshot(value: unknown): value is CollectionSnapshot {
 	);
 }
 
+function parseSessionSkillsProfile(value: unknown): SessionSkillsProfile | undefined {
+	if (typeof value !== "object" || value === null) return undefined;
+	const candidate = value as Record<string, unknown>;
+	if (
+		(candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2) ||
+		!Number.isInteger(candidate.revision) ||
+		(candidate.revision as number) < 1 ||
+		!Array.isArray(candidate.additionalCollections) ||
+		!candidate.additionalCollections.every(isCollectionSnapshot) ||
+		!isStringArray(candidate.addedSkillIds) ||
+		!isStringArray(candidate.disabledSkillIds) ||
+		typeof candidate.updatedAt !== "string"
+	) {
+		return undefined;
+	}
+	if (candidate.schemaVersion === 1 && !isCollectionSnapshot(candidate.baseCollection)) return undefined;
+	if (
+		candidate.schemaVersion === 2 &&
+		candidate.baseCollection !== null &&
+		!isCollectionSnapshot(candidate.baseCollection)
+	) {
+		return undefined;
+	}
+	const baseCollection = candidate.baseCollection as CollectionSnapshot | null;
+	return {
+		schemaVersion: 2,
+		revision: candidate.revision as number,
+		baseCollection: baseCollection ? cloneCollection(baseCollection) : null,
+		additionalCollections: candidate.additionalCollections.map(cloneCollection),
+		addedSkillIds: [...candidate.addedSkillIds],
+		disabledSkillIds: [...candidate.disabledSkillIds],
+		updatedAt: candidate.updatedAt,
+	};
+}
+
 export function isSessionSkillsProfile(value: unknown): value is SessionSkillsProfile {
-	if (typeof value !== "object" || value === null) return false;
-	const candidate = value as Partial<SessionSkillsProfile>;
 	return (
-		candidate.schemaVersion === 1 &&
-		Number.isInteger(candidate.revision) &&
-		(candidate.revision ?? 0) >= 1 &&
-		isCollectionSnapshot(candidate.baseCollection) &&
-		Array.isArray(candidate.additionalCollections) &&
-		candidate.additionalCollections.every(isCollectionSnapshot) &&
-		isStringArray(candidate.addedSkillIds) &&
-		isStringArray(candidate.disabledSkillIds) &&
-		typeof candidate.updatedAt === "string"
+		typeof value === "object" &&
+		value !== null &&
+		(value as Record<string, unknown>).schemaVersion === 2 &&
+		parseSessionSkillsProfile(value) !== undefined
 	);
 }
 
 export function createSessionSkillsProfile(params: CreateSessionSkillsProfileParams): SessionSkillsProfile {
 	const baseCollection = cloneCollection(params.baseCollection);
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		revision: 1,
 		baseCollection,
 		additionalCollections: normalizeAdditionalCollections(
@@ -97,7 +125,7 @@ export function resolveSessionSkillIds(profile: SessionSkillsProfile): string[] 
 
 function memberSessionSkillIds(profile: SessionSkillsProfile): string[] {
 	return unique([
-		...profile.baseCollection.skillIds,
+		...(profile.baseCollection?.skillIds ?? []),
 		...profile.additionalCollections.flatMap(collection => collection.skillIds),
 		...profile.addedSkillIds,
 	]);
@@ -109,13 +137,15 @@ export function reduceSessionSkillsProfileEntries(entries: readonly SessionEntry
 		candidate => candidate.type === "custom" && candidate.customType === SESSION_SKILLS_PROFILE_CUSTOM_TYPE,
 	);
 	if (!entry) return undefined;
-	if (entry.type !== "custom" || !isSessionSkillsProfile(entry.data)) {
+	const profile = entry.type === "custom" ? parseSessionSkillsProfile(entry.data) : undefined;
+	if (!profile) {
 		throw new SessionSkillsProfileError("profile_invalid", "The latest Session Skills Profile entry is invalid");
 	}
-	return cloneSessionSkillsProfile(entry.data);
+	return profile;
 }
 
-function sameCollection(left: CollectionSnapshot, right: CollectionSnapshot): boolean {
+function sameCollection(left: CollectionSnapshot | null, right: CollectionSnapshot | null): boolean {
+	if (!left || !right) return left === right;
 	return (
 		left.collectionId === right.collectionId &&
 		left.collectionName === right.collectionName &&
@@ -150,13 +180,13 @@ function diffSkillIds(before: readonly string[], after: readonly string[]): Sess
 
 function assertSyncCollections(
 	profile: SessionSkillsProfile,
-	baseCollection: CollectionSnapshot,
+	baseCollection: CollectionSnapshot | null,
 	additionalCollections: readonly CollectionSnapshot[],
 ): void {
 	const currentIds = new Set(profile.additionalCollections.map(collection => collection.collectionId));
 	const nextIds = new Set(additionalCollections.map(collection => collection.collectionId));
 	if (
-		baseCollection.collectionId !== profile.baseCollection.collectionId ||
+		baseCollection?.collectionId !== profile.baseCollection?.collectionId ||
 		currentIds.size !== nextIds.size ||
 		[...currentIds].some(collectionId => !nextIds.has(collectionId))
 	) {
@@ -177,14 +207,15 @@ export function reduceSessionSkillsProfile(
 
 	switch (mutation.type) {
 		case "set-base-collection": {
-			next.baseCollection = cloneCollection(mutation.collection);
+			const baseCollection = cloneCollection(mutation.collection);
+			next.baseCollection = baseCollection;
 			next.additionalCollections = next.additionalCollections.filter(
-				collection => collection.collectionId !== next.baseCollection.collectionId,
+				collection => collection.collectionId !== baseCollection.collectionId,
 			);
 			break;
 		}
 		case "add-collection": {
-			if (mutation.collection.collectionId === next.baseCollection.collectionId) break;
+			if (mutation.collection.collectionId === next.baseCollection?.collectionId) break;
 			const collection = cloneCollection(mutation.collection);
 			const index = next.additionalCollections.findIndex(item => item.collectionId === collection.collectionId);
 			if (index === -1) next.additionalCollections.push(collection);
@@ -192,6 +223,7 @@ export function reduceSessionSkillsProfile(
 			break;
 		}
 		case "remove-collection":
+			if (next.baseCollection?.collectionId === mutation.collectionId) next.baseCollection = null;
 			next.additionalCollections = next.additionalCollections.filter(
 				collection => collection.collectionId !== mutation.collectionId,
 			);
@@ -220,10 +252,12 @@ export function reduceSessionSkillsProfile(
 			break;
 		}
 		case "sync": {
-			const baseCollection = cloneCollection(mutation.snapshots.baseCollection);
+			const baseCollection = mutation.snapshots.baseCollection
+				? cloneCollection(mutation.snapshots.baseCollection)
+				: null;
 			const additionalCollections = normalizeAdditionalCollections(
 				mutation.snapshots.additionalCollections,
-				baseCollection.collectionId,
+				baseCollection?.collectionId,
 			);
 			assertSyncCollections(next, baseCollection, additionalCollections);
 			next.baseCollection = baseCollection;
@@ -234,7 +268,7 @@ export function reduceSessionSkillsProfile(
 
 	next.additionalCollections = normalizeAdditionalCollections(
 		next.additionalCollections,
-		next.baseCollection.collectionId,
+		next.baseCollection?.collectionId,
 	);
 	next.addedSkillIds = unique(next.addedSkillIds);
 	next.disabledSkillIds = unique(next.disabledSkillIds);

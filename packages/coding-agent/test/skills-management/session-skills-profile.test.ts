@@ -46,7 +46,7 @@ describe("Session Skills Profile reducer", () => {
 		const value = profile();
 
 		expect(resolveSessionSkillIds(value)).toEqual(["base-a", "extra-a", "manual-a"]);
-		expect(value.baseCollection.skillIds).toEqual(["base-a", "shared"]);
+		expect(value.baseCollection?.skillIds).toEqual(["base-a", "shared"]);
 		expect(value.disabledSkillIds).toEqual(["shared"]);
 	});
 
@@ -60,7 +60,8 @@ describe("Session Skills Profile reducer", () => {
 		});
 
 		base.skillIds.push("later");
-		expect(value.baseCollection.skillIds).toEqual(["a"]);
+		expect(value.schemaVersion).toBe(2);
+		expect(value.baseCollection?.skillIds).toEqual(["a"]);
 		expect(value.additionalCollections.map(item => item.collectionId)).toEqual(["extra"]);
 		expect(value.addedSkillIds).toEqual(["c"]);
 		expect(value.disabledSkillIds).toEqual(["a"]);
@@ -89,6 +90,26 @@ describe("Session Skills Profile reducer", () => {
 		expect(() => reduceSessionSkillsProfileEntries(manager.getBranch())).toThrow(
 			"latest Session Skills Profile entry is invalid",
 		);
+	});
+
+	test("converts a persisted v1 Profile to v2 and writes subsequent updates as v2", async () => {
+		const manager = SessionManager.inMemory();
+		const legacy = profile();
+		manager.appendCustomEntry(SESSION_SKILLS_PROFILE_CUSTOM_TYPE, { ...legacy, schemaVersion: 1 });
+
+		const recovered = reduceSessionSkillsProfileEntries(manager.getBranch());
+
+		expect(recovered).toMatchObject({
+			schemaVersion: 2,
+			revision: 1,
+			baseCollection: { collectionId: "base" },
+		});
+
+		const updated = await manager.updateSessionSkillsProfile(
+			{ type: "remove-collection", collectionId: "base" },
+			context(manager, 1),
+		);
+		expect(updated.profile).toMatchObject({ schemaVersion: 2, revision: 2, baseCollection: null });
 	});
 
 	test("supports collection and session-only Skill mutations", () => {
@@ -125,10 +146,43 @@ describe("Session Skills Profile reducer", () => {
 		expect(removedSkill.effectiveSkillIds).toContain("shared");
 	});
 
+	test("removes the initial collection while preserving other collections and manually added Skills", () => {
+		const withoutBase = reduceSessionSkillsProfile(profile(), {
+			type: "remove-collection",
+			collectionId: "base",
+		});
+
+		expect(withoutBase.profile.baseCollection).toBeNull();
+		expect(withoutBase.profile.additionalCollections.map(collection => collection.collectionId)).toEqual(["extra"]);
+		expect(withoutBase.effectiveSkillIds).toEqual(["extra-a", "manual-a"]);
+
+		const withoutCollections = reduceSessionSkillsProfile(withoutBase.profile, {
+			type: "remove-collection",
+			collectionId: "extra",
+		});
+		expect(withoutCollections.profile.additionalCollections).toEqual([]);
+		expect(withoutCollections.profile.addedSkillIds).toEqual(["manual-a"]);
+		expect(withoutCollections.effectiveSkillIds).toEqual(["manual-a"]);
+	});
+
+	test("allows a Profile with no collections and no effective Skills", () => {
+		const initial = createSessionSkillsProfile({ baseCollection: collection("base", ["base-a"]) });
+
+		const result = reduceSessionSkillsProfile(initial, {
+			type: "remove-collection",
+			collectionId: "base",
+		});
+
+		expect(result.profile.baseCollection).toBeNull();
+		expect(result.profile.additionalCollections).toEqual([]);
+		expect(result.effectiveSkillIds).toEqual([]);
+		expect(result.diff).toEqual({ addedSkillIds: [], removedSkillIds: ["base-a"] });
+	});
+
 	test("disables and restores a Skill without changing collection membership", () => {
 		const disabled = reduceSessionSkillsProfile(profile(), { type: "disable-skill", skillId: "base-a" });
 		expect(disabled.effectiveSkillIds).not.toContain("base-a");
-		expect(disabled.profile.baseCollection.skillIds).toContain("base-a");
+		expect(disabled.profile.baseCollection?.skillIds).toContain("base-a");
 
 		const restored = reduceSessionSkillsProfile(disabled.profile, { type: "restore-skill", skillId: "base-a" });
 		expect(restored.effectiveSkillIds).toContain("base-a");
@@ -175,6 +229,7 @@ describe("Session Skills Profile reducer", () => {
 
 	test("sync ignores capture-time-only snapshot changes", () => {
 		const current = profile();
+		if (!current.baseCollection) throw new Error("Expected a base collection");
 		const result = reduceSessionSkillsProfile(current, {
 			type: "sync",
 			snapshots: {
@@ -188,6 +243,22 @@ describe("Session Skills Profile reducer", () => {
 
 		expect(result.changed).toBeFalse();
 		expect(result.profile.revision).toBe(1);
+	});
+
+	test("syncing a Profile with no collections is a no-op", () => {
+		const empty = reduceSessionSkillsProfile(profile({ additionalCollections: [], addedSkillIds: [] }), {
+			type: "remove-collection",
+			collectionId: "base",
+		}).profile;
+
+		const result = reduceSessionSkillsProfile(empty, {
+			type: "sync",
+			snapshots: { baseCollection: null, additionalCollections: [] },
+		});
+
+		expect(result.changed).toBeFalse();
+		expect(result.profile.baseCollection).toBeNull();
+		expect(result.effectiveSkillIds).toEqual([]);
 	});
 });
 
@@ -288,6 +359,23 @@ describe("SessionManager Session Skills Profile integration", () => {
 		expect(manager.getSessionSkillsState().profile?.disabledSkillIds).toEqual(["a"]);
 	});
 
+	test("restores an empty collection scope when switching between branches", async () => {
+		const manager = SessionManager.inMemory();
+		const initial = await manager.initializeSessionSkillsProfile(
+			{ baseCollection: collection("base", ["a"]) },
+			context(manager, 0),
+		);
+		const empty = await manager.updateSessionSkillsProfile(
+			{ type: "remove-collection", collectionId: "base" },
+			{ expectedActiveLeafId: initial.activeLeafId, expectedRevision: initial.profile.revision },
+		);
+
+		manager.branch(initial.entryId!);
+		expect(manager.getSessionSkillsState().profile?.baseCollection?.collectionId).toBe("base");
+		manager.branch(empty.entryId!);
+		expect(manager.getSessionSkillsState().profile?.baseCollection).toBeNull();
+	});
+
 	test("materializes an otherwise empty persisted session and restores Profile after reopen", async () => {
 		const storage = new MemorySessionStorage();
 		const manager = SessionManager.create("/cwd", "/sessions", storage);
@@ -300,6 +388,31 @@ describe("SessionManager Session Skills Profile integration", () => {
 		expect(reopened.getSessionSkillsState().profile).toMatchObject({
 			revision: 1,
 			baseCollection: { collectionId: "base" },
+		});
+		await reopened.close();
+	});
+
+	test("restores an explicitly empty collection scope after reopen", async () => {
+		const storage = new MemorySessionStorage();
+		const manager = SessionManager.create("/cwd", "/sessions", storage);
+		const initial = await manager.initializeSessionSkillsProfile(
+			{ baseCollection: collection("base", ["a"]) },
+			context(manager, 0),
+		);
+		await manager.updateSessionSkillsProfile(
+			{ type: "remove-collection", collectionId: "base" },
+			{ expectedActiveLeafId: initial.activeLeafId, expectedRevision: initial.profile.revision },
+		);
+		const sessionFile = manager.getSessionFile();
+		if (!sessionFile) throw new Error("Expected session file");
+		await manager.close();
+
+		const reopened = await SessionManager.open(sessionFile, "/sessions", storage, { initialCwd: "/cwd" });
+		expect(reopened.getSessionSkillsState().profile).toMatchObject({
+			schemaVersion: 2,
+			revision: 2,
+			baseCollection: null,
+			additionalCollections: [],
 		});
 		await reopened.close();
 	});

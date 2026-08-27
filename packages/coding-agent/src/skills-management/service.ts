@@ -85,7 +85,7 @@ function unique(values: readonly string[]): string[] {
 
 function memberSkillIds(profile: SessionSkillsProfile): string[] {
 	return unique([
-		...profile.baseCollection.skillIds,
+		...(profile.baseCollection?.skillIds ?? []),
 		...profile.additionalCollections.flatMap(collection => collection.skillIds),
 		...profile.addedSkillIds,
 	]);
@@ -466,12 +466,14 @@ export class SkillManagementService {
 	}
 
 	async #syncedSnapshots(profile: SessionSkillsProfile): Promise<{
-		baseCollection: CollectionSnapshot;
+		baseCollection: CollectionSnapshot | null;
 		additionalCollections: CollectionSnapshot[];
 	}> {
 		try {
 			return {
-				baseCollection: await this.#collectionSnapshot(profile.baseCollection.collectionId),
+				baseCollection: profile.baseCollection
+					? await this.#collectionSnapshot(profile.baseCollection.collectionId)
+					: null,
 				additionalCollections: await Promise.all(
 					profile.additionalCollections.map(collection => this.#collectionSnapshot(collection.collectionId)),
 				),

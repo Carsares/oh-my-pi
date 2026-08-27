@@ -23,17 +23,6 @@
   margin-bottom: var(--space-3);
 }
 
-.skill-session-collections .skill-management-form-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-}
-
-.skill-session-collections .skill-management-form-row > .ui-button {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
 .skill-management-search {
   min-width: min(100%, 240px);
   flex: 1;
@@ -278,23 +267,597 @@
   border-bottom: 0;
 }
 
-.skill-session-header {
-  margin-bottom: var(--space-3);
+.skill-session-root {
+  position: relative;
+  min-width: 0;
+  color: var(--text-primary);
 }
 
-.skill-session-collections,
-.skill-session-members {
+.skill-session-page-header,
+.skill-session-title-row,
+.skill-session-summary,
+.skill-session-summary-item,
+.skill-session-header-actions,
+.skill-session-source-heading,
+.skill-session-source-row,
+.skill-session-source-editor-actions,
+.skill-session-toolbar,
+.skill-session-add-control,
+.skill-session-filter-bar,
+.skill-session-group-heading,
+.skill-session-member-main,
+.skill-session-member-actions,
+.skill-session-status,
+.skill-session-detail-row,
+.skill-session-dialog-heading,
+.skill-session-dialog-actions,
+.skill-session-sync-summary {
+  display: flex;
+  align-items: center;
+}
+
+.skill-session-page-header {
+  min-width: 0;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-2) 0 var(--space-4);
+}
+
+.skill-session-title-block {
+  min-width: 0;
+}
+
+.skill-session-title-row {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.skill-session-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.skill-session-profile-meta,
+.skill-session-summary,
+.skill-session-source-meta,
+.skill-session-member-meta,
+.skill-session-group-count,
+.skill-session-dialog-description,
+.skill-session-detail-row,
+.skill-session-change-row span,
+.skill-session-change-row code {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.skill-session-profile-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-session-summary {
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.skill-session-summary-item {
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.skill-session-summary-dot,
+.skill-session-group-dot,
+.skill-session-status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-pill);
+  background: var(--text-secondary);
+}
+
+.skill-session-summary-dot--active,
+.skill-session-group-dot--active,
+.skill-session-status--active .skill-session-status-dot {
+  background: var(--success);
+}
+
+.skill-session-summary-dot--shadowed,
+.skill-session-group-dot--shadowed,
+.skill-session-group-dot--disabled,
+.skill-session-group-dot--inactive,
+.skill-session-status--shadowed .skill-session-status-dot,
+.skill-session-status--disabled .skill-session-status-dot,
+.skill-session-status--inactive .skill-session-status-dot {
+  background: var(--warning);
+}
+
+.skill-session-summary-dot--unavailable,
+.skill-session-group-dot--unavailable,
+.skill-session-status--unavailable .skill-session-status-dot {
+  background: var(--error);
+}
+
+.skill-session-header-actions {
+  flex: 0 0 auto;
+  gap: var(--space-2);
+}
+
+.skill-session-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
+  min-height: 520px;
+  border-top: 1px solid var(--border);
+}
+
+.skill-session-sources {
+  min-width: 0;
+  padding: var(--space-4) var(--space-3);
+  border-right: 1px solid var(--border);
+  background: var(--bg-glass);
+}
+
+.skill-session-source-heading {
+  min-height: var(--control-height-sm);
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.skill-session-source-close {
+  display: none;
+}
+
+.skill-session-source-list {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.skill-session-source-empty {
+  padding: var(--space-5) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.skill-session-source-row {
+  min-width: 0;
+  min-height: 52px;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.skill-session-source-info {
+  min-width: 0;
+}
+
+.skill-session-source-name,
+.skill-session-source-meta {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-session-source-meta {
+  margin-top: var(--space-0-5);
+}
+
+.skill-session-source-action {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.skill-session-add-collection {
+  margin-top: var(--space-2);
+  color: var(--accent);
+}
+
+.skill-session-source-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-glass-strong);
+}
+
+.skill-session-source-editor[hidden] {
+  display: none;
+}
+
+.skill-session-source-editor > .ui-select-menu {
+  width: 100%;
+}
+
+.skill-session-source-editor-actions {
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.skill-session-main {
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.skill-session-mobile-sources {
+  display: none;
+  width: 100%;
+  justify-content: flex-start;
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-session-toolbar {
+  min-width: 0;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.skill-session-search {
+  position: relative;
+  width: min(100%, 360px);
+  min-width: 180px;
+  flex: 1 1 auto;
+}
+
+.skill-session-search > svg {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: var(--space-3);
+  color: var(--text-secondary);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.skill-session-search > .ui-input {
+  width: 100%;
+  padding-left: var(--space-8);
+}
+
+.skill-session-add-control {
+  min-width: min(100%, 280px);
+  flex: 0 1 360px;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.skill-session-add-control > .ui-select-menu {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.skill-session-add-control > .ui-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.skill-session-filter-bar {
+  gap: var(--space-0-5);
+  margin-top: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.skill-session-filter {
+  flex: 0 0 auto;
+  padding: 0 var(--space-2);
+  color: var(--text-secondary);
+}
+
+.skill-session-filter.is-active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.skill-session-member-group {
   margin-top: var(--space-4);
 }
 
-@media (max-width: 720px) {
-  .skill-collections-layout {
-    grid-template-columns: 1fr;
+.skill-session-member-group[hidden],
+.skill-session-member[hidden],
+.skill-session-member-empty[hidden] {
+  display: none;
+}
+
+.skill-session-group-heading {
+  min-height: var(--control-height-sm);
+  gap: var(--space-2);
+}
+
+.skill-session-group-title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.skill-session-member-list {
+  border-top: 1px solid var(--border);
+}
+
+.skill-session-member {
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.skill-session-member-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 60px;
+  padding: var(--space-2) 0;
+}
+
+.skill-session-member-main {
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.skill-session-expand {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+.skill-session-expand svg {
+  transition: transform var(--duration) var(--ease);
+}
+
+.skill-session-expand[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.skill-session-member-copy {
+  min-width: 0;
+}
+
+.skill-session-member-name,
+.skill-session-member-meta {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-session-member-name {
+  font-weight: 600;
+}
+
+.skill-session-member-meta {
+  margin-top: var(--space-0-5);
+}
+
+.skill-session-member-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.skill-session-status {
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.skill-session-status--active {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
+}
+
+.skill-session-status--shadowed,
+.skill-session-status--disabled,
+.skill-session-status--inactive {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+}
+
+.skill-session-status--unavailable {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: var(--error);
+}
+
+.skill-session-member-details {
+  margin: 0 0 var(--space-3) calc(var(--control-height-xs) + var(--space-2));
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--border-hover);
+  background: var(--bg-glass);
+}
+
+.skill-session-member-details[hidden] {
+  display: none;
+}
+
+.skill-session-detail-row {
+  min-width: 0;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.skill-session-detail-row:first-child {
+  margin-top: 0;
+}
+
+.skill-session-detail-label {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+.skill-session-detail-row code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.skill-session-reason-list {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+  color: var(--warning);
+  font-size: var(--font-size-sm);
+}
+
+.skill-session-member-empty {
+  padding: var(--space-6) 0;
+  text-align: center;
+}
+
+.skill-session-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.skill-session-dialog-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(0 0 0 / 0.36);
+}
+
+.skill-session-dialog {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg-solid);
+  box-shadow: var(--shadow-lg);
+}
+
+.skill-session-dialog--sync {
+  width: min(440px, 92vw);
+  height: 100%;
+  padding: var(--space-5);
+}
+
+.skill-session-dialog--confirmation {
+  width: min(440px, calc(100vw - var(--space-6)));
+  max-height: min(560px, calc(100vh - var(--space-6)));
+  align-self: center;
+  margin: auto;
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.skill-session-dialog-heading {
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.skill-session-dialog-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.skill-session-dialog-description {
+  margin: var(--space-2) 0 var(--space-4);
+  line-height: 1.5;
+}
+
+.skill-session-dialog-actions {
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-5);
+}
+
+.skill-session-sync-summary {
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.skill-session-sync-count {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.skill-session-sync-count--added {
+  color: var(--success);
+}
+
+.skill-session-sync-count--removed {
+  color: var(--error);
+}
+
+.skill-session-sync-count--winner {
+  color: var(--warning);
+}
+
+.skill-session-change-section {
+  margin-top: var(--space-4);
+}
+
+.skill-session-change-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-md);
+}
+
+.skill-session-change-row {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.skill-session-change-row code {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 800px) {
+  .skill-session-layout {
+    display: block;
+    min-height: 0;
   }
 
-  .skill-session-collections .skill-management-form-row {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
+  .skill-session-sources {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .skill-session-layout.is-sources-open .skill-session-sources {
+    display: block;
+  }
+
+  .skill-session-source-close,
+  .skill-session-mobile-sources {
+    display: inline-flex;
+  }
+
+  .skill-session-layout.is-sources-open .skill-session-mobile-sources {
+    display: none;
+  }
+
+  .skill-session-main {
+    padding: var(--space-3) 0 var(--space-4);
+  }
+
+  .skill-collections-layout {
+    grid-template-columns: 1fr;
   }
 
   .skill-management-member {
@@ -304,5 +867,73 @@
 
   .skill-management-actions {
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 600px) {
+  .skill-session-page-header,
+  .skill-session-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .skill-session-header-actions {
+    justify-content: flex-end;
+  }
+
+  .skill-session-search,
+  .skill-session-add-control {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex-basis: auto;
+  }
+
+  .skill-session-member-summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  .skill-session-member-actions {
+    flex-wrap: wrap;
+    padding-left: calc(var(--control-height-xs) + var(--space-2));
+  }
+
+  .skill-session-member-details {
+    margin-left: calc(var(--control-height-xs) + var(--space-2));
+  }
+
+  .skill-session-dialog--sync {
+    width: 100%;
+    padding: var(--space-4);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .skill-session-header-actions,
+  .skill-session-add-control {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .skill-session-header-actions > .ui-button,
+  .skill-session-add-control > .ui-button,
+  .skill-session-add-control > .ui-select-menu {
+    width: 100%;
+  }
+
+  .skill-session-member-actions {
+    padding-left: 0;
+  }
+
+  .skill-session-member-details {
+    margin-left: 0;
+  }
+
+  .skill-session-dialog--confirmation {
+    width: calc(100vw - var(--space-4));
+    max-height: calc(100vh - var(--space-4));
+    padding: var(--space-4);
   }
 }

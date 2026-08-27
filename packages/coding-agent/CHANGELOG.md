@@ -6,6 +6,10 @@
 
 - Added current-context breakdowns and cumulative journal usage to `get_session_stats` RPC responses.
 
+### Changed
+
+- Session skill collections can now all be removed, allowing a session to use no collection-provided Skills while retaining manually added Skills.
+
 ## [18.0.4] - 2026-08-24
 
 ### Added

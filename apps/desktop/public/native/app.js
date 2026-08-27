@@ -1211,7 +1211,7 @@ async function switchSession(sessionId) {
           roles: summarizeMessageRoles(diskMessages),
         });
         const renderStartedAt = performance.now();
-        const hadInFlightPrompt = renderHistory(diskMessages);
+        const hadInFlightPrompt = renderHistory(diskMessages, { preserveContextPopup: false });
         convNav.rebuild();
         console.info("[SESSION-LOAD] switch disk history rendered", {
           sessionId,
@@ -1818,6 +1818,7 @@ async function handleRuntimeEvent(event) {
           event.message.usage ?? null,
           "",
           event.message.contextSnapshot ?? null,
+          getMessageContextKey(event.message),
         );
         setSessionCost(sessionTotalCost + (event.message.usage?.cost?.total ?? 0));
         headerStatusBar?.applyLiveUsage?.(event.message.usage ?? null);
@@ -1993,7 +1994,14 @@ function renderToolCallBlocks(blocks, toolResults, targetContainer) {
   return count;
 }
 
-function renderHistory(messages) {
+function getMessageContextKey(message, index = -1) {
+  const stableId = message?.id || message?.entryId || message?.responseId;
+  if (stableId) return String(stableId);
+  if (Number.isFinite(message?.timestamp)) return `assistant:${message.timestamp}`;
+  return index >= 0 ? `assistant:index:${index}` : null;
+}
+
+function renderHistory(messages, { preserveContextPopup = true } = {}) {
   console.info("[SESSION-LOAD] renderHistory start", {
     sessionId: target.sessionId,
     messageCount: messages.length,
@@ -2001,6 +2009,9 @@ function renderHistory(messages) {
     existingChildCount: messagesElement?.children?.length ?? null,
   });
   const hadInFlightPrompt = extensionUi.requeueForegroundPrompt();
+  const contextPopupState = preserveContextPopup
+    ? messageRenderer.captureMessageContextPopupState()
+    : null;
   const expandedProcessGroups = captureExpandedProcessGroups(messagesElement);
   messageRenderer.clear();
   toolRenderer.clear();
@@ -2072,6 +2083,7 @@ function renderHistory(messages) {
     for (let i = bodyStart; i < end; i++) {
       const message = messages[i];
       if (message.role !== "assistant") continue;
+      const contextKey = getMessageContextKey(message, i);
 
       if (i === finalAssistantIdx) {
         const { processBlocks, answerBlocks } = splitFinalAssistantBlocks(message.content);
@@ -2091,6 +2103,8 @@ function renderHistory(messages) {
               },
               false,
               true,
+              null,
+              contextKey,
             );
           }
           const remainingProcessBlocks = processBlocks.filter((b) => b.type !== "text");
@@ -2104,6 +2118,7 @@ function renderHistory(messages) {
               false,
               true,
               ensureGroup().body,
+              contextKey,
             );
             if (el) stepCount += 1;
           }
@@ -2125,6 +2140,7 @@ function renderHistory(messages) {
               false,
               true,
               ensureGroup().body,
+              contextKey,
             );
             if (el) stepCount += 1;
           }
@@ -2141,10 +2157,18 @@ function renderHistory(messages) {
             },
             false,
             true,
+            null,
+            contextKey,
           );
         }
       } else {
-        const el = messageRenderer.renderAssistantMessage(message, false, true, ensureGroup().body);
+        const el = messageRenderer.renderAssistantMessage(
+          message,
+          false,
+          true,
+          ensureGroup().body,
+          contextKey,
+        );
         if (el) stepCount += 1;
         toolCallCount += renderToolCallBlocks(message.content ?? [], toolResults, group.body);
       }
@@ -2161,6 +2185,7 @@ function renderHistory(messages) {
 
   const highlighted = applyActiveSearchHighlight();
   if (highlighted === 0) messageRenderer.forceScrollToBottom();
+  messageRenderer.restoreMessageContextPopupState(contextPopupState);
   logMessagesDom("renderHistory complete", {
     sessionId: target.sessionId,
     inputCount: messages.length,

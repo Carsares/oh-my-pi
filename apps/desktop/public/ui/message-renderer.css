@@ -131,7 +131,7 @@
 }
 
 .message-context-viz {
-  width: 300px;
+  width: 420px;
 }
 
 .message-context-heading-row {
@@ -224,17 +224,17 @@
   border-color: var(--accent-text);
 }
 
-.message-context-call code,
-.message-context-skill code {
+.message-context-call code {
   min-width: 0;
   color: var(--text-primary);
   overflow-wrap: anywhere;
 }
 
-.message-context-skill span {
+.message-context-skill code {
+  flex: 1;
   min-width: 0;
+  color: var(--text-primary);
   overflow: hidden;
-  color: var(--text-tertiary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

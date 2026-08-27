@@ -95,6 +95,7 @@ export class MessageRenderer {
           this._messageContextPopup.button,
           this._messageContextPopup.snapshot,
           this._messageContextPopup.details,
+          this._messageContextPopup.contextKey,
         );
       if (this.container.querySelector(".welcome")) {
         this.renderWelcome(this.lastWelcomeOptions || {});
@@ -108,6 +109,25 @@ export class MessageRenderer {
     this.container.replaceChildren();
     this._messageContextSnapshots.clear();
     this.isNearBottom = true;
+  }
+
+  captureMessageContextPopupState() {
+    if (!this._messageContextPopup?.contextKey) return null;
+    return {
+      contextKey: this._messageContextPopup.contextKey,
+      details: this._messageContextPopup.details,
+    };
+  }
+
+  restoreMessageContextPopupState(state) {
+    if (!state?.contextKey || !this.container) return false;
+    const button = [...this.container.querySelectorAll("[data-message-context-key]")].find(
+      (candidate) => candidate.dataset.messageContextKey === state.contextKey,
+    );
+    const snapshot = button?._messageContextSnapshot;
+    if (!button || !snapshot) return false;
+    this._renderMessageContextPopup(button, snapshot, Boolean(state.details), state.contextKey);
+    return true;
   }
 
   clearSearchHighlights() {
@@ -246,7 +266,13 @@ export class MessageRenderer {
     return div;
   }
 
-  renderAssistantMessage(message, isStreaming = false, isHistory = false, targetContainer = null) {
+  renderAssistantMessage(
+    message,
+    isStreaming = false,
+    isHistory = false,
+    targetContainer = null,
+    contextKey = null,
+  ) {
     const welcome = this.container.querySelector(".welcome");
     if (welcome) welcome.remove();
 
@@ -301,7 +327,9 @@ export class MessageRenderer {
 
     const footer = div.querySelector(".message-footer");
     if (footer && message.usage) {
-      footer.appendChild(this._createMessageUsageSummary(message.usage, message.contextSnapshot));
+      footer.appendChild(
+        this._createMessageUsageSummary(message.usage, message.contextSnapshot, contextKey),
+      );
       if (!hasThinking) this._appendMessageCost(footer, message.usage);
     }
 
@@ -314,7 +342,7 @@ export class MessageRenderer {
     return div;
   }
 
-  _createMessageUsageSummary(usage, contextSnapshot = null) {
+  _createMessageUsageSummary(usage, contextSnapshot = null, contextKey = null) {
     const input = Math.max(0, Number(usage?.input) || 0);
     const output = Math.max(0, Number(usage?.output) || 0);
     const cacheRead = Math.max(0, Number(usage?.cacheRead) || 0);
@@ -335,12 +363,14 @@ export class MessageRenderer {
       inputButton.dataset.messageUsageInput = "true";
       inputButton.dataset.input = element.dataset.input;
       inputButton.dataset.snapshot = JSON.stringify(contextSnapshot);
+      inputButton._messageContextSnapshot = contextSnapshot;
+      if (contextKey) inputButton.dataset.messageContextKey = contextKey;
       for (const call of contextSnapshot.toolCalls ?? []) {
         if (call?.callId) this._messageContextSnapshots.set(call.callId, contextSnapshot);
       }
       inputButton.addEventListener("click", (event) => {
         event.stopPropagation();
-        this._toggleMessageContextPopup(inputButton, contextSnapshot);
+        this._toggleMessageContextPopup(inputButton, contextSnapshot, contextKey);
       });
       element.append(inputButton, document.createTextNode(" · "));
       const output = document.createElement("span");
@@ -374,12 +404,12 @@ export class MessageRenderer {
     });
   }
 
-  _toggleMessageContextPopup(button, snapshot) {
+  _toggleMessageContextPopup(button, snapshot, contextKey = null) {
     if (this._messageContextPopup?.button === button) {
       this._hideMessageContextPopup();
       return;
     }
-    this._renderMessageContextPopup(button, snapshot);
+    this._renderMessageContextPopup(button, snapshot, false, contextKey);
   }
 
   _hideMessageContextPopup() {
@@ -387,7 +417,7 @@ export class MessageRenderer {
     this._messageContextPopup = null;
   }
 
-  _renderMessageContextPopup(button, snapshot, details = false) {
+  _renderMessageContextPopup(button, snapshot, details = false, contextKey = null) {
     this._hideMessageContextPopup();
     const breakdown = snapshot?.contextBreakdown;
     if (!breakdown) return;
@@ -410,7 +440,7 @@ export class MessageRenderer {
     detailsButton.setAttribute("aria-pressed", String(details));
     detailsButton.addEventListener("click", (event) => {
       event.stopPropagation();
-      this._renderMessageContextPopup(button, snapshot, !details);
+      this._renderMessageContextPopup(button, snapshot, !details, contextKey);
     });
     headingRow.append(heading, detailsButton);
     popup.appendChild(headingRow);
@@ -477,7 +507,7 @@ export class MessageRenderer {
     popup.style.position = "fixed";
     popup.style.left = `${Math.min(Math.max(gap, rect.left), Math.max(gap, window.innerWidth - popupRect.width - gap))}px`;
     popup.style.top = `${Math.min(Math.max(gap, top), Math.max(gap, window.innerHeight - popupRect.height - gap))}px`;
-    this._messageContextPopup = { button, popup, snapshot, details };
+    this._messageContextPopup = { button, popup, snapshot, details, contextKey };
   }
 
   updateToolCallStatus(toolCallId, status) {
@@ -491,6 +521,7 @@ export class MessageRenderer {
         this._messageContextPopup.button,
         snapshot,
         this._messageContextPopup.details,
+        this._messageContextPopup.contextKey,
       );
     }
   }
@@ -575,9 +606,7 @@ export class MessageRenderer {
       item.className = "message-context-skill";
       const name = document.createElement("code");
       name.textContent = skill.name;
-      const source = document.createElement("span");
-      source.textContent = skill.path || skill.source || "";
-      item.append(name, source);
+      item.appendChild(name);
       list.appendChild(item);
     }
     if (list.children.length > 0) section.append(heading, list);
@@ -707,7 +736,13 @@ export class MessageRenderer {
     return { text, thinking };
   }
 
-  finalizeStreamingMessage(messageElement, usage = null, thinking = "", contextSnapshot = null) {
+  finalizeStreamingMessage(
+    messageElement,
+    usage = null,
+    thinking = "",
+    contextSnapshot = null,
+    contextKey = null,
+  ) {
     const contentDiv = messageElement.querySelector(".message-content");
     let finalThinking = "";
     if (contentDiv) {
@@ -748,7 +783,7 @@ export class MessageRenderer {
       if (copyableText) footer.appendChild(this._createCopyButton());
 
       if (usage) {
-        footer.appendChild(this._createMessageUsageSummary(usage, contextSnapshot));
+        footer.appendChild(this._createMessageUsageSummary(usage, contextSnapshot, contextKey));
         if (!finalThinking) this._appendMessageCost(footer, usage);
       }
 

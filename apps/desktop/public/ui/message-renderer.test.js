@@ -256,8 +256,59 @@ describe("MessageRenderer streaming markdown preview", () => {
     expect(popup.textContent).toContain("Tools provided");
     expect(popup.textContent).toContain("Succeeded");
     expect(popup.textContent).toContain("Skills provided");
+    expect(popup.textContent).not.toContain("/workspace/skills/review/SKILL.md");
+    expect(popup.querySelector(".message-context-skill span")).toBeNull();
     popup.querySelector(".message-context-file").click();
     expect(previews).toEqual(["/workspace/AGENTS.md"]);
+  });
+
+  it("restores an open context popup after history messages are re-rendered", () => {
+    const snapshot = {
+      contextBreakdown: {
+        contextWindow: 1000,
+        usedTokens: 640,
+        systemPromptTokens: 100,
+        systemToolsTokens: 200,
+        systemContextTokens: 80,
+        skillsTokens: 60,
+        messagesTokens: 200,
+      },
+      providedSkills: [{ name: "review", path: "/workspace/skills/review/SKILL.md" }],
+    };
+    const oldElement = renderer.renderAssistantMessage(
+      {
+        content: "Restored answer",
+        usage: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } },
+        contextSnapshot: snapshot,
+      },
+      false,
+      true,
+      null,
+      "assistant-1",
+    );
+    oldElement.querySelector("[data-message-usage-input]").click();
+    renderer._messageContextPopup.popup.querySelector(".message-context-details-btn").click();
+    const popupState = renderer.captureMessageContextPopupState();
+
+    renderer.clear();
+    const newElement = renderer.renderAssistantMessage(
+      {
+        content: "Restored answer",
+        usage: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } },
+        contextSnapshot: snapshot,
+      },
+      false,
+      true,
+      null,
+      "assistant-1",
+    );
+
+    expect(renderer.restoreMessageContextPopupState(popupState)).toBe(true);
+    expect(renderer._messageContextPopup.button).toBe(
+      newElement.querySelector("[data-message-usage-input]"),
+    );
+    expect(renderer._messageContextPopup.details).toBe(true);
+    expect(renderer._messageContextPopup.popup.textContent).toContain("Skills provided");
   });
 
   it("keeps a partial code block previewing as a code block", () => {

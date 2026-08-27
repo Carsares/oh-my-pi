@@ -914,6 +914,19 @@ export type AssistantRetryRecovery =
 export interface ContextSnapshot {
 	promptTokens: number; // authoritative provider prompt/input tokens
 	nonMessageTokens: number; // estimated non-message total at send time
+	/** Token categories captured for the provider request that produced this message. */
+	contextBreakdown?: {
+		contextWindow: number;
+		usedTokens: number;
+		systemPromptTokens: number;
+		systemToolsTokens: number;
+		systemContextTokens: number;
+		skillsTokens: number;
+		messagesTokens: number;
+	};
+	/** Tools and skills observed in the completed assistant request. */
+	usedTools?: string[];
+	usedSkills?: string[];
 	/** Estimated prompt tokens removed by local history rewrites after this provider snapshot was recorded. */
 	historyRewriteTokensRemoved?: number;
 	/**

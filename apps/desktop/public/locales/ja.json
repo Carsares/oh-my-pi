@@ -76,6 +76,12 @@
     "costTitle": "costTitle",
     "summary": "In {in} · Out {out} · Cache {cache}",
     "messageSummary": "入力 {input} · 出力 {output} · キャッシュ率 {cache}",
+    "messageInput": "入力 {input}",
+    "messageOutput": "出力 {output}",
+    "messageCache": "キャッシュ率 {cache}",
+    "inputBreakdownTitle": "今回の入力の内訳",
+    "toolsUsed": "使用したツール",
+    "skillsUsed": "使用したスキル",
     "inputSummary": "In {in}",
     "outputSummary": "Out {out}",
     "sessionUsageTitle": "Session tokens (input / output / cache)"

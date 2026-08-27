@@ -47,7 +47,6 @@ import {
 import {
 	type CompactionPreparation,
 	type CompactionResult,
-	calculatePromptTokens,
 	collectEntriesForBranchSummary,
 	generateBranchSummary,
 	type ShakeConfig,
@@ -467,6 +466,35 @@ function cloneMessageEndNotification(message: AgentMessage): AgentMessage {
 	return snapshot as unknown as AgentMessage;
 }
 
+function collectUsedSkillNames(messages: readonly AgentMessage[], assistant: AssistantMessage): string[] {
+	const names = new Set<string>();
+	let assistantIndex = messages.indexOf(assistant);
+	if (assistantIndex < 0) {
+		assistantIndex = messages.findIndex(
+			message => message.role === "assistant" && message.timestamp === assistant.timestamp,
+		);
+	}
+	let startIndex = 0;
+	if (assistantIndex >= 0) {
+		startIndex = assistantIndex;
+		while (startIndex > 0 && messages[startIndex - 1]?.role !== "assistant") startIndex--;
+	}
+	for (const message of messages.slice(startIndex, assistantIndex >= 0 ? assistantIndex : undefined)) {
+		if (message.role !== "custom" || message.customType !== SKILL_PROMPT_MESSAGE_TYPE) continue;
+		if (isRecord(message.details) && typeof message.details.name === "string") names.add(message.details.name);
+	}
+	for (const block of assistant.content) {
+		if (block.type !== "toolCall") continue;
+		const serialized = JSON.stringify(block.arguments);
+		if (typeof serialized !== "string") continue;
+		const matches = serialized.matchAll(/skill:\/\/([^/?#\s'"`)\\;&|<>($]+)/g);
+		for (const match of matches) {
+			if (match[1]) names.add(match[1]);
+		}
+	}
+	return [...names];
+}
+
 const INTERRUPTED_THINKING_MIN_CHARS = 60;
 
 export class AgentSession {
@@ -625,6 +653,7 @@ export class AgentSession {
 	#usagePreflightReadyModel: Model | undefined;
 	#detachUsageBeforeQueueDequeue: (() => void) | undefined;
 	#detachUsageBeforeModelCall: (() => void) | undefined;
+	#detachContextSnapshotBeforeModelCall: (() => void) | undefined;
 
 	#transformContext: (messages: AgentMessage[], signal?: AbortSignal) => AgentMessage[] | Promise<AgentMessage[]>;
 	#onPayload: SimpleStreamOptions["onPayload"] | undefined;
@@ -1176,6 +1205,12 @@ export class AgentSession {
 			sessionId: () => this.sessionId,
 		};
 		this.#stats = new SessionStatsTracker(statsHost);
+		// Capture each provider-bound request after the agent has folded in tool
+		// results and steering messages. The pending prompt estimate above only
+		// describes the first request in a turn; this hook also covers tool loops.
+		this.#detachContextSnapshotBeforeModelCall = this.agent.addBeforeModelCall(context => {
+			this.#stats.captureProviderContextSnapshot(context, this.model?.contextWindow ?? 0);
+		});
 		const memoryHost: SessionMemoryHost = {
 			agent: this.agent,
 			settings: this.settings,
@@ -2052,6 +2087,17 @@ export class AgentSession {
 		this.sessionManager.appendCustomEntry(TOOL_EXECUTION_START_CUSTOM_TYPE, data);
 	}
 
+	/** Attach request provenance while the completed assistant message is still mutable. */
+	#annotateAssistantContextSnapshot(message: AssistantMessage): void {
+		this.#stats.stampAssistantSnapshot(message);
+		const snapshot = message.contextSnapshot;
+		if (!snapshot) return;
+		const tools = message.content.flatMap(block => (block.type === "toolCall" ? [block.name] : []));
+		const skills = collectUsedSkillNames(this.messages, message);
+		if (tools.length > 0) snapshot.usedTools = [...new Set([...(snapshot.usedTools ?? []), ...tools])];
+		if (skills.length > 0) snapshot.usedSkills = [...new Set([...(snapshot.usedSkills ?? []), ...skills])];
+	}
+
 	#recordSessionExit(reason: postmortem.Reason | "dispose"): void {
 		if (this.#exitRecorded) return;
 		this.#exitRecorded = true;
@@ -2393,14 +2439,7 @@ export class AgentSession {
 			const assistantMsg = message as AssistantMessage;
 			if (this.#recovery.isClassifierRefusal(assistantMsg)) return;
 			if (isEmptyErrorTurn(assistantMsg)) return;
-			if (assistantMsg.stopReason !== "aborted" && assistantMsg.stopReason !== "error" && assistantMsg.usage) {
-				assistantMsg.contextSnapshot = {
-					promptTokens: calculatePromptTokens(assistantMsg.usage),
-					nonMessageTokens:
-						this.#stats.pendingNonMessageTokens ?? computeNonMessageTokens(this, this.agent.tokenizer),
-					compactionEpoch: this.#stats.compactionEpoch,
-				};
-			}
+			this.#annotateAssistantContextSnapshot(assistantMsg);
 		}
 		const skipPersistedRewindResult =
 			message.role === "toolResult" &&
@@ -2570,6 +2609,7 @@ export class AgentSession {
 		// toolUse) assistant message and skipping settle-only work.
 		if (event.type === "message_end" && event.message.role === "assistant") {
 			this.#lastAssistantMessage = event.message;
+			this.#annotateAssistantContextSnapshot(event.message);
 		}
 		// Plan-mode internal transition: stamp `SILENT_ABORT_MARKER` on the
 		// persisted message BEFORE the obfuscator's display-side copy below.
@@ -3970,6 +4010,8 @@ export class AgentSession {
 		this.#detachUsageBeforeQueueDequeue = undefined;
 		this.#detachUsageBeforeModelCall?.();
 		this.#detachUsageBeforeModelCall = undefined;
+		this.#detachContextSnapshotBeforeModelCall?.();
+		this.#detachContextSnapshotBeforeModelCall = undefined;
 		this.#memory.cancelLocalMemoryStartup();
 		this.#titleGenerationAbortController.abort();
 		this.#abortAutolearnCapture();
@@ -5964,6 +6006,7 @@ export class AgentSession {
 				promptTokens,
 				nonMessageTokens,
 				cutoffCount: this.messages.length + messages.length,
+				contextBreakdown: breakdown,
 			});
 			// Commit the plan-reference delivery flag only now that the message is
 			// actually handed to agent.prompt. Every pre-send setup step above can

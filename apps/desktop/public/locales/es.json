@@ -76,6 +76,12 @@
     "costTitle": "costTitle",
     "summary": "In {in} · Out {out} · Cache {cache}",
     "messageSummary": "Entrada {input} · Salida {output} · Tasa de caché {cache}",
+    "messageInput": "Entrada {input}",
+    "messageOutput": "Salida {output}",
+    "messageCache": "Tasa de caché {cache}",
+    "inputBreakdownTitle": "Composición de esta entrada",
+    "toolsUsed": "Herramientas usadas",
+    "skillsUsed": "Habilidades usadas",
     "inputSummary": "In {in}",
     "outputSummary": "Out {out}",
     "sessionUsageTitle": "Session tokens (input / output / cache)"

@@ -18,6 +18,21 @@ const enMessages = {
   shortcuts: { focusInput: "Focus input", abort: "Abort" },
   usage: {
     messageSummary: "Input {input} · Output {output} · Cache rate {cache}",
+    messageInput: "Input {input}",
+    messageOutput: "Output {output}",
+    messageCache: "Cache rate {cache}",
+    inputBreakdownTitle: "This input breakdown",
+    toolsUsed: "Tools used",
+    skillsUsed: "Skills used",
+  },
+  context: {
+    used: "{pct}% used",
+    total: "{used} / {total}",
+    systemPrompt: "System prompt",
+    systemTools: "System tools",
+    systemContext: "System context",
+    skills: "Skills",
+    messages: "Messages",
   },
 };
 const zhMessages = {
@@ -36,6 +51,12 @@ const zhMessages = {
   shortcuts: { focusInput: "聚焦输入", abort: "中止" },
   usage: {
     messageSummary: "输入 {input} · 输出 {output} · 缓存利用率 {cache}",
+    messageInput: "输入 {input}",
+    messageOutput: "输出 {output}",
+    messageCache: "缓存利用率 {cache}",
+    inputBreakdownTitle: "本次输入构成",
+    toolsUsed: "使用的工具",
+    skillsUsed: "使用的技能",
   },
 };
 
@@ -144,6 +165,36 @@ describe("MessageRenderer streaming markdown preview", () => {
     expect(el.querySelector("[data-message-usage-summary]").textContent).toBe(
       "Input 0 · Output 42 · Cache rate --",
     );
+  });
+
+  it("opens the saved input breakdown instead of reading current session state", () => {
+    const el = renderer.renderAssistantMessage(
+      {
+        content: "Restored answer",
+        usage: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } },
+        contextSnapshot: {
+          contextBreakdown: {
+            contextWindow: 1000,
+            usedTokens: 640,
+            systemPromptTokens: 100,
+            systemToolsTokens: 200,
+            systemContextTokens: 80,
+            skillsTokens: 60,
+            messagesTokens: 200,
+          },
+          usedTools: ["read"],
+          usedSkills: ["review"],
+        },
+      },
+      false,
+      true,
+    );
+
+    el.querySelector("[data-message-usage-input]").click();
+
+    expect(document.querySelector(".message-context-viz").textContent).toContain("System tools");
+    expect(document.querySelector(".message-context-viz").textContent).toContain("read");
+    expect(document.querySelector(".message-context-viz").textContent).toContain("review");
   });
 
   it("keeps a partial code block previewing as a code block", () => {

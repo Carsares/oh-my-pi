@@ -1,6 +1,6 @@
 import { t } from "../i18n.js";
 
-const CONTEXT_CATEGORIES = [
+export const CONTEXT_CATEGORIES = [
   { field: "systemPromptTokens", key: "system-prompt", label: "context.systemPrompt" },
   { field: "systemToolsTokens", key: "system-tools", label: "context.systemTools" },
   { field: "systemContextTokens", key: "system-context", label: "context.systemContext" },

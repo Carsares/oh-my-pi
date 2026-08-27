@@ -5,7 +5,7 @@
  */
 
 import { onLocaleChange, t } from "../i18n.js";
-import { formatTokens } from "./context-viz.js";
+import { CONTEXT_CATEGORIES, formatTokens } from "./context-viz.js";
 import { initImageLightbox } from "./image-lightbox.js";
 import { renderMarkdown, renderStreamingMarkdown, renderUserMarkdown } from "./markdown.js";
 
@@ -52,6 +52,21 @@ export class MessageRenderer {
     this.isNearBottom = true;
     this.lastWelcomeOptions = null;
     this._destroyed = false;
+    this._messageContextPopup = null;
+    this._messageContextOutsideHandler = (event) => {
+      if (!this._messageContextPopup) return;
+      if (
+        event.target === this._messageContextPopup.button ||
+        this._messageContextPopup.popup.contains(event.target)
+      )
+        return;
+      this._hideMessageContextPopup();
+    };
+    this._messageContextKeydownHandler = (event) => {
+      if (event.key === "Escape") this._hideMessageContextPopup();
+    };
+    document.addEventListener("click", this._messageContextOutsideHandler);
+    document.addEventListener("keydown", this._messageContextKeydownHandler);
 
     initImageLightbox(this.container);
 
@@ -74,6 +89,11 @@ export class MessageRenderer {
       this.container.querySelectorAll("[data-message-usage-summary]").forEach((el) => {
         this._updateMessageUsageSummary(el);
       });
+      if (this._messageContextPopup)
+        this._renderMessageContextPopup(
+          this._messageContextPopup.button,
+          this._messageContextPopup.snapshot,
+        );
       if (this.container.querySelector(".welcome")) {
         this.renderWelcome(this.lastWelcomeOptions || {});
       }
@@ -82,6 +102,7 @@ export class MessageRenderer {
 
   clear() {
     if (!this.container) return;
+    this._hideMessageContextPopup();
     this.container.replaceChildren();
     this.isNearBottom = true;
   }
@@ -277,7 +298,7 @@ export class MessageRenderer {
 
     const footer = div.querySelector(".message-footer");
     if (footer && message.usage) {
-      footer.appendChild(this._createMessageUsageSummary(message.usage));
+      footer.appendChild(this._createMessageUsageSummary(message.usage, message.contextSnapshot));
       if (!hasThinking) this._appendMessageCost(footer, message.usage);
     }
 
@@ -290,7 +311,7 @@ export class MessageRenderer {
     return div;
   }
 
-  _createMessageUsageSummary(usage) {
+  _createMessageUsageSummary(usage, contextSnapshot = null) {
     const input = Math.max(0, Number(usage?.input) || 0);
     const output = Math.max(0, Number(usage?.output) || 0);
     const cacheRead = Math.max(0, Number(usage?.cacheRead) || 0);
@@ -304,16 +325,156 @@ export class MessageRenderer {
     element.dataset.output = formatTokens(output);
     element.dataset.cache =
       cacheRateBase > 0 ? `${((cacheRead / cacheRateBase) * 100).toFixed(1)}%` : "--";
+    if (contextSnapshot?.contextBreakdown) {
+      const inputButton = document.createElement("button");
+      inputButton.type = "button";
+      inputButton.className = "message-usage-input";
+      inputButton.dataset.messageUsageInput = "true";
+      inputButton.dataset.input = element.dataset.input;
+      inputButton.dataset.snapshot = JSON.stringify(contextSnapshot);
+      inputButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this._toggleMessageContextPopup(inputButton, contextSnapshot);
+      });
+      element.append(inputButton, document.createTextNode(" · "));
+      const output = document.createElement("span");
+      output.dataset.messageUsageOutput = "true";
+      const cache = document.createElement("span");
+      cache.dataset.messageUsageCache = "true";
+      element.append(output, document.createTextNode(" · "), cache);
+    }
     this._updateMessageUsageSummary(element);
     return element;
   }
 
   _updateMessageUsageSummary(element) {
-    element.textContent = t("usage.messageSummary", {
-      input: element.dataset.input,
+    const inputButton = element.querySelector("[data-message-usage-input]");
+    if (!inputButton) {
+      element.textContent = t("usage.messageSummary", {
+        input: element.dataset.input,
+        output: element.dataset.output,
+        cache: element.dataset.cache,
+      });
+      return;
+    }
+    inputButton.textContent = t("usage.messageInput", { input: element.dataset.input });
+    inputButton.title = t("usage.inputBreakdownTitle");
+    inputButton.setAttribute("aria-label", t("usage.inputBreakdownTitle"));
+    element.querySelector("[data-message-usage-output]").textContent = t("usage.messageOutput", {
       output: element.dataset.output,
+    });
+    element.querySelector("[data-message-usage-cache]").textContent = t("usage.messageCache", {
       cache: element.dataset.cache,
     });
+  }
+
+  _toggleMessageContextPopup(button, snapshot) {
+    if (this._messageContextPopup?.button === button) {
+      this._hideMessageContextPopup();
+      return;
+    }
+    this._renderMessageContextPopup(button, snapshot);
+  }
+
+  _hideMessageContextPopup() {
+    this._messageContextPopup?.popup.remove();
+    this._messageContextPopup = null;
+  }
+
+  _renderMessageContextPopup(button, snapshot) {
+    this._hideMessageContextPopup();
+    const breakdown = snapshot?.contextBreakdown;
+    if (!breakdown) return;
+    const popup = document.createElement("div");
+    popup.className = "context-viz message-context-viz";
+    popup.setAttribute("role", "dialog");
+    popup.setAttribute("aria-label", t("usage.inputBreakdownTitle"));
+
+    const heading = document.createElement("div");
+    heading.className = "context-viz-heading";
+    heading.textContent = t("usage.inputBreakdownTitle");
+    popup.appendChild(heading);
+
+    const overview = document.createElement("div");
+    overview.className = "context-viz-overview";
+    const used = document.createElement("strong");
+    used.textContent = t("context.used", {
+      pct:
+        breakdown.contextWindow > 0
+          ? ((breakdown.usedTokens / breakdown.contextWindow) * 100).toFixed(1)
+          : "0.0",
+    });
+    const total = document.createElement("span");
+    total.textContent = t("context.total", {
+      used: formatTokens(breakdown.usedTokens),
+      total: formatTokens(breakdown.contextWindow),
+    });
+    overview.append(used, total);
+    popup.appendChild(overview);
+
+    const bar = document.createElement("div");
+    bar.className = "context-bar";
+    for (const category of CONTEXT_CATEGORIES) {
+      const tokens = Math.max(0, Number(breakdown[category.field]) || 0);
+      if (tokens <= 0 || breakdown.contextWindow <= 0) continue;
+      const segment = document.createElement("span");
+      segment.className = `context-bar-segment context-color-${category.key}`;
+      segment.style.width = `${Math.min(100, (tokens / breakdown.contextWindow) * 100)}%`;
+      bar.appendChild(segment);
+    }
+    popup.appendChild(bar);
+
+    const legend = document.createElement("div");
+    legend.className = "context-legend";
+    for (const category of CONTEXT_CATEGORIES) {
+      const tokens = Math.max(0, Number(breakdown[category.field]) || 0);
+      const item = document.createElement("div");
+      item.className = "context-legend-item";
+      const label = document.createElement("span");
+      label.className = "context-legend-label";
+      const dot = document.createElement("span");
+      dot.className = `context-legend-dot context-color-${category.key}`;
+      label.append(dot, t(category.label));
+      const value = document.createElement("span");
+      value.className = "context-legend-value";
+      value.textContent = formatTokens(tokens);
+      item.append(label, value);
+      legend.appendChild(item);
+    }
+    popup.appendChild(legend);
+
+    this._appendUsedItems(popup, "usage.toolsUsed", snapshot.usedTools);
+    this._appendUsedItems(popup, "usage.skillsUsed", snapshot.usedSkills);
+    document.body.appendChild(popup);
+    const rect = button.getBoundingClientRect();
+    const popupRect = popup.getBoundingClientRect();
+    const gap = 8;
+    const top =
+      rect.top - popupRect.height - gap >= gap
+        ? rect.top - popupRect.height - gap
+        : rect.bottom + gap;
+    popup.style.position = "fixed";
+    popup.style.left = `${Math.min(Math.max(gap, rect.left), Math.max(gap, window.innerWidth - popupRect.width - gap))}px`;
+    popup.style.top = `${Math.min(Math.max(gap, top), Math.max(gap, window.innerHeight - popupRect.height - gap))}px`;
+    this._messageContextPopup = { button, popup, snapshot };
+  }
+
+  _appendUsedItems(popup, labelKey, items) {
+    if (!Array.isArray(items) || items.length === 0) return;
+    const section = document.createElement("section");
+    section.className = "message-context-used";
+    const heading = document.createElement("div");
+    heading.className = "context-viz-heading";
+    heading.textContent = t(labelKey);
+    const list = document.createElement("div");
+    list.className = "message-context-used-list";
+    for (const item of items) {
+      const value = document.createElement("code");
+      value.textContent = item;
+      list.appendChild(value);
+    }
+    section.append(heading, list);
+    popup.appendChild(section);
   }
 
   _appendMessageCost(footer, usage) {
@@ -421,7 +582,7 @@ export class MessageRenderer {
     return { text, thinking };
   }
 
-  finalizeStreamingMessage(messageElement, usage = null, thinking = "") {
+  finalizeStreamingMessage(messageElement, usage = null, thinking = "", contextSnapshot = null) {
     const contentDiv = messageElement.querySelector(".message-content");
     let finalThinking = "";
     if (contentDiv) {
@@ -462,7 +623,7 @@ export class MessageRenderer {
       if (copyableText) footer.appendChild(this._createCopyButton());
 
       if (usage) {
-        footer.appendChild(this._createMessageUsageSummary(usage));
+        footer.appendChild(this._createMessageUsageSummary(usage, contextSnapshot));
         if (!finalThinking) this._appendMessageCost(footer, usage);
       }
 
@@ -756,6 +917,9 @@ export class MessageRenderer {
       this.unsubscribeLocaleChange();
       this.unsubscribeLocaleChange = null;
     }
+    this._hideMessageContextPopup();
+    document.removeEventListener("click", this._messageContextOutsideHandler);
+    document.removeEventListener("keydown", this._messageContextKeydownHandler);
     this._scrollHandler = null;
     this.container = null;
   }

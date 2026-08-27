@@ -50,6 +50,48 @@ function createState() {
 }
 
 describe("Session Skills panel", () => {
+  it("exposes collection menus and enables actions only after a valid selection", async () => {
+    document.body.innerHTML = '<div id="session-skills"></div>';
+    const client = {
+      sessionGet: vi.fn(async () => createState()),
+      collectionsList: vi.fn(async () => ({
+        state: { revision: 6, defaultCollectionId: "local-all", collections: [] },
+        collections: [
+          { collectionId: "local-all", name: "All", skillIds: ["skill-a", "skill-b"] },
+          { collectionId: "focused", name: "Focused", skillIds: ["skill-a"] },
+        ],
+      })),
+      catalogList: vi.fn(async () => ({ entries: [] })),
+    };
+    const panel = setupSessionSkillsPanel({
+      container: document.getElementById("session-skills"),
+      client,
+    });
+    await panel.activate();
+
+    const collectionPanel = document.querySelector(".skill-session-collections");
+    const baseSelect = collectionPanel.querySelector("[data-session-base-collection]");
+    const addSelect = collectionPanel.querySelector("[data-session-add-collection]");
+    const [changeBaseButton, addCollectionButton] = collectionPanel.querySelectorAll(
+      ".skill-management-form-row > .ui-button",
+    );
+
+    expect(collectionPanel.querySelectorAll('[role="combobox"]')).toHaveLength(2);
+    expect(baseSelect.classList.contains("ui-select-native")).toBe(true);
+    expect(addSelect.classList.contains("ui-select-native")).toBe(true);
+    expect(changeBaseButton.disabled).toBe(true);
+    expect(addCollectionButton.disabled).toBe(true);
+
+    baseSelect.value = "focused";
+    baseSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    addSelect.value = "focused";
+    addSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(changeBaseButton.disabled).toBe(false);
+    expect(addCollectionButton.disabled).toBe(false);
+    panel.destroy();
+  });
+
   it("shows server winner states and sends activate plus revision-bound sync", async () => {
     document.body.innerHTML = '<div id="session-skills"></div>';
     const client = {

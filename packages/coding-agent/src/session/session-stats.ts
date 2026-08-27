@@ -5,7 +5,7 @@ import {
 	isTranscriptUsageAnchor,
 	type SessionMessageEntry,
 } from "@oh-my-pi/pi-agent-core/compaction";
-import type { AssistantMessage, Model, ProviderResponseMetadata, Usage } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, Context, Model, ProviderResponseMetadata, Usage } from "@oh-my-pi/pi-ai";
 import { isRecord } from "@oh-my-pi/pi-utils";
 import type { ModelRegistry } from "../config/model-registry";
 import type { ContextUsage } from "../extensibility/extensions/types";
@@ -22,6 +22,7 @@ interface PendingContextSnapshot {
 	promptTokens: number;
 	nonMessageTokens: number;
 	cutoffCount: number;
+	contextBreakdown?: ContextUsageBreakdown;
 	/**
 	 * Compaction epoch at rebase time. Distinguishes a genuinely fresh in-turn
 	 * anchor (same epoch) from a post-cutoff anchor that predates a mid-run
@@ -58,6 +59,7 @@ function contextUsageFromBreakdown(breakdown: ContextUsageBreakdown | undefined)
 export class SessionStatsTracker {
 	readonly #host: SessionStatsTrackerHost;
 	#pendingContextSnapshot: PendingContextSnapshot | undefined;
+	#providerContextSnapshot: PendingContextSnapshot | undefined;
 	#contextUsageRevision = 0;
 	#compactionEpoch = 0;
 
@@ -283,6 +285,55 @@ export class SessionStatsTracker {
 	/** Non-message token count captured for the active provider request. */
 	get pendingNonMessageTokens(): number | undefined {
 		return this.#pendingContextSnapshot?.nonMessageTokens;
+	}
+
+	/** Capture the fully assembled provider request without changing live usage arithmetic. */
+	captureProviderContextSnapshot(context: Context, contextWindow: number): void {
+		const nonMessage = computeNonMessageBreakdown(this.#host.session, this.#tokenizer);
+		const messageFragments = context.messages.map(message => JSON.stringify(message));
+		const messagesTokens = this.#tokenizer.countTokens(messageFragments);
+		const nonMessageTokens =
+			nonMessage.skillsTokens +
+			nonMessage.toolsTokens +
+			nonMessage.systemContextTokens +
+			nonMessage.systemPromptTokens;
+		const breakdown: ContextUsageBreakdown = {
+			contextWindow,
+			anchored: false,
+			usedTokens: nonMessageTokens + messagesTokens,
+			systemPromptTokens: nonMessage.systemPromptTokens,
+			systemToolsTokens: nonMessage.toolsTokens,
+			systemContextTokens: nonMessage.systemContextTokens,
+			skillsTokens: nonMessage.skillsTokens,
+			messagesTokens,
+		};
+		this.#providerContextSnapshot = {
+			promptTokens: breakdown.usedTokens,
+			nonMessageTokens,
+			contextBreakdown: breakdown,
+			cutoffCount: this.#host.agent.state.messages.length,
+			epoch: this.#compactionEpoch,
+		};
+	}
+
+	/** Stamp the request snapshot onto a completed assistant message. */
+	stampAssistantSnapshot(assistant: AssistantMessage): void {
+		if (assistant.stopReason === "aborted" || assistant.stopReason === "error" || !assistant.usage) return;
+		const pending = this.#providerContextSnapshot ?? this.#pendingContextSnapshot;
+		assistant.contextSnapshot = {
+			...assistant.contextSnapshot,
+			promptTokens: calculatePromptTokens(assistant.usage),
+			nonMessageTokens:
+				pending?.nonMessageTokens ??
+				assistant.contextSnapshot?.nonMessageTokens ??
+				computeNonMessageTokens(this.#host.session, this.#tokenizer),
+			...(pending?.contextBreakdown
+				? { contextBreakdown: pending.contextBreakdown }
+				: assistant.contextSnapshot?.contextBreakdown
+					? { contextBreakdown: assistant.contextSnapshot.contextBreakdown }
+					: {}),
+			compactionEpoch: this.#compactionEpoch,
+		};
 	}
 
 	/**

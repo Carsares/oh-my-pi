@@ -1813,7 +1813,12 @@ async function handleRuntimeEvent(event) {
     case "message_end":
       if (event.message?.role === "assistant" && streamingElement) {
         messageRenderer.updateStreamingMessage(streamingElement, event.message.content ?? []);
-        messageRenderer.finalizeStreamingMessage(streamingElement, event.message.usage ?? null);
+        messageRenderer.finalizeStreamingMessage(
+          streamingElement,
+          event.message.usage ?? null,
+          "",
+          event.message.contextSnapshot ?? null,
+        );
         setSessionCost(sessionTotalCost + (event.message.usage?.cost?.total ?? 0));
         headerStatusBar?.applyLiveUsage?.(event.message.usage ?? null);
         hydrateSessionStats();
@@ -2074,7 +2079,11 @@ function renderHistory(messages) {
           const leadingText = processBlocks.filter((b) => b.type === "text");
           if (leadingText.length > 0) {
             messageRenderer.renderAssistantMessage(
-              { content: leadingText, usage: message.usage },
+              {
+                content: leadingText,
+                usage: message.usage,
+                contextSnapshot: message.contextSnapshot,
+              },
               false,
               true,
             );
@@ -2082,7 +2091,11 @@ function renderHistory(messages) {
           const remainingProcessBlocks = processBlocks.filter((b) => b.type !== "text");
           if (remainingProcessBlocks.some((b) => b.type === "thinking")) {
             const el = messageRenderer.renderAssistantMessage(
-              { content: remainingProcessBlocks, usage: message.usage },
+              {
+                content: remainingProcessBlocks,
+                usage: message.usage,
+                contextSnapshot: message.contextSnapshot,
+              },
               false,
               true,
               ensureGroup().body,
@@ -2099,7 +2112,11 @@ function renderHistory(messages) {
         } else {
           if (processBlocks.some((b) => b.type === "text" || b.type === "thinking")) {
             const el = messageRenderer.renderAssistantMessage(
-              { content: processBlocks, usage: message.usage },
+              {
+                content: processBlocks,
+                usage: message.usage,
+                contextSnapshot: message.contextSnapshot,
+              },
               false,
               true,
               ensureGroup().body,
@@ -2112,7 +2129,11 @@ function renderHistory(messages) {
         }
         if (answerBlocks.length > 0) {
           messageRenderer.renderAssistantMessage(
-            { content: answerBlocks, usage: message.usage },
+            {
+              content: answerBlocks,
+              usage: message.usage,
+              contextSnapshot: message.contextSnapshot,
+            },
             false,
             true,
           );

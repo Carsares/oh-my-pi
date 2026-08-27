@@ -23,6 +23,17 @@
   margin-bottom: var(--space-3);
 }
 
+.skill-session-collections .skill-management-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.skill-session-collections .skill-management-form-row > .ui-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .skill-management-search {
   min-width: min(100%, 240px);
   flex: 1;
@@ -281,7 +292,11 @@
     grid-template-columns: 1fr;
   }
 
-  .skill-management-form-row,
+  .skill-session-collections .skill-management-form-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
   .skill-management-member {
     align-items: stretch;
     flex-direction: column;

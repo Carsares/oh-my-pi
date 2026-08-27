@@ -2,6 +2,7 @@
 // ABOUTME: Renders only server-provided memberStates and resolver outcomes; it never selects winners locally.
 
 import { onLocaleChange, t } from "../../i18n.js";
+import { enhanceSelect } from "../../ui/select-menu.js";
 import {
   compactSkillPath,
   renderSkillPanelMessage,
@@ -140,17 +141,58 @@ export function setupSessionSkillsPanel({ container, client, showError, showSucc
     const additionalIds = new Set(additional.map((snapshot) => snapshot.collectionId));
     const baseSelect = skillElement(
       "select",
-      { class: "ui-select", dataset: { sessionBaseCollection: "" } },
+      {
+        class: "ui-select",
+        dataset: { sessionBaseCollection: "" },
+        "aria-label": t("settings.skills.baseCollection"),
+      },
       collectionOptions(baseId),
     );
     const addSelect = skillElement(
       "select",
-      { class: "ui-select", dataset: { sessionAddCollection: "" } },
+      {
+        class: "ui-select skill-management-grow",
+        dataset: { sessionAddCollection: "" },
+        "aria-label": t("settings.skills.chooseCollection"),
+      },
       [
         skillElement("option", { value: "", text: t("settings.skills.chooseCollection") }),
         ...collectionOptions(null, new Set([baseId, ...additionalIds])),
       ],
     );
+    const changeBaseButton = skillElement("button", {
+      type: "button",
+      class: "ui-button ui-button--secondary",
+      text: t("settings.skills.changeBase"),
+      disabled: true,
+      onClick: () =>
+        void mutate((context) =>
+          client.sessionSetBaseCollection({
+            ...context,
+            collectionId: baseSelect.value,
+          }),
+        ),
+    });
+    const addCollectionButton = skillElement("button", {
+      type: "button",
+      class: "ui-button ui-button--secondary",
+      text: t("settings.skills.addCollection"),
+      disabled: true,
+      onClick: () => {
+        if (addSelect.value) {
+          void mutate((context) =>
+            client.sessionAddCollection({ ...context, collectionId: addSelect.value }),
+          );
+        }
+      },
+    });
+    const updateCollectionActions = () => {
+      changeBaseButton.disabled = busy || !baseSelect.value || baseSelect.value === baseId;
+      addCollectionButton.disabled = busy || !addSelect.value;
+    };
+    baseSelect.addEventListener("change", updateCollectionActions);
+    addSelect.addEventListener("change", updateCollectionActions);
+    updateCollectionActions();
     return skillElement("section", { class: "ui-panel skill-session-collections" }, [
       skillElement("h3", { text: t("settings.skills.sessionCollections") }),
       skillElement("div", { class: "skill-management-form-row" }, [
@@ -158,19 +200,7 @@ export function setupSessionSkillsPanel({ container, client, showError, showSucc
           skillElement("span", { text: t("settings.skills.baseCollection") }),
           baseSelect,
         ]),
-        skillElement("button", {
-          type: "button",
-          class: "ui-button ui-button--secondary",
-          text: t("settings.skills.changeBase"),
-          disabled: busy,
-          onClick: () =>
-            void mutate((context) =>
-              client.sessionSetBaseCollection({
-                ...context,
-                collectionId: baseSelect.value,
-              }),
-            ),
-        }),
+        changeBaseButton,
       ]),
       skillElement(
         "div",
@@ -196,22 +226,7 @@ export function setupSessionSkillsPanel({ container, client, showError, showSucc
           ]),
         ),
       ),
-      skillElement("div", { class: "skill-management-form-row" }, [
-        addSelect,
-        skillElement("button", {
-          type: "button",
-          class: "ui-button ui-button--secondary",
-          text: t("settings.skills.addCollection"),
-          disabled: busy,
-          onClick: () => {
-            if (addSelect.value) {
-              void mutate((context) =>
-                client.sessionAddCollection({ ...context, collectionId: addSelect.value }),
-              );
-            }
-          },
-        }),
-      ]),
+      skillElement("div", { class: "skill-management-form-row" }, [addSelect, addCollectionButton]),
     ]);
   }
 
@@ -439,6 +454,11 @@ export function setupSessionSkillsPanel({ container, client, showError, showSucc
       renderMembers(current),
     ].filter(Boolean);
     container.replaceChildren(...content);
+    for (const select of container.querySelectorAll(
+      ".skill-session-collections select.ui-select",
+    )) {
+      enhanceSelect(select);
+    }
   }
 
   return {

@@ -3,6 +3,8 @@ import {
 	hasOpus47ApiRestrictions,
 	isClaudeModelId,
 	isGeminiModelId,
+	isGlm52ReasoningEffortModelId,
+	isGlm53ReasoningEffortModelId,
 	isGlmVisionModelId,
 	isGrokModelId,
 	isGrokMultiAgentModelId,
@@ -275,7 +277,7 @@ describe("isOpenAIModelId", () => {
 });
 
 describe("isReasoningGlmModelId", () => {
-	test("matches the glm-4.5+ base / air / turbo reasoning lines", () => {
+	test("matches the glm-4.5+ base / air / turbo reasoning lines and GLM-5.3+ Flash", () => {
 		expect(isReasoningGlmModelId("glm-4.5")).toBe(true);
 		expect(isReasoningGlmModelId("glm-4.5-air")).toBe(true);
 		expect(isReasoningGlmModelId("glm-4.6")).toBe(true);
@@ -286,19 +288,29 @@ describe("isReasoningGlmModelId", () => {
 		expect(isReasoningGlmModelId("glm-5.2")).toBe(true);
 		// Family match is future-proof: new integers need no allowlist entry.
 		expect(isReasoningGlmModelId("glm-5.3")).toBe(true);
+		expect(isReasoningGlmModelId("glm-5.3-flash")).toBe(true);
 		expect(isReasoningGlmModelId("glm-6")).toBe(true);
 		// Namespaced ids are stripped before classification.
 		expect(isReasoningGlmModelId("z-ai/glm-5-turbo")).toBe(true);
 	});
 
-	test("excludes pre-4.5, vision, flash, and preview SKUs", () => {
+	test("excludes pre-4.5, vision, pre-5.3 Flash, FlashX, and preview SKUs", () => {
 		expect(isReasoningGlmModelId("glm-4")).toBe(false);
 		expect(isReasoningGlmModelId("glm-4.4")).toBe(false);
 		expect(isReasoningGlmModelId("glm-5-preview")).toBe(false);
 		expect(isReasoningGlmModelId("glm-4.5-flash")).toBe(false);
+		expect(isReasoningGlmModelId("glm-5.2-flash")).toBe(false);
 		expect(isReasoningGlmModelId("glm-4.7-flashx")).toBe(false);
+		expect(isReasoningGlmModelId("glm-5.3-flashx")).toBe(false);
 		expect(isReasoningGlmModelId("glm-4.5v")).toBe(false);
 		expect(isReasoningGlmModelId("qwen3.5")).toBe(false);
+	});
+
+	test("classifies GLM-5.3 Flash as a mandatory reasoning-effort model", () => {
+		expect(isGlm52ReasoningEffortModelId("glm-5.3-flash")).toBe(true);
+		expect(isGlm53ReasoningEffortModelId("glm-5.3-flash")).toBe(true);
+		expect(isGlm52ReasoningEffortModelId("glm-5.2-flash")).toBe(false);
+		expect(isGlm53ReasoningEffortModelId("glm-5.3-flashx")).toBe(false);
 	});
 
 	test("matches uppercase provider-prefixed GLM ids", () => {

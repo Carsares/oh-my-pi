@@ -28,6 +28,22 @@ function glm53OnFireworks(): Model<"openai-completions"> {
 	} satisfies ModelSpec<"openai-completions">);
 }
 
+function glm53FlashOnZhipu(): Model<"openai-completions"> {
+	return buildModel({
+		id: "glm-5.3-flash",
+		name: "GLM-5.3-Flash",
+		api: "openai-completions",
+		provider: "zhipu-coding-plan",
+		baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+		reasoning: true,
+		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 200_000,
+		maxTokens: 131_072,
+		compat: { thinkingFormat: "zai" },
+	} satisfies ModelSpec<"openai-completions">);
+}
+
 function glm53OnZaiAnthropic(): Model<"anthropic-messages"> {
 	return buildModel({
 		id: "glm-5.3",
@@ -66,6 +82,13 @@ async function captureChatBody(
 describe("GLM-5.3 reasoning effort wire mapping", () => {
 	it("derives the uniform low/high/max ladder on a direct GLM host (not the GLM-5.2 host-specific shape)", () => {
 		const model = glm53OnFireworks();
+		expect(model.thinking?.efforts).toEqual([Effort.Low, Effort.High, Effort.Max]);
+		expect(model.thinking?.requiresEffort).toBe(true);
+		expect(model.thinking?.defaultLevel).toBe(Effort.Max);
+	});
+
+	it("derives the same mandatory effort contract for GLM-5.3-Flash", () => {
+		const model = glm53FlashOnZhipu();
 		expect(model.thinking?.efforts).toEqual([Effort.Low, Effort.High, Effort.Max]);
 		expect(model.thinking?.requiresEffort).toBe(true);
 		expect(model.thinking?.defaultLevel).toBe(Effort.Max);

@@ -487,7 +487,7 @@ fn open_native_workspace_window(
         .icon(icon)
         .map_err(|error| error.to_string())?;
 
-    let builder = builder.decorations(true);
+    let builder = builder.decorations(true).fullscreen(true);
     let window = builder.build().map_err(|error| error.to_string())?;
     set_window_workspace(app, window.label(), &target.workspace_id);
     Ok(())
@@ -883,6 +883,7 @@ fn open_native_home_window(app: &AppHandle, host_origin: &str) -> Result<(), Str
     .icon(icon)
     .map_err(|error| error.to_string())?
     .decorations(true)
+    .fullscreen(true)
     .build()
     .map_err(|error| error.to_string())?;
     Ok(())

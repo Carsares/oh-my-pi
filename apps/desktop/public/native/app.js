@@ -1827,6 +1827,7 @@ async function handleRuntimeEvent(event) {
       }
       break;
     case "tool_execution_start":
+      messageRenderer.updateToolCallStatus?.(event.toolCallId, "started");
       toolRenderer.createToolCard({ ...event, status: "pending" });
       filePreviewFollow.onToolStart(event);
       break;
@@ -1838,6 +1839,10 @@ async function handleRuntimeEvent(event) {
       });
       break;
     case "tool_execution_end":
+      messageRenderer.updateToolCallStatus?.(
+        event.toolCallId,
+        event.isError ? "failed" : "completed",
+      );
       toolRenderer.finalizeToolCard(event.toolCallId, event.result, event.isError);
       if (event.toolName === "todo" && !event.isError)
         todoMirrorPanel.applyToolResult(event.result);

@@ -5,7 +5,16 @@ import {
 	isTranscriptUsageAnchor,
 	type SessionMessageEntry,
 } from "@oh-my-pi/pi-agent-core/compaction";
-import type { AssistantMessage, Context, Model, ProviderResponseMetadata, Usage } from "@oh-my-pi/pi-ai";
+import type {
+	AssistantMessage,
+	Context,
+	ContextSkill,
+	ContextSourceFile,
+	ContextToolCall,
+	Model,
+	ProviderResponseMetadata,
+	Usage,
+} from "@oh-my-pi/pi-ai";
 import { isRecord } from "@oh-my-pi/pi-utils";
 import type { ModelRegistry } from "../config/model-registry";
 import type { ContextUsage } from "../extensibility/extensions/types";
@@ -23,6 +32,9 @@ interface PendingContextSnapshot {
 	nonMessageTokens: number;
 	cutoffCount: number;
 	contextBreakdown?: ContextUsageBreakdown;
+	systemPromptFiles?: ContextSourceFile[];
+	providedTools?: string[];
+	providedSkills?: ContextSkill[];
 	/**
 	 * Compaction epoch at rebase time. Distinguishes a genuinely fresh in-turn
 	 * anchor (same epoch) from a post-cutoff anchor that predates a mid-run
@@ -39,6 +51,8 @@ export interface SessionStatsTrackerHost {
 	modelRegistry: ModelRegistry;
 	model(): Model | undefined;
 	sessionId(): string;
+	contextSourceFiles?: () => readonly ContextSourceFile[];
+	contextSkills?: () => readonly ContextSkill[];
 }
 
 function correctedPromptTokens(assistant: AssistantMessage): number {
@@ -311,6 +325,9 @@ export class SessionStatsTracker {
 			promptTokens: breakdown.usedTokens,
 			nonMessageTokens,
 			contextBreakdown: breakdown,
+			systemPromptFiles: [...(this.#host.contextSourceFiles?.() ?? [])],
+			providedTools: [...new Set((context.tools ?? []).map(tool => tool.name))],
+			providedSkills: (this.#host.contextSkills?.() ?? []).map(skill => ({ ...skill })),
 			cutoffCount: this.#host.agent.state.messages.length,
 			epoch: this.#compactionEpoch,
 		};
@@ -332,6 +349,16 @@ export class SessionStatsTracker {
 				: assistant.contextSnapshot?.contextBreakdown
 					? { contextBreakdown: assistant.contextSnapshot.contextBreakdown }
 					: {}),
+			...(pending?.systemPromptFiles ? { systemPromptFiles: pending.systemPromptFiles } : {}),
+			...(pending?.providedTools ? { providedTools: pending.providedTools } : {}),
+			...(pending?.providedSkills ? { providedSkills: pending.providedSkills } : {}),
+			...(assistant.content.some(block => block.type === "toolCall")
+				? {
+						toolCalls: assistant.content.flatMap((block): ContextToolCall[] =>
+							block.type === "toolCall" ? [{ name: block.name, callId: block.id, status: "requested" }] : [],
+						),
+					}
+				: {}),
 			compactionEpoch: this.#compactionEpoch,
 		};
 	}

@@ -134,6 +134,36 @@
   width: 300px;
 }
 
+.message-context-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.message-context-details-btn {
+  width: var(--space-4);
+  height: var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.message-context-details-btn:hover,
+.message-context-details-btn:focus-visible {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
 .message-context-used {
   margin-top: var(--space-3);
   padding-top: var(--space-3);
@@ -156,6 +186,72 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
   font-size: var(--font-size-sm);
+}
+
+.message-context-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.message-context-file,
+.message-context-call,
+.message-context-skill {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1-5);
+  color: var(--text-secondary);
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-size: var(--font-size-sm);
+  text-align: left;
+}
+
+.message-context-file {
+  width: 100%;
+  color: var(--accent-text);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.message-context-file:hover,
+.message-context-file:focus-visible {
+  border-color: var(--accent-text);
+}
+
+.message-context-call code,
+.message-context-skill code {
+  min-width: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.message-context-skill span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-context-status {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+}
+
+.message-context-status.status-completed {
+  color: var(--success);
+}
+.message-context-status.status-failed {
+  color: var(--error);
+}
+.message-context-status.status-started {
+  color: var(--warning);
 }
 
 /* biome-ignore lint/style/noDescendingSpecificity: base styles defined after scoped overrides intentionally */

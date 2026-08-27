@@ -924,6 +924,14 @@ export interface ContextSnapshot {
 		skillsTokens: number;
 		messagesTokens: number;
 	};
+	/** Files that contributed prompt/context text and can be opened in the workspace. */
+	systemPromptFiles?: ContextSourceFile[];
+	/** Tool names included in the provider-bound request. */
+	providedTools?: string[];
+	/** Tool calls requested by the model, with execution state when known. */
+	toolCalls?: ContextToolCall[];
+	/** Skills included in the provider-bound prompt. */
+	providedSkills?: ContextSkill[];
 	/** Tools and skills observed in the completed assistant request. */
 	usedTools?: string[];
 	usedSkills?: string[];
@@ -937,6 +945,29 @@ export interface ContextSnapshot {
 	 */
 	compactionEpoch?: number;
 	lastMessageTimestamp?: number;
+}
+
+/** A prompt source file retained for request-level context inspection. */
+export interface ContextSourceFile {
+	name: string;
+	path: string;
+	category: "system-prompt" | "context" | "rule";
+	openable?: boolean;
+}
+
+/** A skill available to the provider-bound request. */
+export interface ContextSkill {
+	name: string;
+	path?: string;
+	source?: string;
+	mode?: "provided" | "loaded" | "referenced";
+}
+
+/** A model-requested tool call and its observed execution state. */
+export interface ContextToolCall {
+	name: string;
+	callId?: string;
+	status?: "requested" | "started" | "completed" | "failed";
 }
 
 export interface AssistantMessage {

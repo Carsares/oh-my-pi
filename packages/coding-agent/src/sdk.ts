@@ -3074,6 +3074,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 					: options.systemPrompt;
 			return {
 				systemPrompt: typeof customPrompt === "string" ? [customPrompt] : customPrompt,
+				systemPromptFiles: defaultPrompt.systemPromptFiles,
 			};
 		};
 
@@ -3214,12 +3215,8 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 		}
 
 		setSessionActiveToolNames(initialToolNames);
-		const { systemPrompt } = await logger.time(
-			"buildSystemPrompt",
-			rebuildSystemPrompt,
-			initialToolNames,
-			toolRegistry,
-		);
+		const initialPrompt = await logger.time("buildSystemPrompt", rebuildSystemPrompt, initialToolNames, toolRegistry);
+		const { systemPrompt } = initialPrompt;
 
 		const promptTemplates = await promptTemplatesPromise;
 		toolSession.promptTemplates = promptTemplates;
@@ -3562,6 +3559,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 			extensionRunner,
 			customCommands: customCommandsResult.commands,
 			skills,
+			initialSystemPromptFiles: initialPrompt.systemPromptFiles,
 			skillWarnings,
 			skillsReloadable: options.skills === undefined,
 			skillsSettings: settings.getGroup("skills"),

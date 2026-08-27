@@ -5,7 +5,7 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
-import type { ToolExample, TSchema } from "@oh-my-pi/pi-ai";
+import type { ContextSourceFile, ToolExample, TSchema } from "@oh-my-pi/pi-ai";
 import { renderToolInventory } from "@oh-my-pi/pi-ai/dialect";
 import {
 	$env,
@@ -79,6 +79,11 @@ interface AlwaysApplyRule {
 
 function normalizePromptBlock(content: string): string {
 	return prompt.format(content, { renderPhase: "post-render" }).trim();
+}
+
+function isPromptFileOpenable(filePath: string, cwd: string): boolean {
+	const relative = path.relative(cwd, filePath);
+	return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
 function splitComparablePromptBlocks(content: string | null | undefined): string[] {
@@ -652,6 +657,8 @@ export interface BuildSystemPromptOptions {
 export interface BuildSystemPromptResult {
 	/** Ordered system prompt blocks. Providers should preserve entries as distinct messages/blocks. */
 	systemPrompt: string[];
+	/** Files whose contents contributed to the prompt and can be opened by the desktop UI. */
+	systemPromptFiles?: readonly ContextSourceFile[];
 	/**
 	 * Names of `xd://` devices whose catalog/protocol section this prompt renders.
 	 * Empty/undefined when no catalog was emitted (no mounted devices, or a custom
@@ -767,6 +774,11 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	const systemPromptCustomizationPromise: Promise<string | null> = callerControlsCustomPrompt
 		? Promise.resolve(null)
 		: logger.time("loadSystemPromptFiles", loadSystemPromptFiles, { cwd: resolvedCwd });
+	const systemPromptFilePathsPromise: Promise<string[]> = callerControlsCustomPrompt
+		? Promise.resolve([])
+		: loadCapability<SystemPromptFile>(systemPromptCapability.id, { cwd: resolvedCwd }).then(result =>
+				result.items.map(item => item.path),
+			);
 	const contextFilesPromise = (async () => {
 		const primary = providedContextFiles
 			? providedContextFiles
@@ -828,6 +840,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		resolvedCustomPrompt,
 		resolvedAppendPrompt,
 		systemPromptCustomization,
+		systemPromptFilePaths,
 		contextFiles,
 		skills,
 		workspaceTree,
@@ -851,6 +864,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 			prepDefaults.resolvedAppendPrompt,
 		),
 		withDeadline("loadSystemPromptFiles", systemPromptCustomizationPromise, prepDefaults.systemPromptCustomization),
+		withDeadline("loadSystemPromptFilePaths", systemPromptFilePathsPromise, []),
 		withDeadline("loadProjectContextFiles", contextFilesPromise, prepDefaults.contextFiles).then(
 			dedupeContainedContextFiles,
 		),
@@ -1019,5 +1033,32 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	// default template; a resolved custom prompt uses a template that omits it.
 	const xdevCatalogNames =
 		!resolvedCustomPrompt && xdevTools.length > 0 ? xdevTools.map(mounted => mounted.name) : undefined;
-	return { systemPrompt, xdevCatalogNames };
+	const systemPromptFiles = [
+		...systemPromptFilePaths.map(path => ({
+			name: path.split(/[\\/]/).pop() ?? path,
+			path,
+			category: "system-prompt" as const,
+			openable: isPromptFileOpenable(path, resolvedCwd),
+		})),
+		...contextFiles.map(file => ({
+			name: file.path.split(/[\\/]/).pop() ?? file.path,
+			path: file.path,
+			category: "context" as const,
+			openable: isPromptFileOpenable(file.path, resolvedCwd),
+		})),
+		...(rules ?? []).map(rule => ({
+			name: rule.name,
+			path: rule.path,
+			category: "rule" as const,
+			openable: isPromptFileOpenable(rule.path, resolvedCwd),
+		})),
+		...(alwaysApplyRules ?? []).map(rule => ({
+			name: rule.name,
+			path: rule.path,
+			category: "rule" as const,
+			openable: isPromptFileOpenable(rule.path, resolvedCwd),
+		})),
+	] satisfies ContextSourceFile[];
+	const uniqueSystemPromptFiles = [...new Map(systemPromptFiles.map(file => [file.path, file])).values()];
+	return { systemPrompt, xdevCatalogNames, systemPromptFiles: uniqueSystemPromptFiles };
 }

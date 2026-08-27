@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Agent, AgentTool } from "@oh-my-pi/pi-agent-core";
-import type { Model } from "@oh-my-pi/pi-ai";
+import type { ContextSourceFile, Model } from "@oh-my-pi/pi-ai";
 import { isRecord, logger, prompt, stringProperty, untilAborted } from "@oh-my-pi/pi-utils";
 import { reset as resetCapabilities } from "../capability";
 import type { ModelRegistry } from "../config/model-registry";
@@ -87,11 +87,16 @@ interface SessionToolsOptions {
 		toolNames: string[],
 		tools: Map<string, AgentTool>,
 		options?: { directToolNames?: readonly string[]; skills?: readonly Skill[] },
-	) => Promise<{ systemPrompt: string[]; xdevCatalogNames?: readonly string[] }>;
+	) => Promise<{
+		systemPrompt: string[];
+		xdevCatalogNames?: readonly string[];
+		systemPromptFiles?: readonly ContextSourceFile[];
+	}>;
 	getMcpServerInstructions?: () => Map<string, string> | undefined;
 	xdev?: XdevState;
 	setActiveToolNames?: (names: Iterable<string>) => void;
 	baseSystemPrompt: string[];
+	initialSystemPromptFiles?: readonly ContextSourceFile[];
 	skills?: Skill[];
 	skillWarnings?: SkillWarning[];
 	skillsSettings?: SkillsSettings;
@@ -104,6 +109,7 @@ export interface PreparedSkillsUpdate {
 	readonly warnings: readonly SkillWarning[];
 	readonly settings: SkillsSettings;
 	readonly systemPrompt?: readonly string[];
+	readonly systemPromptFiles?: readonly ContextSourceFile[];
 	readonly xdevCatalogNames?: readonly string[];
 	readonly toolSignature?: string;
 }
@@ -248,6 +254,7 @@ export class SessionTools {
 	 * prompt carries no catalog (no mounts, or a custom prompt that omits the section).
 	 */
 	#basePromptXdevNames: ReadonlySet<string> = new Set();
+	#systemPromptFiles: readonly ContextSourceFile[] = [];
 	#toolRegistryMutationScope = new AsyncLocalStorage<boolean>();
 	#toolRegistryMutationTail: Promise<void> = Promise.resolve();
 	#promptModelKey: string | undefined;
@@ -294,6 +301,7 @@ export class SessionTools {
 		if (this.#xdev) this.#xdev.decorateExecution = tool => this.#wrapToolForAcpPermission(tool);
 		this.#setActiveToolNames = options.setActiveToolNames;
 		this.#baseSystemPrompt = options.baseSystemPrompt;
+		this.#systemPromptFiles = [...(options.initialSystemPromptFiles ?? [])];
 		this.#skills = options.skills ?? [];
 		this.#skillWarnings = options.skillWarnings ?? [];
 		this.#skillsSettings = options.skillsSettings;
@@ -309,6 +317,11 @@ export class SessionTools {
 	/** Current stable base system prompt. */
 	get baseSystemPrompt(): string[] {
 		return this.#baseSystemPrompt;
+	}
+
+	/** Prompt source files contributing to the current base system prompt. */
+	get systemPromptFiles(): readonly ContextSourceFile[] {
+		return this.#systemPromptFiles;
 	}
 
 	/** Replaces the controller-owned base prompt without applying it to the agent. */
@@ -957,6 +970,7 @@ export class SessionTools {
 		this.#codeModeDirectToolNames = codeMode.active ? appliedNames : undefined;
 
 		let rebuiltSystemPrompt: string[] | undefined;
+		let rebuiltSystemPromptFiles: readonly ContextSourceFile[] | undefined;
 		let rebuiltSignature: string | undefined;
 		let rebuiltXdevCatalogNames: readonly string[] | undefined;
 		try {
@@ -981,6 +995,7 @@ export class SessionTools {
 						this.#rebuildSystemPrompt(promptToolNames, this.#toolRegistry, { directToolNames }),
 					);
 					rebuiltSystemPrompt = built.systemPrompt;
+					rebuiltSystemPromptFiles = built.systemPromptFiles;
 					rebuiltSignature = signature;
 					rebuiltXdevCatalogNames = built.xdevCatalogNames;
 				}
@@ -1013,6 +1028,7 @@ export class SessionTools {
 		if (rebuiltSystemPrompt && rebuiltSignature) {
 			if (this.#lastAppliedToolSignature !== undefined) this.#host.clearInheritedProviderPromptCacheKey();
 			this.#baseSystemPrompt = rebuiltSystemPrompt;
+			this.#systemPromptFiles = [...(rebuiltSystemPromptFiles ?? this.#systemPromptFiles)];
 			this.#host.clearMemoryPromotionSnapshot();
 			this.#applyAgentSystemPrompt(this.#baseSystemPrompt);
 			this.#lastAppliedToolSignature = rebuiltSignature;
@@ -1240,6 +1256,7 @@ export class SessionTools {
 			return {
 				...prepared,
 				systemPrompt: [...built.systemPrompt],
+				systemPromptFiles: [...(built.systemPromptFiles ?? [])],
 				xdevCatalogNames: [...(built.xdevCatalogNames ?? [])],
 				toolSignature: this.#computeAppliedToolSignature(promptToolNames, promptTools, directToolNames),
 			};
@@ -1257,6 +1274,7 @@ export class SessionTools {
 				this.#baseSystemPrompt.length !== prepared.systemPrompt.length ||
 				this.#baseSystemPrompt.some((part, index) => part !== prepared.systemPrompt?.[index]);
 			this.#baseSystemPrompt = [...prepared.systemPrompt];
+			this.#systemPromptFiles = [...(prepared.systemPromptFiles ?? this.#systemPromptFiles)];
 			this.#basePromptXdevNames = new Set(prepared.xdevCatalogNames);
 			this.#host.clearMemoryPromotionSnapshot();
 			if (promptChanged) this.#host.clearInheritedProviderPromptCacheKey();
@@ -1583,6 +1601,7 @@ export class SessionTools {
 		const built = await this.#rebuildSystemPrompt(promptToolNames, this.#toolRegistry, { directToolNames });
 		if (this.#host.isDisposed()) return;
 		this.#baseSystemPrompt = built.systemPrompt;
+		this.#systemPromptFiles = [...(built.systemPromptFiles ?? [])];
 		this.#basePromptXdevNames = new Set(built.xdevCatalogNames);
 		this.#host.clearMemoryPromotionSnapshot();
 		if (

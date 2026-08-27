@@ -8,6 +8,7 @@ import type {
 } from "@oh-my-pi/pi-agent-core";
 import type {
 	Context,
+	ContextSourceFile,
 	Effort,
 	ImageContent,
 	Message,
@@ -152,6 +153,8 @@ export interface AgentSessionConfig {
 	extensionRunner?: ExtensionRunner;
 	/** Loaded skills already discovered by the SDK. */
 	skills?: Skill[];
+	/** Prompt source files captured during the initial system prompt build. */
+	initialSystemPromptFiles?: readonly ContextSourceFile[];
 	/** Skill loading warnings already captured by the SDK. */
 	skillWarnings?: SkillWarning[];
 	/** Whether runtime reloads may rediscover disk-backed skills. */
@@ -215,7 +218,11 @@ export interface AgentSessionConfig {
 	rebuildSystemPrompt?: (
 		toolNames: string[],
 		tools: Map<string, AgentTool>,
-	) => Promise<{ systemPrompt: string[]; xdevCatalogNames?: readonly string[] }>;
+	) => Promise<{
+		systemPrompt: string[];
+		xdevCatalogNames?: readonly string[];
+		systemPromptFiles?: readonly ContextSourceFile[];
+	}>;
 	/** Tools mounted under `xd://`, for `/tools` display. */
 	getXdevToolEntries?: () => Array<{ name: string; summary: string }>;
 	/** `xd://` presentation state backed by the canonical tool map. */

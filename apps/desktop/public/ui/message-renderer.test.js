@@ -22,8 +22,19 @@ const enMessages = {
     messageOutput: "Output {output}",
     messageCache: "Cache rate {cache}",
     inputBreakdownTitle: "This input breakdown",
+    inputBreakdownDetails: "View input details",
+    systemPromptFiles: "System prompt files",
+    toolsProvided: "Tools provided",
+    toolsCalled: "Tools called",
     toolsUsed: "Tools used",
+    skillsProvided: "Skills provided",
     skillsUsed: "Skills used",
+    toolStatus: {
+      requested: "Requested",
+      started: "Running",
+      completed: "Succeeded",
+      failed: "Failed",
+    },
   },
   context: {
     used: "{pct}% used",
@@ -55,8 +66,19 @@ const zhMessages = {
     messageOutput: "输出 {output}",
     messageCache: "缓存利用率 {cache}",
     inputBreakdownTitle: "本次输入构成",
+    inputBreakdownDetails: "查看本次输入详情",
+    systemPromptFiles: "系统提示词文件",
+    toolsProvided: "传入的工具",
+    toolsCalled: "调用的工具",
     toolsUsed: "使用的工具",
+    skillsProvided: "传入的技能",
     skillsUsed: "使用的技能",
+    toolStatus: {
+      requested: "已请求",
+      started: "执行中",
+      completed: "成功",
+      failed: "失败",
+    },
   },
 };
 
@@ -195,6 +217,47 @@ describe("MessageRenderer streaming markdown preview", () => {
     expect(document.querySelector(".message-context-viz").textContent).toContain("System tools");
     expect(document.querySelector(".message-context-viz").textContent).toContain("read");
     expect(document.querySelector(".message-context-viz").textContent).toContain("review");
+  });
+
+  it("opens full provenance details and emits file previews", () => {
+    const el = renderer.renderAssistantMessage(
+      {
+        content: "Restored answer",
+        usage: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } },
+        contextSnapshot: {
+          contextBreakdown: {
+            contextWindow: 1000,
+            usedTokens: 640,
+            systemPromptTokens: 100,
+            systemToolsTokens: 200,
+            systemContextTokens: 80,
+            skillsTokens: 60,
+            messagesTokens: 200,
+          },
+          systemPromptFiles: [
+            { name: "AGENTS.md", path: "/workspace/AGENTS.md", category: "context" },
+          ],
+          providedTools: ["read", "bash"],
+          toolCalls: [{ name: "read", callId: "call-1", status: "completed" }],
+          providedSkills: [{ name: "review", path: "/workspace/skills/review/SKILL.md" }],
+        },
+      },
+      false,
+      true,
+    );
+
+    const previews = [];
+    container.addEventListener("previewfile", (event) => previews.push(event.detail.path));
+    el.querySelector("[data-message-usage-input]").click();
+    renderer._messageContextPopup.popup.querySelector(".message-context-details-btn").click();
+
+    const popup = renderer._messageContextPopup.popup;
+    expect(popup.textContent).toContain("System prompt files");
+    expect(popup.textContent).toContain("Tools provided");
+    expect(popup.textContent).toContain("Succeeded");
+    expect(popup.textContent).toContain("Skills provided");
+    popup.querySelector(".message-context-file").click();
+    expect(previews).toEqual(["/workspace/AGENTS.md"]);
   });
 
   it("keeps a partial code block previewing as a code block", () => {

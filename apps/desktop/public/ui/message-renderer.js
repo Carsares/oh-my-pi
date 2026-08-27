@@ -53,6 +53,7 @@ export class MessageRenderer {
     this.lastWelcomeOptions = null;
     this._destroyed = false;
     this._messageContextPopup = null;
+    this._messageContextSnapshots = new Map();
     this._messageContextOutsideHandler = (event) => {
       if (!this._messageContextPopup) return;
       if (
@@ -93,6 +94,7 @@ export class MessageRenderer {
         this._renderMessageContextPopup(
           this._messageContextPopup.button,
           this._messageContextPopup.snapshot,
+          this._messageContextPopup.details,
         );
       if (this.container.querySelector(".welcome")) {
         this.renderWelcome(this.lastWelcomeOptions || {});
@@ -104,6 +106,7 @@ export class MessageRenderer {
     if (!this.container) return;
     this._hideMessageContextPopup();
     this.container.replaceChildren();
+    this._messageContextSnapshots.clear();
     this.isNearBottom = true;
   }
 
@@ -332,6 +335,9 @@ export class MessageRenderer {
       inputButton.dataset.messageUsageInput = "true";
       inputButton.dataset.input = element.dataset.input;
       inputButton.dataset.snapshot = JSON.stringify(contextSnapshot);
+      for (const call of contextSnapshot.toolCalls ?? []) {
+        if (call?.callId) this._messageContextSnapshots.set(call.callId, contextSnapshot);
+      }
       inputButton.addEventListener("click", (event) => {
         event.stopPropagation();
         this._toggleMessageContextPopup(inputButton, contextSnapshot);
@@ -381,7 +387,7 @@ export class MessageRenderer {
     this._messageContextPopup = null;
   }
 
-  _renderMessageContextPopup(button, snapshot) {
+  _renderMessageContextPopup(button, snapshot, details = false) {
     this._hideMessageContextPopup();
     const breakdown = snapshot?.contextBreakdown;
     if (!breakdown) return;
@@ -390,10 +396,24 @@ export class MessageRenderer {
     popup.setAttribute("role", "dialog");
     popup.setAttribute("aria-label", t("usage.inputBreakdownTitle"));
 
+    const headingRow = document.createElement("div");
+    headingRow.className = "message-context-heading-row";
     const heading = document.createElement("div");
     heading.className = "context-viz-heading";
     heading.textContent = t("usage.inputBreakdownTitle");
-    popup.appendChild(heading);
+    const detailsButton = document.createElement("button");
+    detailsButton.type = "button";
+    detailsButton.className = "message-context-details-btn";
+    detailsButton.textContent = "?";
+    detailsButton.title = t("usage.inputBreakdownDetails");
+    detailsButton.setAttribute("aria-label", t("usage.inputBreakdownDetails"));
+    detailsButton.setAttribute("aria-pressed", String(details));
+    detailsButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this._renderMessageContextPopup(button, snapshot, !details);
+    });
+    headingRow.append(heading, detailsButton);
+    popup.appendChild(headingRow);
 
     const overview = document.createElement("div");
     overview.className = "context-viz-overview";
@@ -445,6 +465,7 @@ export class MessageRenderer {
 
     this._appendUsedItems(popup, "usage.toolsUsed", snapshot.usedTools);
     this._appendUsedItems(popup, "usage.skillsUsed", snapshot.usedSkills);
+    if (details) this._appendContextDetails(popup, snapshot);
     document.body.appendChild(popup);
     const rect = button.getBoundingClientRect();
     const popupRect = popup.getBoundingClientRect();
@@ -456,7 +477,111 @@ export class MessageRenderer {
     popup.style.position = "fixed";
     popup.style.left = `${Math.min(Math.max(gap, rect.left), Math.max(gap, window.innerWidth - popupRect.width - gap))}px`;
     popup.style.top = `${Math.min(Math.max(gap, top), Math.max(gap, window.innerHeight - popupRect.height - gap))}px`;
-    this._messageContextPopup = { button, popup, snapshot };
+    this._messageContextPopup = { button, popup, snapshot, details };
+  }
+
+  updateToolCallStatus(toolCallId, status) {
+    const snapshot = this._messageContextSnapshots.get(toolCallId);
+    if (!snapshot || !Array.isArray(snapshot.toolCalls)) return;
+    snapshot.toolCalls = snapshot.toolCalls.map((call) =>
+      call?.callId === toolCallId ? { ...call, status } : call,
+    );
+    if (this._messageContextPopup?.snapshot === snapshot) {
+      this._renderMessageContextPopup(
+        this._messageContextPopup.button,
+        snapshot,
+        this._messageContextPopup.details,
+      );
+    }
+  }
+
+  _appendContextDetails(popup, snapshot) {
+    this._appendContextFiles(popup, snapshot.systemPromptFiles);
+    this._appendContextList(popup, "usage.toolsProvided", snapshot.providedTools);
+    this._appendToolCalls(popup, snapshot.toolCalls);
+    this._appendContextSkills(popup, snapshot.providedSkills);
+  }
+
+  _appendContextFiles(popup, files) {
+    if (!Array.isArray(files) || files.length === 0) return;
+    const section = document.createElement("section");
+    section.className = "message-context-used";
+    const heading = document.createElement("div");
+    heading.className = "context-viz-heading";
+    heading.textContent = t("usage.systemPromptFiles");
+    const list = document.createElement("div");
+    list.className = "message-context-detail-list";
+    for (const file of files) {
+      if (!file || file.openable === false || typeof file.path !== "string" || !file.path) continue;
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "message-context-file";
+      item.textContent = file.name || file.path;
+      item.title = file.path;
+      item.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.container.dispatchEvent(
+          new CustomEvent("previewfile", { bubbles: true, detail: { path: file.path } }),
+        );
+      });
+      list.appendChild(item);
+    }
+    if (list.children.length > 0) section.append(heading, list);
+    if (section.children.length > 0) popup.appendChild(section);
+  }
+
+  _appendContextList(popup, labelKey, items) {
+    if (!Array.isArray(items) || items.length === 0) return;
+    this._appendUsedItems(popup, labelKey, items);
+  }
+
+  _appendToolCalls(popup, calls) {
+    if (!Array.isArray(calls) || calls.length === 0) return;
+    const section = document.createElement("section");
+    section.className = "message-context-used";
+    const heading = document.createElement("div");
+    heading.className = "context-viz-heading";
+    heading.textContent = t("usage.toolsCalled");
+    const list = document.createElement("div");
+    list.className = "message-context-detail-list";
+    for (const call of calls) {
+      if (!call || typeof call.name !== "string") continue;
+      const item = document.createElement("div");
+      item.className = "message-context-call";
+      const name = document.createElement("code");
+      name.textContent = call.name;
+      const status = document.createElement("span");
+      status.textContent = t(`usage.toolStatus.${call.status || "requested"}`);
+      status.className = `message-context-status status-${call.status || "requested"}`;
+      item.append(name, status);
+      list.appendChild(item);
+    }
+    if (list.children.length > 0) section.append(heading, list);
+    if (section.children.length > 0) popup.appendChild(section);
+  }
+
+  _appendContextSkills(popup, skills) {
+    if (!Array.isArray(skills) || skills.length === 0) return;
+    const section = document.createElement("section");
+    section.className = "message-context-used";
+    const heading = document.createElement("div");
+    heading.className = "context-viz-heading";
+    heading.textContent = t("usage.skillsProvided");
+    const list = document.createElement("div");
+    list.className = "message-context-detail-list";
+    for (const skill of skills) {
+      if (!skill || typeof skill.name !== "string") continue;
+      const item = document.createElement("div");
+      item.className = "message-context-skill";
+      const name = document.createElement("code");
+      name.textContent = skill.name;
+      const source = document.createElement("span");
+      source.textContent = skill.path || skill.source || "";
+      item.append(name, source);
+      list.appendChild(item);
+    }
+    if (list.children.length > 0) section.append(heading, list);
+    if (section.children.length > 0) popup.appendChild(section);
   }
 
   _appendUsedItems(popup, labelKey, items) {

@@ -1203,6 +1203,14 @@ export class AgentSession {
 			modelRegistry: this.#modelRegistry,
 			model: () => this.model,
 			sessionId: () => this.sessionId,
+			contextSourceFiles: () => this.#tools.systemPromptFiles,
+			contextSkills: () =>
+				this.#tools.skills.map(skill => ({
+					name: skill.name,
+					path: skill.filePath,
+					source: skill.source,
+					mode: "provided" as const,
+				})),
 		};
 		this.#stats = new SessionStatsTracker(statsHost);
 		// Capture each provider-bound request after the agent has folded in tool
@@ -1388,6 +1396,7 @@ export class AgentSession {
 			xdev: config.xdev,
 			setActiveToolNames: config.setActiveToolNames,
 			baseSystemPrompt: this.agent.state.systemPrompt,
+			initialSystemPromptFiles: config.initialSystemPromptFiles,
 			skills: config.skills,
 			skillWarnings: config.skillWarnings,
 			skillsSettings: config.skillsSettings,
@@ -2094,8 +2103,66 @@ export class AgentSession {
 		if (!snapshot) return;
 		const tools = message.content.flatMap(block => (block.type === "toolCall" ? [block.name] : []));
 		const skills = collectUsedSkillNames(this.messages, message);
+		const messageIndex = this.messages.indexOf(message);
+		const turnStart =
+			messageIndex < 0
+				? 0
+				: (() => {
+						let index = messageIndex;
+						while (index > 0 && this.messages[index - 1]?.role !== "assistant") index--;
+						return index;
+					})();
+		const priorToolCalls =
+			messageIndex < 0
+				? []
+				: this.messages
+						.slice(turnStart, messageIndex)
+						.flatMap(item => (item.role === "assistant" ? (item.contextSnapshot?.toolCalls ?? []) : []));
+		const allToolCalls = [...priorToolCalls, ...(message.contextSnapshot?.toolCalls ?? [])];
+		const allToolNames = allToolCalls.map(call => call.name);
 		if (tools.length > 0) snapshot.usedTools = [...new Set([...(snapshot.usedTools ?? []), ...tools])];
+		if (allToolNames.length > 0) snapshot.usedTools = [...new Set([...(snapshot.usedTools ?? []), ...allToolNames])];
 		if (skills.length > 0) snapshot.usedSkills = [...new Set([...(snapshot.usedSkills ?? []), ...skills])];
+		if (tools.length > 0 || priorToolCalls.length > 0) {
+			const previous = new Map(allToolCalls.map(call => [call.callId, call]));
+			const currentToolCalls = message.content.flatMap(block => {
+				if (block.type !== "toolCall") return [];
+				return [
+					{
+						name: block.name,
+						callId: block.id,
+						status: previous.get(block.id)?.status ?? "requested",
+					},
+				];
+			});
+			snapshot.toolCalls = currentToolCalls.concat(
+				priorToolCalls.filter(call => !currentToolCalls.some(current => current.callId === call.callId)),
+			);
+		}
+	}
+
+	/** Keep persisted tool-call provenance aligned with the execution lifecycle. */
+	#annotateToolExecutionSnapshot(
+		event: Extract<AgentEvent, { type: "tool_execution_start" | "tool_execution_end" }>,
+	): void {
+		const assistant = this.messages.find(
+			message =>
+				message.role === "assistant" &&
+				message.content.some(block => block.type === "toolCall" && block.id === event.toolCallId),
+		) as AssistantMessage | undefined;
+		const snapshot = assistant?.contextSnapshot;
+		if (!snapshot) return;
+		const status = event.type === "tool_execution_start" ? "started" : event.isError ? "failed" : "completed";
+		const calls = snapshot.toolCalls ?? [];
+		const index = calls.findIndex(call => call.callId === event.toolCallId);
+		if (index < 0) return;
+		if (calls[index]?.status === status) return;
+		snapshot.toolCalls = calls.map((call, callIndex) => (callIndex === index ? { ...call, status } : call));
+		if (event.type === "tool_execution_end") {
+			void this.sessionManager.rewriteEntries().catch(error => {
+				logger.debug("Failed to persist tool execution context status", { error: String(error) });
+			});
+		}
 	}
 
 	#recordSessionExit(reason: postmortem.Reason | "dispose"): void {
@@ -2707,6 +2774,7 @@ export class AgentSession {
 		}
 
 		if (event.type === "tool_execution_start") {
+			this.#annotateToolExecutionSnapshot(event);
 			this.#recordToolExecutionStart(event);
 		}
 
@@ -2744,6 +2812,7 @@ export class AgentSession {
 			}
 		}
 		if (event.type === "tool_execution_end") {
+			this.#annotateToolExecutionSnapshot(event);
 			if (event.toolName === "goal") {
 				await this.#goalRuntime.onGoalToolCompleted();
 			} else {

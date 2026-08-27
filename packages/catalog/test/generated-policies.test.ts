@@ -4,6 +4,7 @@ import type { Api, ModelSpec, Provider } from "@oh-my-pi/pi-catalog/types";
 import {
 	applyAntigravityPricingFallback,
 	applyGeneratedModelPolicies,
+	applyModelsDevFallback,
 	applyOllamaCloudOutputCap,
 	linkOpenAIPromotionTargets,
 } from "../scripts/generated-policies";
@@ -36,6 +37,117 @@ function createSpec<TApi extends Api>(overrides: {
 		applyPatchToolType: overrides.applyPatchToolType,
 	};
 }
+
+describe("applyModelsDevFallback", () => {
+	it("fills only missing limits from an exact provider/model reference", () => {
+		const discovered: ModelSpec = {
+			...createSpec({ id: "model-a", api: "openai-completions", provider: "provider-a" }),
+			name: "Endpoint Name",
+			reasoning: true,
+			input: ["text"],
+			contextWindow: null,
+			maxTokens: null,
+		};
+		const reference: ModelSpec = {
+			...createSpec({
+				id: "model-a",
+				api: "openai-completions",
+				provider: "provider-a",
+				contextWindow: 1_000_000,
+				maxTokens: 131_072,
+			}),
+			name: "Catalog Name",
+			reasoning: false,
+			input: ["text", "image"],
+		};
+
+		const [result] = applyModelsDevFallback([discovered], [reference]);
+
+		expect(result).toMatchObject({
+			name: "Endpoint Name",
+			reasoning: true,
+			input: ["text"],
+			contextWindow: 1_000_000,
+			maxTokens: 131_072,
+		});
+	});
+
+	it("preserves explicit endpoint limits", () => {
+		const discovered = createSpec({
+			id: "model-a",
+			api: "openai-completions",
+			provider: "provider-a",
+			contextWindow: 200_000,
+			maxTokens: 32_000,
+		});
+		const reference = createSpec({
+			id: "model-a",
+			api: "openai-completions",
+			provider: "provider-a",
+			contextWindow: 1_000_000,
+			maxTokens: 131_072,
+		});
+
+		const [result] = applyModelsDevFallback([discovered], [reference]);
+
+		expect(result?.contextWindow).toBe(200_000);
+		expect(result?.maxTokens).toBe(32_000);
+	});
+
+	it("does not cross provider boundaries when an exact provider reference exists", () => {
+		const discovered: ModelSpec = {
+			...createSpec({ id: "model-a", api: "openai-completions", provider: "provider-a" }),
+			contextWindow: null,
+			maxTokens: null,
+		};
+		const exactReference: ModelSpec = { ...discovered };
+		const otherProviderReference = createSpec({
+			id: "model-a",
+			api: "openai-completions",
+			provider: "provider-b",
+			contextWindow: 1_000_000,
+			maxTokens: 131_072,
+		});
+
+		const [result] = applyModelsDevFallback([discovered], [exactReference, otherProviderReference]);
+
+		expect(result?.contextWindow).toBeNull();
+		expect(result?.maxTokens).toBeNull();
+	});
+
+	it("keeps the existing same-id global fallback when no provider reference exists", () => {
+		const discovered: ModelSpec = {
+			...createSpec({ id: "model-a", api: "openai-completions", provider: "gateway-a" }),
+			name: "Endpoint Name",
+			reasoning: false,
+			input: ["text"],
+			contextWindow: null,
+			maxTokens: null,
+		};
+		const reference: ModelSpec = {
+			...createSpec({
+				id: "model-a",
+				api: "openai-completions",
+				provider: "provider-a",
+				contextWindow: 200_000,
+				maxTokens: 32_000,
+			}),
+			name: "Catalog Name",
+			reasoning: true,
+			input: ["text", "image"],
+		};
+
+		const [result] = applyModelsDevFallback([discovered], [reference]);
+
+		expect(result).toMatchObject({
+			name: "Catalog Name",
+			reasoning: true,
+			input: ["text", "image"],
+			contextWindow: 200_000,
+			maxTokens: 32_000,
+		});
+	});
+});
 
 describe("generated model policies", () => {
 	it("re-bakes thinking metadata and applies parsed catalog corrections", () => {

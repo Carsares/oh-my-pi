@@ -61,6 +61,7 @@ import {
 	applyAntigravityPricingFallback,
 	applyCanonicalLimitFallback,
 	applyGeneratedModelPolicies,
+	applyModelsDevFallback,
 	applyOllamaCloudOutputCap,
 	CLOUDFLARE_FALLBACK_MODEL,
 	dropBedrockMantleOpenAIModels,
@@ -178,59 +179,6 @@ async function loadModelsDevData(): Promise<ModelSpec[]> {
 		console.error("Failed to load stencil.so data:", error);
 		return [];
 	}
-}
-
-function createGlobalModelsDevReferenceMap(modelsDevModels: readonly ModelSpec[]): Map<string, ModelSpec> {
-	const references = new Map<string, ModelSpec>();
-	for (const model of modelsDevModels) {
-		const existing = references.get(model.id);
-		if (!existing) {
-			references.set(model.id, model);
-			continue;
-		}
-		if ((model.contextWindow ?? 0) > (existing.contextWindow ?? 0)) {
-			references.set(model.id, model);
-			continue;
-		}
-		if (
-			(model.contextWindow ?? 0) === (existing.contextWindow ?? 0) &&
-			(model.maxTokens ?? 0) > (existing.maxTokens ?? 0)
-		) {
-			references.set(model.id, model);
-		}
-	}
-	return references;
-}
-
-function applyGlobalModelsDevFallback(
-	models: readonly ModelSpec[],
-	modelsDevModels: readonly ModelSpec[],
-): ModelSpec[] {
-	const providerScopedKeys = new Set(modelsDevModels.map(model => `${model.provider}/${model.id}`));
-	const globalReferences = createGlobalModelsDevReferenceMap(modelsDevModels);
-	return models.map(model => {
-		if (
-			providerScopedKeys.has(`${model.provider}/${model.id}`) ||
-			model.provider === "devin" ||
-			model.provider === "baseten"
-		) {
-			return model;
-		}
-		const reference = globalReferences.get(model.id);
-		if (!reference) {
-			return model;
-		}
-		return {
-			...model,
-			name: reference.name,
-			reasoning: reference.reasoning,
-			input: reference.input,
-			// Fill unknown endpoint limits from same-id stencil.so references, but keep
-			// provider-specific values when discovery returned them explicitly.
-			contextWindow: model.contextWindow ?? reference.contextWindow,
-			maxTokens: model.maxTokens ?? reference.maxTokens,
-		};
-	});
 }
 
 function applyPremiumMultiplierOverrides(models: readonly ModelSpec[]): ModelSpec[] {
@@ -532,7 +480,7 @@ async function generateModels() {
 	const gitLabDuoModels = getGitLabDuoModels().map(model => toModelSpec(model));
 	// Combine models. stencil.so has priority unless a provider's successful endpoint
 	// discovery is authoritative; those endpoint snapshots replace stencil.so rows.
-	let allModels = applyGlobalModelsDevFallback(
+	let allModels = applyModelsDevFallback(
 		[...bundledModelsDevModels, ...catalogProviderModels, ...gitLabDuoModels],
 		modelsDevModels,
 	);
@@ -675,7 +623,7 @@ async function generateModels() {
 		}
 	}
 
-	allModels = applyGlobalModelsDevFallback(allModels, modelsDevModels);
+	allModels = applyModelsDevFallback(allModels, modelsDevModels);
 	// Seed QwenCloud's documented Token Plan models when credentialed
 	// discovery is unavailable. A successful `/models` response is authoritative
 	// for the subscribed edition and must not be widened by the fallback.

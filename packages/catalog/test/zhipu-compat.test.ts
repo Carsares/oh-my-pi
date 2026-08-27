@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { buildModel } from "@oh-my-pi/pi-catalog/build";
 import { buildOpenAICompat } from "@oh-my-pi/pi-catalog/compat/openai";
+import { Effort } from "@oh-my-pi/pi-catalog/effort";
+import { resolveProviderModels } from "@oh-my-pi/pi-catalog/model-manager";
+import { getBundledModels } from "@oh-my-pi/pi-catalog/models";
 import { DEFAULT_MODEL_PER_PROVIDER } from "@oh-my-pi/pi-catalog/provider-models";
 import { zhipuCodingPlanModelManagerOptions } from "@oh-my-pi/pi-catalog/provider-models/openai-compat";
 import type { FetchImpl, ModelSpec } from "@oh-my-pi/pi-catalog/types";
@@ -64,6 +68,13 @@ describe("zhipu-coding-plan descriptor", () => {
 	it("defaults to the same Zhipu-hosted model used by login validation", () => {
 		expect(DEFAULT_MODEL_PER_PROVIDER["zhipu-coding-plan"]).toBe("glm-5.1");
 		expect(DEFAULT_MODEL_PER_PROVIDER.zai).toBe("glm-5.3");
+	});
+
+	it("bundles GLM-5.3-Flash limits from the provider-scoped catalog reference", () => {
+		const model = getBundledModels("zhipu-coding-plan").find(candidate => candidate.id === "glm-5.3-flash");
+
+		expect(model?.contextWindow).toBe(1_000_000);
+		expect(model?.maxTokens).toBe(131_072);
 	});
 });
 
@@ -174,5 +185,45 @@ describe("zhipu-coding-plan model discovery", () => {
 		expect(requestedUrl).toBe("https://open.bigmodel.cn/api/coding/paas/v4/models");
 		expect(models?.[0]?.id).toBe("glm-5.1");
 		expect(models?.[0]?.baseUrl).toBe("https://open.bigmodel.cn/api/coding/paas/v4");
+	});
+
+	it("classifies GLM-5.3-Flash thinking without model-specific capacity defaults", async () => {
+		const mockFetch: FetchImpl = Object.assign(
+			async (): Promise<Response> =>
+				new Response(JSON.stringify({ data: [{ id: "glm-5.3-flash", name: "GLM-5.3-Flash" }] }), {
+					headers: { "content-type": "application/json" },
+				}),
+			{ preconnect: fetch.preconnect },
+		);
+
+		const options = zhipuCodingPlanModelManagerOptions({ apiKey: "test-key", fetch: mockFetch });
+		const specs = await options.fetchDynamicModels?.();
+		const spec = specs?.[0];
+		if (!spec) throw new Error("expected discovered GLM-5.3-Flash model");
+		const model = buildModel(spec);
+
+		expect(model.reasoning).toBe(true);
+		expect(model.thinking?.efforts).toEqual([Effort.Low, Effort.High, Effort.Max]);
+		expect(model.thinking?.defaultLevel).toBe(Effort.Max);
+		expect(model.thinking?.requiresEffort).toBe(true);
+		expect(model.contextWindow).toBeNull();
+		expect(model.maxTokens).toBeNull();
+	});
+
+	it("retains bundled GLM-5.3-Flash limits when live discovery omits them", async () => {
+		const mockFetch: FetchImpl = Object.assign(
+			async (): Promise<Response> =>
+				new Response(JSON.stringify({ data: [{ id: "glm-5.3-flash", name: "GLM-5.3-Flash" }] }), {
+					headers: { "content-type": "application/json" },
+				}),
+			{ preconnect: fetch.preconnect },
+		);
+		const options = zhipuCodingPlanModelManagerOptions({ apiKey: "test-key", fetch: mockFetch });
+
+		const result = await resolveProviderModels({ ...options, cacheDbPath: ":memory:" }, "online");
+		const model = result.models.find(candidate => candidate.id === "glm-5.3-flash");
+
+		expect(model?.contextWindow).toBe(1_000_000);
+		expect(model?.maxTokens).toBe(131_072);
 	});
 });

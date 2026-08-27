@@ -89,6 +89,68 @@ export function hasBillableCost(cost: ModelSpec["cost"]): boolean {
 	return cost.input !== 0 || cost.output !== 0 || cost.cacheRead !== 0 || cost.cacheWrite !== 0;
 }
 
+function createGlobalModelsDevReferenceMap(modelsDevModels: readonly ModelSpec[]): Map<string, ModelSpec> {
+	const references = new Map<string, ModelSpec>();
+	for (const model of modelsDevModels) {
+		const existing = references.get(model.id);
+		if (!existing) {
+			references.set(model.id, model);
+			continue;
+		}
+		if ((model.contextWindow ?? 0) > (existing.contextWindow ?? 0)) {
+			references.set(model.id, model);
+			continue;
+		}
+		if (
+			(model.contextWindow ?? 0) === (existing.contextWindow ?? 0) &&
+			(model.maxTokens ?? 0) > (existing.maxTokens ?? 0)
+		) {
+			references.set(model.id, model);
+		}
+	}
+	return references;
+}
+
+/**
+ * Enrich generation-time discovery rows with stencil.so metadata. An exact
+ * provider/model reference is route-specific, so it may fill only unknown
+ * limits; endpoint-authored identity and capability fields remain authoritative.
+ */
+export function applyModelsDevFallback(
+	models: readonly ModelSpec[],
+	modelsDevModels: readonly ModelSpec[],
+): ModelSpec[] {
+	const providerReferences = new Map(modelsDevModels.map(model => [`${model.provider}/${model.id}`, model]));
+	const globalReferences = createGlobalModelsDevReferenceMap(modelsDevModels);
+	return models.map(model => {
+		if (model.provider === "devin" || model.provider === "baseten") {
+			return model;
+		}
+		const providerReference = providerReferences.get(`${model.provider}/${model.id}`);
+		if (providerReference) {
+			return {
+				...model,
+				contextWindow: model.contextWindow ?? providerReference.contextWindow,
+				maxTokens: model.maxTokens ?? providerReference.maxTokens,
+			};
+		}
+		const reference = globalReferences.get(model.id);
+		if (!reference) {
+			return model;
+		}
+		return {
+			...model,
+			name: reference.name,
+			reasoning: reference.reasoning,
+			input: reference.input,
+			// Fill unknown endpoint limits from same-id stencil.so references, but keep
+			// provider-specific values when discovery returned them explicitly.
+			contextWindow: model.contextWindow ?? reference.contextWindow,
+			maxTokens: model.maxTokens ?? reference.maxTokens,
+		};
+	});
+}
+
 /**
  * Providers whose first-party list prices back-fill Antigravity's unpriced
  * rows, in lookup order. Antigravity discovery reports no pricing (the

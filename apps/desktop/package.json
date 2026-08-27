@@ -19,7 +19,7 @@
   },
   "scripts": {
     "tauri": "tauri",
-    "dev": "PATH=\"$HOME/.cargo/bin:$PATH\" tauri dev",
+    "dev": "bun run scripts/dev-supervisor.js",
     "stage:omp": "bun ../../scripts/stage-desktop-omp.ts",
     "fetch:terminal-font": "bun run scripts/fetch-terminal-font.js",
     "fetch:cjk-font": "bun run scripts/fetch-cjk-font.js",

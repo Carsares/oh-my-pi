@@ -54,7 +54,11 @@ type SkillSourceRegistryState = Arc<SkillSourceRegistry>;
 const MENU_NEW_SESSION_ID: &str = "picot-new-session";
 #[cfg(target_os = "macos")]
 const MENU_RESTART_ID: &str = "picot-restart";
+#[cfg(all(target_os = "macos", debug_assertions))]
+const MENU_REBUILD_RESTART_ID: &str = "picot-rebuild-restart";
 const NATIVE_HOME_WINDOW_LABEL: &str = "native-home";
+#[cfg(debug_assertions)]
+const DEV_RESTART_MARKER_ENV: &str = "PICOT_DEV_RESTART_MARKER";
 const BETA_UPDATE_ENDPOINT: &str =
     "https://github.com/Carsares/oh-my-pi/releases/download/beta/latest.json";
 
@@ -550,6 +554,14 @@ fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         Some("CmdOrCtrl+Shift+R"),
     )?;
+    #[cfg(debug_assertions)]
+    let rebuild_restart = MenuItem::with_id(
+        app,
+        MENU_REBUILD_RESTART_ID,
+        "Rebuild and Restart Picot",
+        true,
+        None::<&str>,
+    )?;
     let file = Submenu::with_items(
         app,
         "File",
@@ -586,6 +598,26 @@ fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         ],
     )?;
     let help = Submenu::with_items(app, "Help", true, &[])?;
+    #[cfg(debug_assertions)]
+    let app_menu = Submenu::with_items(
+        app,
+        app.package_info().name.clone(),
+        true,
+        &[
+            &PredefinedMenuItem::about(app, None, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &restart,
+            &rebuild_restart,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::services(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::hide(app, None)?,
+            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+    #[cfg(not(debug_assertions))]
     let app_menu = Submenu::with_items(
         app,
         app.package_info().name.clone(),
@@ -877,6 +909,47 @@ fn setup_native_host(app: &mut tauri::App, static_dir: PathBuf) -> Result<(), St
     Ok(())
 }
 
+#[cfg(debug_assertions)]
+fn request_development_restart(app: &AppHandle, mode: &str) -> bool {
+    if let Some(marker_path) = std::env::var_os(DEV_RESTART_MARKER_ENV) {
+        let marker_path = PathBuf::from(marker_path);
+        match fs::write(&marker_path, format!("{mode}\n")) {
+            Ok(()) => {
+                log::info!(
+                    "[picot-native] requested {mode} development restart through supervisor: marker={}",
+                    marker_path.display()
+                );
+                app.exit(0);
+                return true;
+            }
+            Err(error) => {
+                log::error!(
+                    "[picot-native] failed to write development restart marker {}: {error}",
+                    marker_path.display()
+                );
+            }
+        }
+    }
+    false
+}
+
+fn restart_application(app: &AppHandle) {
+    #[cfg(debug_assertions)]
+    if request_development_restart(app, "fast") {
+        return;
+    }
+
+    // Packaged builds are restarted directly by Tauri.
+    app.request_restart();
+}
+
+#[cfg(debug_assertions)]
+fn rebuild_and_restart_application(app: &AppHandle) {
+    if !request_development_restart(app, "full") {
+        log::error!("[picot-native] full development restart requires the dev supervisor");
+    }
+}
+
 fn main() {
     if let Err(error) = fix_path_env::fix_all_vars() {
         eprintln!("[picot] failed to sync login-shell environment: {error}");
@@ -895,9 +968,13 @@ fn main() {
                 });
             }
             MENU_RESTART_ID => {
-                // The exit callback stops all OMP runtimes before Tauri relaunches Picot.
                 log::info!("[picot-native] restarting Picot and its OMP runtimes");
-                app.request_restart();
+                restart_application(app);
+            }
+            #[cfg(debug_assertions)]
+            MENU_REBUILD_RESTART_ID => {
+                log::info!("[picot-native] rebuilding and restarting Picot and its OMP runtimes");
+                rebuild_and_restart_application(app);
             }
             _ => {}
         }

@@ -564,19 +564,24 @@ export class ModelControls {
 	}
 
 	/**
-	 * Cycle to next thinking level: off → auto → minimal..max → off.
-	 * @returns New selector, or undefined if model doesn't support thinking
+	 * Cycle to the next supported thinking selector. Mandatory-thinking models
+	 * omit `off`; reasoning models without adjustable efforts cannot cycle.
+	 * @returns New selector, or undefined when thinking cannot be adjusted
 	 */
 	cycleThinkingLevel(): ConfiguredThinkingLevel | undefined {
 		if (!this.#model?.reasoning) return undefined;
 
+		const availableLevels = this.getAvailableThinkingLevels();
+		if (availableLevels.length === 0) return undefined;
+		const requiresEffort = this.#model.thinking?.requiresEffort === true;
 		const levels: ConfiguredThinkingLevel[] = [
-			ThinkingLevel.Off,
+			...(!requiresEffort ? [ThinkingLevel.Off] : []),
 			AUTO_THINKING,
-			...this.getAvailableThinkingLevels(),
+			...availableLevels,
 		];
 		const configured = this.configuredThinkingLevel();
-		const currentLevel = configured === ThinkingLevel.Inherit ? ThinkingLevel.Off : configured;
+		const currentLevel =
+			configured === ThinkingLevel.Inherit ? (requiresEffort ? undefined : ThinkingLevel.Off) : configured;
 		const currentIndex = currentLevel ? levels.indexOf(currentLevel) : -1;
 		const nextIndex = (currentIndex + 1) % levels.length;
 		const nextLevel = levels[nextIndex];

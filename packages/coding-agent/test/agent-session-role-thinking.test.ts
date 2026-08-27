@@ -351,6 +351,65 @@ describe("AgentSession role model thinking behavior", () => {
 		expect(session.cycleThinkingLevel()).toBe("off");
 	});
 
+	it("never cycles mandatory-thinking models to off", async () => {
+		const model = {
+			...getAnthropicModelOrThrow("claude-opus-4-7"),
+			thinking: {
+				mode: "effort" as const,
+				efforts: [Effort.Low, Effort.High, Effort.Max],
+				defaultLevel: Effort.Max,
+				requiresEffort: true,
+			},
+		};
+		const agent = new Agent({
+			initialState: {
+				model,
+				systemPrompt: ["Test"],
+				tools: [],
+				messages: [],
+				thinkingLevel: Effort.High,
+			},
+		});
+		sessionSettings = Settings.isolated();
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: sessionSettings,
+			modelRegistry,
+		});
+
+		session.setThinkingLevel(Effort.High);
+		expect(session.cycleThinkingLevel()).toBe(Effort.Max);
+		expect(session.cycleThinkingLevel()).toBe(AUTO_THINKING);
+		expect(session.cycleThinkingLevel()).toBe(Effort.Low);
+		expect(agent.state.disableReasoning).toBe(false);
+	});
+
+	it("does not cycle fixed reasoning models without effort controls", async () => {
+		const model = {
+			...getAnthropicModelOrThrow("claude-opus-4-7"),
+			thinking: undefined,
+		};
+		const agent = new Agent({
+			initialState: {
+				model,
+				systemPrompt: ["Test"],
+				tools: [],
+				messages: [],
+				thinkingLevel: Effort.High,
+			},
+		});
+		sessionSettings = Settings.isolated();
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: sessionSettings,
+			modelRegistry,
+		});
+
+		expect(session.cycleThinkingLevel()).toBeUndefined();
+	});
+
 	it("keeps auto configured while applying the classifier result as the effective level", async () => {
 		const model = getAnthropicModelOrThrow("claude-sonnet-4-5");
 		await createSession({

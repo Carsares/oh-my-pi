@@ -26,9 +26,11 @@ describe("terminal font distribution", () => {
 
   test("fetches the font before Tauri dev and distributable builds", () => {
     const tauri = JSON.parse(read("src-tauri/tauri.conf.json"));
+    const prepareDev = read("scripts/prepare-dev.ts");
 
     expect(read("package.json")).toContain('"fetch:terminal-font"');
-    expect(tauri.build.beforeDevCommand).toContain("bun run fetch:terminal-font");
+    expect(tauri.build.beforeDevCommand.script).toContain("bun run prepare:dev");
+    expect(prepareDev).toContain('"fetch:terminal-font"');
     expect(tauri.build.beforeBuildCommand).toContain("bun run fetch:terminal-font");
     expect(read("scripts/fetch-terminal-font.js")).toContain("ttf2woff2");
     expect(read("public/style.css")).toContain(".woff2");

@@ -83,9 +83,7 @@ async function buildOne(entrySpec) {
 
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  for (const entry of ENTRIES) {
-    await buildOne(entry);
-  }
+  await Promise.all(ENTRIES.map((entry) => buildOne(entry)));
 }
 
 main().catch((err) => {

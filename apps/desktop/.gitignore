@@ -19,6 +19,7 @@ src-tauri/resources/pi/
 src-tauri/resources/omp/
 .cache/terminal-fonts/
 .cache/cjk-fonts/
+.cache/omp-staging/
 
 # Vendored font assets live under public/fonts/.
 # Use scripts/fetch-terminal-font.js and scripts/fetch-cjk-font.js to update them.

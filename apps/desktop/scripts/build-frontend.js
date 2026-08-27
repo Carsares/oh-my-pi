@@ -86,27 +86,32 @@ function copyStaticAssets() {
 
 async function buildOnce() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  for (const entry of entries) {
-    await esbuild.build(entry);
-    const outPath = entry.outfile;
-    const sizeKb = (fs.statSync(outPath).size / 1024).toFixed(1);
-    console.log(`[build-frontend] ${path.relative(ROOT, outPath)} (${sizeKb} KB)`);
-  }
+  const outputs = await Promise.all(
+    entries.map(async (entry) => {
+      await esbuild.build(entry);
+      const outPath = entry.outfile;
+      const sizeKb = (fs.statSync(outPath).size / 1024).toFixed(1);
+      return `[build-frontend] ${path.relative(ROOT, outPath)} (${sizeKb} KB)`;
+    }),
+  );
+  for (const output of outputs) console.log(output);
   copyStaticAssets();
 }
 
 async function buildWatch() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const contexts = [];
-  for (const entry of entries) {
-    const ctx = await esbuild.context(entry);
-    contexts.push(ctx);
-    await ctx.watch();
-    console.log(
-      `[build-frontend] watching ${path.relative(ROOT, entry.entryPoints[0])} → ${path.relative(ROOT, entry.outfile)}`,
-    );
-  }
+  const contexts = await Promise.all(
+    entries.map(async (entry) => {
+      const context = await esbuild.context(entry);
+      await context.watch();
+      console.log(
+        `[build-frontend] watching ${path.relative(ROOT, entry.entryPoints[0])} → ${path.relative(ROOT, entry.outfile)}`,
+      );
+      return context;
+    }),
+  );
   console.log("[build-frontend] watch mode active. Press Ctrl+C to stop.");
+  return contexts;
 }
 
 async function main() {

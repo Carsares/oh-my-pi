@@ -21,6 +21,8 @@
     "tauri": "tauri",
     "dev": "bun run scripts/dev-supervisor.js",
     "stage:omp": "bun ../../scripts/stage-desktop-omp.ts",
+    "stage:omp:dev": "bun ../../scripts/stage-desktop-omp.ts --if-stale",
+    "prepare:dev": "bun run scripts/prepare-dev.ts",
     "fetch:terminal-font": "bun run scripts/fetch-terminal-font.js",
     "fetch:cjk-font": "bun run scripts/fetch-cjk-font.js",
     "smoke:omp-rpc": "bun run scripts/smoke-omp-rpc.js",

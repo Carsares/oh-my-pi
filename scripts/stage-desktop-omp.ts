@@ -6,6 +6,31 @@ import * as path from "node:path";
 const repositoryRoot = path.join(import.meta.dir, "..");
 const codingAgentDir = path.join(repositoryRoot, "packages", "coding-agent");
 const desktopResourceDir = path.join(repositoryRoot, "apps", "desktop", "src-tauri", "resources", "omp");
+const desktopCacheDir = path.join(repositoryRoot, "apps", "desktop", ".cache", "omp-staging");
+
+export const OMP_BUILD_INPUTS = [
+	".bazelrc",
+	".bazelignore",
+	".bazelversion",
+	".cargo",
+	"BUILD.bazel",
+	"Cargo.lock",
+	"Cargo.toml",
+	"MODULE.bazel",
+	"MODULE.bazel.lock",
+	"bun.lock",
+	"bunfig.toml",
+	"crates",
+	"package.json",
+	"packages",
+	"rust-toolchain.toml",
+	"scripts",
+	"tsconfig.base.json",
+	"tsconfig.json",
+	"tsconfig.tools.json",
+] as const;
+
+const STAGING_FINGERPRINT_VERSION = "picot-omp-staging-v1";
 
 interface CodingAgentManifest {
 	version: string;
@@ -74,6 +99,67 @@ async function run(command: string[], env: Record<string, string | undefined>, l
 	if (exitCode !== 0) throw new Error(`${label} failed with exit code ${exitCode}`);
 }
 
+async function listOmpBuildInputs(root: string): Promise<string[]> {
+	const process = Bun.spawn(
+		["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...OMP_BUILD_INPUTS],
+		{
+			cwd: root,
+			stdout: "pipe",
+			stderr: "pipe",
+		},
+	);
+	const [exitCode, stdout, stderr] = await Promise.all([
+		process.exited,
+		new Response(process.stdout as ReadableStream<Uint8Array>).arrayBuffer(),
+		new Response(process.stderr as ReadableStream<Uint8Array>).text(),
+	]);
+	if (exitCode !== 0) throw new Error(`git ls-files failed with exit code ${exitCode}: ${stderr.trim()}`);
+	return new TextDecoder().decode(stdout).split("\0").filter(Boolean).sort();
+}
+
+export async function computeFilesFingerprint(root: string, relativePaths: readonly string[]): Promise<string> {
+	const hasher = new Bun.CryptoHasher("sha256");
+	for (const relativePath of relativePaths.toSorted()) {
+		hasher.update(`${relativePath.length}:${relativePath}\0`);
+		for await (const chunk of Bun.file(path.join(root, relativePath)).stream()) hasher.update(chunk);
+		hasher.update("\0");
+	}
+	return hasher.digest("hex");
+}
+
+async function computeStagingFingerprint(root: string, crossTarget: string | undefined): Promise<string> {
+	const filesFingerprint = await computeFilesFingerprint(root, await listOmpBuildInputs(root));
+	const environment = [
+		STAGING_FINGERPRINT_VERSION,
+		crossTarget ?? "host",
+		process.platform,
+		process.arch,
+		Bun.version,
+		Bun.env.OMP_NATIVE_BUILD_BACKEND ?? "",
+		Bun.env.BUN_COMPILE_EXECUTABLE_PATH ?? "",
+	].join("\0");
+	return new Bun.CryptoHasher("sha256").update(environment).update("\0").update(filesFingerprint).digest("hex");
+}
+
+export async function canReuseStagedOmp(
+	destination: string,
+	versionPath: string,
+	cachePath: string,
+	fingerprint: string,
+	version: string,
+): Promise<boolean> {
+	try {
+		const [destinationStat, stagedVersion, cachedFingerprint] = await Promise.all([
+			fs.stat(destination),
+			Bun.file(versionPath).text(),
+			Bun.file(cachePath).text(),
+		]);
+		return destinationStat.isFile() && stagedVersion.trim() === version && cachedFingerprint.trim() === fingerprint;
+	} catch {
+		return false;
+	}
+}
+
 async function buildOmp(crossTarget: string | undefined): Promise<string> {
 	const env = { ...Bun.env };
 	if (crossTarget) env.CROSS_TARGET = crossTarget;
@@ -95,10 +181,29 @@ async function buildOmp(crossTarget: string | undefined): Promise<string> {
 }
 
 async function main(): Promise<void> {
+	const args = process.argv.slice(2);
+	const ifStale = args.includes("--if-stale");
+	const unknownArgs = args.filter(arg => arg !== "--if-stale");
+	if (unknownArgs.length > 0) throw new Error(`Unknown argument(s): ${unknownArgs.join(", ")}`);
 	const manifest = (await Bun.file(path.join(codingAgentDir, "package.json")).json()) as CodingAgentManifest;
 	if (!manifest.version) throw new Error("coding-agent package has no version");
 	const crossTarget = Bun.env.CROSS_TARGET || undefined;
 	const destination = path.join(desktopResourceDir, desktopBinaryName(crossTarget));
+	const versionPath = path.join(desktopResourceDir, ".version");
+	const cacheKey = crossTarget ?? `host-${process.platform}-${process.arch}`;
+	const cachePath = path.join(desktopCacheDir, `${cacheKey}.sha256`);
+	let fingerprint: string | undefined;
+	if (ifStale) {
+		try {
+			fingerprint = await computeStagingFingerprint(repositoryRoot, crossTarget);
+			if (await canReuseStagedOmp(destination, versionPath, cachePath, fingerprint, manifest.version)) {
+				console.log(`Staged OMP ${manifest.version} is current; skipping rebuild`);
+				return;
+			}
+		} catch (error) {
+			console.warn(`[stage-desktop-omp] Could not determine build freshness; rebuilding: ${String(error)}`);
+		}
+	}
 	await fs.rm(desktopResourceDir, { recursive: true, force: true });
 	await fs.mkdir(desktopResourceDir, { recursive: true });
 	if (crossTarget === "darwin-universal") {
@@ -109,7 +214,8 @@ async function main(): Promise<void> {
 		await fs.copyFile(await buildOmp(crossTarget), destination);
 	}
 	if (process.platform !== "win32") await fs.chmod(destination, 0o755);
-	await Bun.write(path.join(desktopResourceDir, ".version"), `${manifest.version}\n`);
+	await Bun.write(versionPath, `${manifest.version}\n`);
+	if (fingerprint) await Bun.write(cachePath, `${fingerprint}\n`);
 
 	console.log(`Staged OMP ${manifest.version} at ${path.relative(repositoryRoot, destination)}`);
 }

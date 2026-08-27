@@ -137,8 +137,8 @@ select:focus-visible {
 .message.user .message-content,
 .file-markdown-preview {
   font-family:
-    "Picot CJK", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-    "Helvetica Neue", sans-serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC",
+    "Hiragino Sans GB", "Noto Sans CJK SC", "Helvetica Neue", sans-serif;
 }
 
 .file-code-editor .cm-editor,

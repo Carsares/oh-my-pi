@@ -2,26 +2,51 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initI18n } from "../../i18n.js";
-import { findLatestAssistantUsage, setupContextUsage } from "./context-usage.js";
+import { setupContextUsage } from "./context-usage.js";
 
 const enMessages = JSON.parse(readFileSync(join(process.cwd(), "public/locales/en.json"), "utf8"));
 
 function renderFixture() {
   document.body.innerHTML = `
-    <span class="pill token-usage" id="token-usage" title="Context usage"></span>
-    <div class="context-viz hidden" id="context-viz">
-      <div class="context-bar" id="context-bar"></div>
-      <div class="context-legend" id="context-legend"></div>
-      <div class="context-viz-footer">
-        <span id="context-viz-used"></span>
+    <span class="context-usage-anchor">
+      <button class="context-usage-button" id="token-usage" aria-expanded="false">
+        <span class="context-usage-ring"></span>
+      </button>
+      <div class="context-viz hidden" id="context-viz">
+        <strong id="context-viz-used"></strong>
         <span id="context-viz-total"></span>
-        <button class="ui-button ui-button--sm ui-button--secondary context-viz-compact-btn" id="compact-context-btn"><span class="compact-btn-label"></span></button>
+        <div class="context-bar" id="context-bar"></div>
+        <div class="context-legend" id="context-legend"></div>
+        <span id="context-session-input"></span>
+        <span id="context-session-output"></span>
+        <span id="context-session-cache"></span>
+        <span id="context-session-cost"></span>
+        <button id="compact-context-btn"><span class="compact-btn-label"></span></button>
       </div>
-    </div>
+    </span>
   `;
 }
 
-describe("context usage header", () => {
+function setPopulatedStats(control) {
+  control.setContextBreakdown({
+    usedTokens: 40_000,
+    contextWindow: 160_000,
+    systemPromptTokens: 2_000,
+    systemToolsTokens: 8_000,
+    systemContextTokens: 4_000,
+    skillsTokens: 6_000,
+    messagesTokens: 20_000,
+  });
+  control.setSessionUsage({
+    input: 100,
+    output: 42,
+    cacheRead: 300,
+    cacheWrite: 100,
+    cost: 0.01234,
+  });
+}
+
+describe("context usage control", () => {
   beforeEach(async () => {
     renderFixture();
     globalThis.fetch = vi.fn(async (input) => {
@@ -34,67 +59,99 @@ describe("context usage header", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     document.body.replaceChildren();
     vi.restoreAllMocks();
   });
 
-  it("keeps the context pill and popover synced from restored session history", () => {
-    const ui = setupContextUsage();
+  it("renders a ring and the authoritative context and session breakdown", () => {
+    const control = setupContextUsage();
+    setPopulatedStats(control);
 
-    ui.setUsage({ input: 191, cacheRead: 9300 }, 128_000);
+    const trigger = document.getElementById("token-usage");
+    expect(trigger.classList.contains("visible")).toBe(true);
+    expect(trigger.textContent.trim()).toBe("");
+    expect(trigger.getAttribute("aria-label")).toBe("Context usage: 25.0%");
+    expect(
+      trigger.querySelector(".context-usage-ring").style.getPropertyValue("--context-percent"),
+    ).toBe("25");
 
-    const pill = document.getElementById("token-usage");
-    expect(pill.classList.contains("visible")).toBe(true);
-    expect(pill.textContent).toBe("7%");
-
-    pill.click();
+    trigger.click();
 
     expect(document.getElementById("context-viz").classList.contains("hidden")).toBe(false);
-    // The legend shows cached and uncached token counts; verify both numeric values appear.
-    expect(document.getElementById("context-legend").textContent).toContain("9.3k");
-    // Input tokens were 191; ensure the raw count or a related label is present.
-    expect(document.getElementById("context-legend").textContent).toMatch(/191|cache|input/i);
-
-    expect(document.getElementById("context-viz-used").textContent).toMatch(/7%|context\.used/);
-    expect(document.getElementById("context-viz-total").textContent).toBe("9.5k / 128.0k");
-  });
-
-  it("combines session in/out with context percentage on the same pill", () => {
-    const ui = setupContextUsage();
-
-    ui.setUsage({ input: 191, cacheRead: 9300 }, 128_000);
-    ui.setSessionTotals({ input: 1_600_000, output: 6000 });
-
-    const pill = document.getElementById("token-usage");
-    expect(pill.classList.contains("visible")).toBe(true);
-    expect(pill.textContent).toBe("In 1.6M · Out 6.0k · 7%");
-
-    pill.click();
-    const legendLabels = [...document.querySelectorAll(".context-legend-item")].map(
-      (item) => item.querySelector(".context-legend-left")?.textContent,
+    expect(document.getElementById("context-viz-used").textContent).toBe("25.0% used");
+    expect(document.getElementById("context-viz-total").textContent).toBe("40.0k / 160.0k");
+    const rows = [...document.querySelectorAll(".context-legend-item")].map(
+      (item) => item.textContent,
     );
-    expect(legendLabels).toEqual(["Input", "Output", "Available", "Cached"]);
-    expect(document.getElementById("context-legend").textContent).toContain("6.0k");
+    expect(rows).toEqual([
+      "System prompt2.0k · 5.0%",
+      "System tools8.0k · 20.0%",
+      "System context4.0k · 10.0%",
+      "Skills6.0k · 15.0%",
+      "Messages20.0k · 50.0%",
+    ]);
+    expect(document.getElementById("context-session-input").textContent).toBe("500");
+    expect(document.getElementById("context-session-output").textContent).toBe("42");
+    expect(document.getElementById("context-session-cache").textContent).toBe("60.0%");
+    expect(document.getElementById("context-session-cost").textContent).toBe("$0.0123");
   });
 
-  it("shows session in/out even before current context is known", () => {
-    const ui = setupContextUsage();
-    ui.setSessionTotals({ input: 100, output: 50 });
+  it("opens upward on hover and remains open while the pointer enters the popover", () => {
+    vi.useFakeTimers();
+    const control = setupContextUsage();
+    setPopulatedStats(control);
+    const trigger = document.getElementById("token-usage");
+    const popover = document.getElementById("context-viz");
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+      top: 700,
+      right: 900,
+      bottom: 728,
+      left: 872,
+      width: 28,
+      height: 28,
+      x: 872,
+      y: 700,
+      toJSON: () => ({}),
+    });
 
-    const pill = document.getElementById("token-usage");
-    expect(pill.classList.contains("visible")).toBe(true);
-    expect(pill.textContent).toBe("In 100 · Out 50");
+    trigger.dispatchEvent(new MouseEvent("mouseenter"));
+    expect(popover.classList.contains("hidden")).toBe(false);
+    expect(popover.style.top).toBe("auto");
+    expect(popover.style.bottom).not.toBe("");
+
+    trigger.dispatchEvent(new MouseEvent("mouseleave"));
+    popover.dispatchEvent(new MouseEvent("mouseenter"));
+    vi.advanceTimersByTime(100);
+    expect(popover.classList.contains("hidden")).toBe(false);
+
+    popover.dispatchEvent(new MouseEvent("mouseleave"));
+    vi.advanceTimersByTime(100);
+    expect(popover.classList.contains("hidden")).toBe(true);
   });
 
-  it("only shows the compact control when OMP has enough context to compact", () => {
+  it("preserves click-to-toggle behavior", () => {
+    const control = setupContextUsage();
+    setPopulatedStats(control);
+    const trigger = document.getElementById("token-usage");
+    const popover = document.getElementById("context-viz");
+
+    trigger.click();
+    expect(popover.classList.contains("hidden")).toBe(false);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    trigger.click();
+    expect(popover.classList.contains("hidden")).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("only enables Compact when the current provider context is large enough", () => {
     const control = setupContextUsage();
     const button = document.getElementById("compact-context-btn");
 
-    expect(button.closest("#context-viz")).not.toBeNull();
-    control.setUsage({ input: 2, cacheRead: 17_400 }, 1_000_000);
+    control.setContextBreakdown({ usedTokens: 17_402, contextWindow: 1_000_000 });
     expect(button.hidden).toBe(true);
 
-    control.setUsage({ input: 8_000, cacheRead: 17_000 }, 128_000);
+    control.setContextBreakdown({ usedTokens: 25_000, contextWindow: 128_000 });
     expect(button.hidden).toBe(false);
     expect(button.disabled).toBe(false);
 
@@ -105,15 +162,5 @@ describe("context usage header", () => {
     expect(button.disabled).toBe(true);
     expect(button.classList.contains("compacting")).toBe(true);
     expect(button.getAttribute("aria-busy")).toBe("true");
-  });
-
-  it("finds the newest assistant usage in a snapshot", () => {
-    expect(
-      findLatestAssistantUsage([
-        { role: "assistant", usage: { input: 1 } },
-        { role: "user", content: "again" },
-        { role: "assistant", usage: { input: 2, cacheRead: 3 } },
-      ]),
-    ).toEqual({ input: 2, cacheRead: 3 });
   });
 });

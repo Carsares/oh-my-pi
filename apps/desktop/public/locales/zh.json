@@ -92,11 +92,25 @@
     "copyFailed": "复制失败"
   },
   "context": {
+    "current": "当前上下文",
+    "sessionUsage": "本会话累计用量",
+    "totalInput": "总输入",
+    "totalOutput": "总输出",
+    "cacheUtilization": "缓存利用率",
+    "sessionCost": "费用",
+    "systemPrompt": "系统提示词",
+    "systemTools": "系统工具",
+    "systemContext": "系统上下文",
+    "skills": "技能",
+    "messages": "消息",
     "cached": "已缓存",
     "input": "输入",
     "output": "输出",
     "available": "可用",
     "used": "已用 {pct}%",
+    "total": "{used} / {total}",
+    "categoryValue": "{tokens} · {pct}%",
+    "triggerLabel": "上下文利用率：{pct}%",
     "tooltip": "{label}：{tokens}"
   },
   "models": {

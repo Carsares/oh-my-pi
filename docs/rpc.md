@@ -183,6 +183,14 @@ correlate it via `id`. Ordering across concurrent commands is not guaranteed
 - `{ id?, type: "set_session_name", name: string }`
 - `{ id?, type: "handoff", customInstructions?: string }`
 
+`get_session_stats` returns both the active-branch message totals and two
+additional authoritative usage views. `contextBreakdown` describes the current
+provider context (`usedTokens`, `contextWindow`, system prompt, system tools,
+system context, skills, and messages). `sessionUsage` is the cumulative session
+journal usage, including input, output, cache read/write, and model-derived
+cost. Context category percentages should use `categoryTokens / usedTokens`;
+cache utilization should use `cacheRead / (input + cacheRead + cacheWrite)`.
+
 ### Messages
 
 - `{ id?, type: "get_messages" }`

@@ -1,9 +1,17 @@
 import { t } from "../../i18n.js";
-import { formatTokens, setupContextViz } from "../../ui/context-viz.js";
+import { setupContextViz } from "../../ui/context-viz.js";
 
 // Mirrors OMP's DEFAULT_COMPACTION_SETTINGS.keepRecentTokens. Below this
 // boundary prepareCompaction() has no older context to summarize.
 export const MIN_COMPACTABLE_CONTEXT_TOKENS = 20_000;
+
+const CONTEXT_FIELDS = [
+  "systemPromptTokens",
+  "systemToolsTokens",
+  "systemContextTokens",
+  "skillsTokens",
+  "messagesTokens",
+];
 
 export function setupContextUsage({
   tokenUsageEl = document.getElementById("token-usage"),
@@ -12,13 +20,25 @@ export function setupContextUsage({
   contextLegend = document.getElementById("context-legend"),
   contextVizUsed = document.getElementById("context-viz-used"),
   contextVizTotal = document.getElementById("context-viz-total"),
+  sessionInputEl = document.getElementById("context-session-input"),
+  sessionOutputEl = document.getElementById("context-session-output"),
+  sessionCacheEl = document.getElementById("context-session-cache"),
+  sessionCostEl = document.getElementById("context-session-cost"),
   compactButton = document.getElementById("compact-context-btn"),
 } = {}) {
-  let usage = null;
+  let breakdown = null;
   let contextWindowSize = 0;
+  let sessionUsage = emptySessionUsage();
   let compacting = false;
   let working = false;
-  let sessionTokens = { input: 0, output: 0 };
+
+  function effectiveBreakdown() {
+    if (!breakdown) return null;
+    return {
+      ...breakdown,
+      contextWindow: contextWindowSize || breakdown.contextWindow,
+    };
+  }
 
   const viz = setupContextViz({
     tokenUsageEl,
@@ -27,49 +47,51 @@ export function setupContextUsage({
     contextLegend,
     contextVizUsed,
     contextVizTotal,
-    getUsage: () => usage,
-    getContextWindowSize: () => contextWindowSize,
-    getSessionTotals: () => sessionTokens,
+    sessionInputEl,
+    sessionOutputEl,
+    sessionCacheEl,
+    sessionCostEl,
+    getContextBreakdown: effectiveBreakdown,
+    getSessionUsage: () => sessionUsage,
   });
 
-  function setUsage(nextUsage, nextContextWindowSize = contextWindowSize) {
-    usage = normalizeUsage(nextUsage);
-    contextWindowSize = Number(nextContextWindowSize) || Number(usage?.contextWindow) || 0;
-    renderPill();
-    if (!contextViz?.classList.contains("hidden")) viz.update();
+  function setContextBreakdown(nextBreakdown) {
+    breakdown = normalizeBreakdown(nextBreakdown);
+    contextWindowSize = Number(breakdown?.contextWindow) || 0;
+    renderTrigger();
+    updateOpenPopover();
   }
 
   function setContextWindowSize(nextContextWindowSize) {
-    contextWindowSize = Number(nextContextWindowSize) || 0;
-    renderPill();
-    if (!contextViz?.classList.contains("hidden")) viz.update();
+    contextWindowSize = finiteAmount(nextContextWindowSize);
+    renderTrigger();
+    updateOpenPopover();
   }
 
-  function setSessionTotals(next = {}) {
-    sessionTokens = {
-      input: Number(next.input) || 0,
-      output: Number(next.output) || 0,
-    };
-    renderPill();
-    if (!contextViz?.classList.contains("hidden")) viz.update();
+  function setSessionUsage(nextUsage) {
+    sessionUsage = normalizeSessionUsage(nextUsage);
+    updateOpenPopover();
   }
 
   function clear() {
-    usage = null;
+    breakdown = null;
     contextWindowSize = 0;
-    sessionTokens = { input: 0, output: 0 };
+    sessionUsage = emptySessionUsage();
     tokenUsageEl?.classList.remove("visible", "warning", "critical");
     if (tokenUsageEl) {
-      tokenUsageEl.textContent = "";
       tokenUsageEl.title = t("usage.contextTitle");
+      tokenUsageEl.setAttribute("aria-label", t("usage.contextTitle"));
+      tokenUsageEl
+        .querySelector(".context-usage-ring")
+        ?.style.setProperty("--context-percent", "0");
     }
-    viz.hide();
+    viz.hide({ force: true });
     renderCompactButton();
   }
 
   function renderCompactButton() {
     if (!compactButton) return;
-    compactButton.hidden = usageTotal(usage) <= MIN_COMPACTABLE_CONTEXT_TOKENS;
+    compactButton.hidden = usedTokens() <= MIN_COMPACTABLE_CONTEXT_TOKENS;
     compactButton.classList.toggle("compacting", compacting);
     compactButton.disabled = compacting || working;
     compactButton.setAttribute("aria-busy", String(compacting));
@@ -80,63 +102,41 @@ export function setupContextUsage({
     compactButton.setAttribute("aria-label", description);
   }
 
-  function renderPill() {
+  function renderTrigger() {
     renderCompactButton();
     if (!tokenUsageEl) return;
     tokenUsageEl.classList.remove("warning", "critical");
-
-    const used = usageTotal(usage);
-    const parts = [];
-    if (sessionTokens.input > 0) {
-      parts.push(t("usage.inputSummary", { in: formatTokens(sessionTokens.input) }));
-    }
-    if (sessionTokens.output > 0) {
-      parts.push(t("usage.outputSummary", { out: formatTokens(sessionTokens.output) }));
-    }
-
-    let percent = null;
-    if (used > 0 && contextWindowSize > 0) {
-      percent = Math.round((used / contextWindowSize) * 100);
-      parts.push(`${percent}%`);
-      if (percent >= 80) tokenUsageEl.classList.add("critical");
-      else if (percent >= 60) tokenUsageEl.classList.add("warning");
-    } else if (used > 0) {
-      parts.push(formatTokens(used));
-    }
-
-    if (parts.length === 0) {
+    const currentBreakdown = effectiveBreakdown();
+    if (!currentBreakdown || currentBreakdown.contextWindow <= 0) {
       tokenUsageEl.classList.remove("visible");
-      tokenUsageEl.textContent = "";
-      tokenUsageEl.title = t("usage.contextTitle");
-      viz.hide();
+      viz.hide({ force: true });
       return;
     }
 
+    const percent = (currentBreakdown.usedTokens / currentBreakdown.contextWindow) * 100;
+    if (percent >= 80) tokenUsageEl.classList.add("critical");
+    else if (percent >= 60) tokenUsageEl.classList.add("warning");
     tokenUsageEl.classList.add("visible");
-    tokenUsageEl.textContent = parts.join(" · ");
-    tokenUsageEl.title = pillTitle(used);
+    tokenUsageEl
+      .querySelector(".context-usage-ring")
+      ?.style.setProperty("--context-percent", String(Math.min(100, Math.max(0, percent))));
+    const description = t("context.triggerLabel", { pct: Math.max(0, percent).toFixed(1) });
+    tokenUsageEl.title = description;
+    tokenUsageEl.setAttribute("aria-label", description);
   }
 
-  function pillTitle(used) {
-    const details = [];
-    if (sessionTokens.input > 0) {
-      details.push(t("usage.inputSummary", { in: formatTokens(sessionTokens.input) }));
-    }
-    if (sessionTokens.output > 0) {
-      details.push(t("usage.outputSummary", { out: formatTokens(sessionTokens.output) }));
-    }
-    if (used > 0 && contextWindowSize > 0) {
-      details.push(`Context: ${formatTokens(used)} / ${formatTokens(contextWindowSize)} tokens`);
-    } else if (used > 0) {
-      details.push(`Context: ${formatTokens(used)} tokens`);
-    }
-    return details.length > 0 ? details.join(" · ") : t("usage.contextTitle");
+  function updateOpenPopover() {
+    if (!contextViz?.classList.contains("hidden")) viz.update();
+  }
+
+  function usedTokens() {
+    return finiteAmount(breakdown?.usedTokens);
   }
 
   return {
     clear,
     get canCompact() {
-      return usageTotal(usage) > MIN_COMPACTABLE_CONTEXT_TOKENS;
+      return usedTokens() > MIN_COMPACTABLE_CONTEXT_TOKENS;
     },
     setCompacting(value) {
       compacting = Boolean(value);
@@ -146,37 +146,43 @@ export function setupContextUsage({
       working = Boolean(value);
       renderCompactButton();
     },
+    setContextBreakdown,
     setContextWindowSize,
-    setSessionTotals,
-    setUsage,
-    get usage() {
-      return usage;
+    setSessionUsage,
+    get breakdown() {
+      return breakdown;
     },
-    get contextWindowSize() {
-      return contextWindowSize;
+    get sessionUsage() {
+      return sessionUsage;
     },
   };
 }
 
-export function findLatestAssistantUsage(messages) {
-  if (!Array.isArray(messages)) return null;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message?.role === "assistant" && message.usage) return message.usage;
-  }
-  return null;
+function normalizeBreakdown(value) {
+  if (!value || typeof value !== "object") return null;
+  const result = {
+    contextWindow: finiteAmount(value.contextWindow),
+    usedTokens: finiteAmount(value.usedTokens),
+  };
+  for (const field of CONTEXT_FIELDS) result[field] = finiteAmount(value[field]);
+  return result;
 }
 
-export function usageTotal(usage) {
-  if (!usage) return 0;
-  return (Number(usage.input) || 0) + (Number(usage.cacheRead) || 0);
-}
-
-function normalizeUsage(usage) {
-  if (!usage) return null;
+function normalizeSessionUsage(value) {
   return {
-    ...usage,
-    input: Number(usage.input) || 0,
-    cacheRead: Number(usage.cacheRead) || 0,
+    input: finiteAmount(value?.input),
+    output: finiteAmount(value?.output),
+    cacheRead: finiteAmount(value?.cacheRead),
+    cacheWrite: finiteAmount(value?.cacheWrite),
+    cost: finiteAmount(value?.cost),
   };
+}
+
+function emptySessionUsage() {
+  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+}
+
+function finiteAmount(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 ? amount : 0;
 }

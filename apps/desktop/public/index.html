@@ -525,40 +525,6 @@
               title="Session cost"
               data-i18n-title="usage.sessionCostTitle"
             ></span>
-            <span class="context-usage-anchor">
-              <span
-                class="pill token-usage"
-                id="token-usage"
-                title="Context usage"
-                data-i18n-title="usage.contextTitle"
-              ></span>
-              <div class="context-viz hidden" id="context-viz">
-                <div class="context-viz-title" data-i18n="misc.contextWindow">
-                  Context Window
-                </div>
-                <div class="context-bar" id="context-bar"></div>
-                <div class="context-legend" id="context-legend"></div>
-                <div class="context-viz-footer">
-                  <span class="context-viz-summary">
-                    <span id="context-viz-used"></span>
-                    <span id="context-viz-total"></span>
-                  </span>
-                  <button
-                    type="button"
-                    class="ui-button ui-button--sm ui-button--secondary context-viz-compact-btn"
-                    id="compact-context-btn"
-                    title="Compact context to save tokens"
-                    data-i18n-title="input.compactDesc"
-                    aria-label="Compact context to save tokens"
-                    data-i18n-aria-label="input.compactDesc"
-                  >
-                    <span class="compact-btn-label" data-i18n="input.compact"
-                      >Compact</span
-                    >
-                  </button>
-                </div>
-              </div>
-            </span>
             <span class="header-open-app hidden" id="header-open-app">
               <button
                 class="ui-button ui-button--sm ui-button--secondary header-open-app-btn"
@@ -835,6 +801,86 @@
                       />
                     </div>
                     <div class="composer-toolbar-right">
+                      <span class="context-usage-anchor">
+                        <button
+                          type="button"
+                          class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost context-usage-button"
+                          id="token-usage"
+                          title="Context usage"
+                          data-i18n-title="usage.contextTitle"
+                          aria-label="Context usage"
+                          data-i18n-aria-label="usage.contextTitle"
+                          aria-controls="context-viz"
+                          aria-expanded="false"
+                          tabindex="-1"
+                        >
+                          <span class="context-usage-ring" aria-hidden="true"></span>
+                        </button>
+                        <div
+                          class="context-viz hidden"
+                          id="context-viz"
+                          role="dialog"
+                          aria-labelledby="context-viz-title"
+                        >
+                          <div class="context-viz-heading" id="context-viz-title" data-i18n="context.current">
+                            Current context
+                          </div>
+                          <div class="context-viz-overview">
+                            <strong id="context-viz-used"></strong>
+                            <span id="context-viz-total"></span>
+                          </div>
+                          <div
+                            class="context-bar"
+                            id="context-bar"
+                            role="progressbar"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                          ></div>
+                          <div class="context-legend" id="context-legend"></div>
+                          <section class="context-session-usage" aria-labelledby="context-session-title">
+                            <div
+                              class="context-viz-heading"
+                              id="context-session-title"
+                              data-i18n="context.sessionUsage"
+                            >
+                              Session usage
+                            </div>
+                            <dl class="context-session-grid">
+                              <div>
+                                <dt data-i18n="context.totalInput">Total input</dt>
+                                <dd id="context-session-input">0</dd>
+                              </div>
+                              <div>
+                                <dt data-i18n="context.totalOutput">Total output</dt>
+                                <dd id="context-session-output">0</dd>
+                              </div>
+                              <div>
+                                <dt data-i18n="context.cacheUtilization">Cache utilization</dt>
+                                <dd id="context-session-cache">--</dd>
+                              </div>
+                              <div>
+                                <dt data-i18n="context.sessionCost">Cost</dt>
+                                <dd id="context-session-cost">$0.0000</dd>
+                              </div>
+                            </dl>
+                          </section>
+                          <div class="context-viz-footer">
+                            <button
+                              type="button"
+                              class="ui-button ui-button--sm ui-button--secondary context-viz-compact-btn"
+                              id="compact-context-btn"
+                              title="Compact context to save tokens"
+                              data-i18n-title="input.compactDesc"
+                              aria-label="Compact context to save tokens"
+                              data-i18n-aria-label="input.compactDesc"
+                            >
+                              <span class="compact-btn-label" data-i18n="input.compact"
+                                >Compact</span
+                              >
+                            </button>
+                          </div>
+                        </div>
+                      </span>
                       <div class="model-dropdown" id="model-dropdown">
                         <button
                           type="button"

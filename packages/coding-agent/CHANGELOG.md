@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added current-context breakdowns and cumulative journal usage to `get_session_stats` RPC responses.
+
 ## [18.0.4] - 2026-08-24
 
 ### Added

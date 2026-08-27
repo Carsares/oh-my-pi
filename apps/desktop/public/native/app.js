@@ -74,7 +74,7 @@ import { RuntimeGateway } from "./transport/runtime-gateway.js";
 import { setupAppKeyboardShortcuts } from "./utils/keyboard-shortcuts.js";
 import { randomId } from "./utils/random-id.js";
 import { appRoutePath, parseAppRoute, replaceTemporarySessionRoute } from "./utils/router.js";
-import { findLatestAssistantUsage, setupContextUsage } from "./workspace/context-usage.js";
+import { setupContextUsage } from "./workspace/context-usage.js";
 import { toggleExclusiveSideView } from "./workspace/exclusive-side-panel.js";
 import { NativeFileBrowser } from "./workspace/file-browser.js";
 import { setupHeaderOpenApp } from "./workspace/header-open-app.js";
@@ -391,15 +391,13 @@ function openGitPanel() {
 
 const sessionCostEl = document.getElementById("session-cost");
 
-// Header status bar: aggregates session token/cost totals from session
-// stats + live completions. Token in/out render on the combined
-// token-usage pill; this bar only owns cost and publishes totals.
+// Header status bar owns the existing session-cost display. Context and
+// cumulative usage details are hydrated independently from get_session_stats.
 let headerStatusBar = null;
 if (sessionCostEl) {
   headerStatusBar = createHeaderStatusBar({
     sessionCostEl,
     t,
-    onTotalsChange: (totals) => contextUsage.setSessionTotals(totals),
   });
 }
 
@@ -418,8 +416,7 @@ function activeSessionFileForStatusBar() {
     null
   );
 }
-async function hydrateHeaderSessionStats() {
-  if (!headerStatusBar) return;
+async function hydrateSessionStats() {
   const generation = ++statsHydrationGeneration;
   try {
     const frame = await runtime.request({ type: "get_session_stats" }, target);
@@ -428,6 +425,15 @@ async function hydrateHeaderSessionStats() {
     const result = frame?.response ?? frame;
     if (!result?.success || !result?.data) return;
     if (generation !== statsHydrationGeneration) return;
+    if (
+      result.data.sessionId &&
+      target.sessionId !== "pending-bootstrap" &&
+      result.data.sessionId !== target.sessionId
+    )
+      return;
+    contextUsage.setContextBreakdown(result.data.contextBreakdown ?? null);
+    contextUsage.setSessionUsage(result.data.sessionUsage ?? null);
+    if (!headerStatusBar) return;
     if (!result.data.sessionFile) return;
     const activeSessionFile = activeSessionFileForStatusBar();
     if (activeSessionFile && result.data.sessionFile !== activeSessionFile) return;
@@ -664,10 +670,8 @@ const hydrateFromSnapshot = async (snapshot) => {
   contextUsage.setCompacting(snapshot.state.compaction?.status === "running");
   updateComposerModel(pi.model ?? null);
   updateComposerThinking(pi.thinkingLevel ?? "off");
-  contextUsage.setUsage(findLatestAssistantUsage(messages), currentModelContextWindow);
   setSessionCost(computeTotalCostFromMessages(messages));
-  // Hydrate header status bar from authoritative get_session_stats
-  hydrateHeaderSessionStats();
+  hydrateSessionStats();
   // Flush queued extension prompts after rendering is settled so inline cards
   // are not immediately destroyed by a subsequent renderHistory() clear.
   await extensionUi.flushForegroundQueue();
@@ -1758,7 +1762,7 @@ async function handleRuntimeEvent(event) {
         // OMP has replaced its context; the old aggregate is stale. Re-hydrate
         // from the authoritative get_session_stats.
         await hydrateSnapshotOnce();
-        hydrateHeaderSessionStats();
+        hydrateSessionStats();
       }
       break;
     }
@@ -1770,7 +1774,10 @@ async function handleRuntimeEvent(event) {
       if (event.text) messageRenderer.renderSystemMessage(event.text);
       break;
     case "config_update":
-      if (Object.hasOwn(event, "model")) updateComposerModel(event.model);
+      if (Object.hasOwn(event, "model")) {
+        updateComposerModel(event.model);
+        hydrateSessionStats();
+      }
       if (Object.hasOwn(event, "thinkingLevel")) updateComposerThinking(event.thinkingLevel);
       break;
     case "prompt_result":
@@ -1802,9 +1809,9 @@ async function handleRuntimeEvent(event) {
       if (event.message?.role === "assistant" && streamingElement) {
         messageRenderer.updateStreamingMessage(streamingElement, event.message.content ?? []);
         messageRenderer.finalizeStreamingMessage(streamingElement, event.message.usage ?? null);
-        contextUsage.setUsage(event.message.usage ?? null, currentModelContextWindow);
         setSessionCost(sessionTotalCost + (event.message.usage?.cost?.total ?? 0));
         headerStatusBar?.applyLiveUsage?.(event.message.usage ?? null);
+        hydrateSessionStats();
         streamingElement = null;
         convNav.notifyNewMessage();
       }
@@ -1904,9 +1911,10 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
     sidebar?.load({ acceptEmpty: true }).catch(showError);
   }
   sessionInfo.refresh();
+  contextUsage.clear();
   headerStatusBar?.reset?.();
   // Re-hydrate the aggregate stats for the new session.
-  hydrateHeaderSessionStats();
+  hydrateSessionStats();
   setSessionCost(0);
   // Save the outgoing session's draft and restore the incoming session's
   if (previousTarget.sessionId && previousTarget.sessionId !== "pending-bootstrap") {

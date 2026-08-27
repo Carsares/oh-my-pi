@@ -92,11 +92,25 @@
     "copyFailed": "コピーに失敗しました"
   },
   "context": {
+    "current": "現在のコンテキスト",
+    "sessionUsage": "セッション使用量",
+    "totalInput": "合計入力",
+    "totalOutput": "合計出力",
+    "cacheUtilization": "キャッシュ利用率",
+    "sessionCost": "費用",
+    "systemPrompt": "システムプロンプト",
+    "systemTools": "システムツール",
+    "systemContext": "システムコンテキスト",
+    "skills": "スキル",
+    "messages": "メッセージ",
     "cached": "キャッシュ済み",
     "input": "入力",
     "output": "出力",
     "available": "利用可能",
     "used": "{pct}% 使用中",
+    "total": "{used} / {total}",
+    "categoryValue": "{tokens} · {pct}%",
+    "triggerLabel": "コンテキスト使用率：{pct}%",
     "tooltip": "{label}：{tokens}"
   },
   "models": {

@@ -36,6 +36,7 @@ import type { SecretObfuscator } from "../secrets/obfuscator";
 import type { ConfiguredThinkingLevel } from "../thinking";
 import type { XdevState } from "../tools/xdev";
 import type { CodexAutoRedeemCoordinator } from "./codex-auto-reset";
+import type { UsageStatistics } from "./session-entries";
 import type { SessionManager } from "./session-manager";
 
 /** Maximum time the interactive shutdown path waits for Mnemopi consolidation. */
@@ -403,6 +404,8 @@ export interface SessionStats {
 	premiumRequests: number;
 	cost: number;
 	contextUsage?: ContextUsage;
+	contextBreakdown?: ContextUsageBreakdown;
+	sessionUsage: UsageStatistics;
 }
 
 /** Stored OAuth accounts available to the current model provider. */

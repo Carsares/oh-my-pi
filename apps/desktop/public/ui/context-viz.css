@@ -1,134 +1,208 @@
-/* ═══════════════════════════════════════════════════════
-   Context window visualiser popover (public/ui/context-viz.js)
-   Anchors to .token-usage header pill; segments/legend built dynamically
-   by setupContextViz(). Consumed via public/native/context-usage.js.
-   ═══════════════════════════════════════════════════════ */
+/* Context utilization control and upward popover (public/ui/context-viz.js). */
 
-/* Anchors the context-viz popover to the token-usage pill instead of the header */
 .context-usage-anchor {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  flex-shrink: 0;
 }
 
-/* Context window visualiser popover */
-.context-viz {
+.context-usage-button {
+  display: none;
+}
+
+.context-usage-button.visible {
+  display: inline-flex;
+}
+
+.context-usage-ring {
+  --context-percent: 0;
+  width: var(--space-4);
+  aspect-ratio: 1;
+  position: relative;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--accent) calc(var(--context-percent) * 1%),
+    var(--bg-glass-active) 0
+  );
+}
+
+.context-usage-ring::after {
+  content: "";
   position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
+  inset: var(--space-1);
+  border-radius: 50%;
+  background: var(--bg-solid);
+}
+
+.context-usage-button.warning .context-usage-ring {
+  background: conic-gradient(
+    var(--warning) calc(var(--context-percent) * 1%),
+    var(--bg-glass-active) 0
+  );
+}
+
+.context-usage-button.critical .context-usage-ring {
+  background: conic-gradient(
+    var(--error) calc(var(--context-percent) * 1%),
+    var(--bg-glass-active) 0
+  );
+}
+
+.context-viz {
   width: 320px;
+  max-width: calc(100vw - var(--space-4));
+  max-height: calc(100vh - var(--space-8));
+  overflow-y: auto;
   z-index: 1001;
   background: var(--bg-solid);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
   border: 1px solid var(--border-hover);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   padding: var(--space-4);
   box-shadow: var(--shadow-lg);
-  animation: dropdownIn 0.15s var(--ease);
+  animation: dropdownInUp 0.15s var(--ease);
 }
 
 .context-viz.hidden {
   display: none;
 }
 
-.context-viz-title {
+.context-viz-heading {
+  color: var(--text-primary);
   font-size: var(--font-size-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
-/* The stacked bar */
+.context-viz-overview {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.context-viz-overview span {
+  color: var(--text-secondary);
+}
+
 .context-bar {
   display: flex;
-  height: 24px;
-  border-radius: var(--radius-md);
+  height: var(--space-2);
+  margin: var(--space-3) 0;
   overflow: hidden;
   background: var(--bg-glass);
   border: 1px solid var(--border);
-  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
 }
 
 .context-bar-segment {
   height: 100%;
-  min-width: 2px;
+  min-width: var(--space-0-5);
   transition: width 0.4s var(--ease);
-  position: relative;
 }
 
-.context-bar-segment:first-child {
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-}
-
-.context-bar-segment:last-child {
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.context-bar-segment.input {
+.context-color-system-prompt {
   background: var(--accent);
 }
-.context-bar-segment.cache {
+
+.context-color-system-tools {
   background: var(--success);
-  opacity: 0.7;
-}
-.context-bar-segment.free {
-  background: transparent;
 }
 
-/* Legend */
+.context-color-system-context {
+  background: var(--warning);
+}
+
+.context-color-skills {
+  background: var(--error);
+}
+
+.context-color-messages {
+  background: var(--text-secondary);
+}
+
+.context-color-available {
+  background: var(--bg-glass-active);
+}
+
 .context-legend {
   display: flex;
   flex-direction: column;
   gap: var(--space-1-5);
 }
 
-.context-legend-item {
+.context-legend-item,
+.context-legend-label {
   display: flex;
   align-items: center;
+}
+
+.context-legend-item {
   justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
   font-size: var(--font-size-sm);
 }
 
-.context-legend-left {
-  display: flex;
-  align-items: center;
+.context-legend-label {
   gap: var(--space-1-5);
+  min-width: 0;
+  color: var(--text-secondary);
 }
 
 .context-legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-xs);
+  width: var(--space-2);
+  aspect-ratio: 1;
   flex-shrink: 0;
-}
-
-.context-legend-dot.input {
-  background: var(--accent);
-}
-.context-legend-dot.cache {
-  background: var(--success);
-  opacity: 0.7;
-}
-.context-legend-dot.free {
-  background: var(--bg-glass-strong);
-  border: 1px solid var(--border);
-}
-
-.context-legend-dot.output {
-  background: var(--warning);
+  border-radius: var(--radius-xs);
 }
 
 .context-legend-value {
+  flex-shrink: 0;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.context-session-usage {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.context-session-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+  margin: var(--space-3) 0 0;
+}
+
+.context-session-grid div {
+  min-width: 0;
+}
+
+.context-session-grid dt {
+  color: var(--text-secondary);
   font-size: var(--font-size-sm);
 }
 
+.context-session-grid dd {
+  margin: var(--space-1) 0 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-variant-numeric: tabular-nums;
+}
+
 .context-viz-footer {
-  margin-top: 10px;
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--border);
   display: flex;
-  justify-content: space-between;
-  font-size: var(--font-size-sm);
+  justify-content: flex-end;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.context-viz-compact-btn {
+  flex-shrink: 0;
 }

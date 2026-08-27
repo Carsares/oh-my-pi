@@ -129,17 +129,6 @@
   display: block;
 }
 
-/* Token usage pill */
-.token-usage {
-  color: var(--header-pill-text, var(--text-secondary));
-  display: none;
-  transition:
-    color 0.3s var(--ease),
-    opacity 0.3s var(--ease);
-  cursor: pointer;
-  font-variant-numeric: tabular-nums;
-}
-
 /* File sidebar toggle (merged file-sidebar-toggle + workspace-path pill).
  * Stays a square icon until the path label is shown, then expands like git. */
 .file-sidebar-toggle:has(.file-sidebar-toggle__label:not(.hidden)) {
@@ -178,37 +167,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.token-usage:hover {
-  border-color: var(--border-hover);
-  background: var(--bg-glass-hover);
-}
-
-.token-usage.visible {
-  display: block;
-}
-
-.token-usage.warning {
-  color: var(--warning);
-  border-color: rgba(251, 191, 36, 0.25);
-}
-
-.token-usage.critical {
-  color: var(--error);
-  border-color: rgba(248, 113, 113, 0.25);
-  animation: pulse 2s infinite;
-}
-
-.context-viz-summary {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.context-viz-compact-btn {
-  flex-shrink: 0;
-  align-self: center;
 }
 
 /* Compaction system messages */

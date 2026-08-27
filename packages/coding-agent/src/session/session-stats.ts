@@ -45,6 +45,15 @@ function correctedPromptTokens(assistant: AssistantMessage): number {
 	return Math.max(0, providerPromptTokens - (assistant.contextSnapshot?.historyRewriteTokensRemoved ?? 0));
 }
 
+function contextUsageFromBreakdown(breakdown: ContextUsageBreakdown | undefined): ContextUsage | undefined {
+	if (!breakdown) return undefined;
+	return {
+		tokens: breakdown.usedTokens,
+		contextWindow: breakdown.contextWindow,
+		percent: breakdown.contextWindow > 0 ? (breakdown.usedTokens / breakdown.contextWindow) * 100 : 0,
+	};
+}
+
 /** Computes session totals and tracks the in-flight context estimate. */
 export class SessionStatsTracker {
 	readonly #host: SessionStatsTrackerHost;
@@ -83,6 +92,7 @@ export class SessionStatsTracker {
 	/** Returns aggregate message, token, and cost statistics for the session. */
 	getSessionStats(): SessionStats {
 		const state = this.#host.agent.state;
+		const contextBreakdown = this.getContextBreakdown();
 		const userMessages = state.messages.filter(message => message.role === "user").length;
 		const assistantMessages = state.messages.filter(message => message.role === "assistant").length;
 		const toolResults = state.messages.filter(message => message.role === "toolResult").length;
@@ -139,7 +149,9 @@ export class SessionStatsTracker {
 			},
 			cost: totalCost,
 			premiumRequests: totalPremiumRequests,
-			contextUsage: this.getContextUsage(),
+			contextUsage: contextUsageFromBreakdown(contextBreakdown),
+			contextBreakdown,
+			sessionUsage: this.#host.sessionManager.getUsageStatistics(),
 		};
 	}
 
@@ -251,13 +263,7 @@ export class SessionStatsTracker {
 
 	/** Returns current context tokens, capacity, and percentage. */
 	getContextUsage(options?: { contextWindow?: number }): ContextUsage | undefined {
-		const breakdown = this.getContextBreakdown(options);
-		if (!breakdown) return undefined;
-		return {
-			tokens: breakdown.usedTokens,
-			contextWindow: breakdown.contextWindow,
-			percent: breakdown.contextWindow > 0 ? (breakdown.usedTokens / breakdown.contextWindow) * 100 : 0,
-		};
+		return contextUsageFromBreakdown(this.getContextBreakdown(options));
 	}
 
 	/** Monotonic revision for in-flight context snapshot changes. */

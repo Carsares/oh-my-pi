@@ -85,6 +85,58 @@ describe("AgentSession session stats", () => {
 			percent: (120_000 / model.contextWindow) * 100,
 		});
 		expect(stats.contextUsage).toEqual(directUsage);
+		expect(stats.contextBreakdown).toEqual(session.getContextBreakdown());
+	});
+
+	it("exposes cumulative journal usage separately from active-message totals", () => {
+		const model = modelRegistry.getAll().find(candidate => candidate.contextWindow && candidate.contextWindow > 0);
+		if (!model?.contextWindow) {
+			throw new Error("Expected bundled model with a context window");
+		}
+		const sessionManager = SessionManager.inMemory();
+		sessionManager.appendMessage({
+			role: "assistant",
+			content: [{ type: "text", text: "Earlier branch response" }],
+			api: model.api,
+			provider: model.provider,
+			model: model.id,
+			usage: {
+				input: 20,
+				output: 10,
+				cacheRead: 70,
+				cacheWrite: 5,
+				totalTokens: 105,
+				cost: { input: 0.01, output: 0.02, cacheRead: 0.003, cacheWrite: 0.001, total: 0.034 },
+			},
+			stopReason: "stop",
+			timestamp: Date.now(),
+		});
+		const agent = new Agent({
+			initialState: { model, systemPrompt: ["Test"], tools: [], messages: [] },
+		});
+		session = new AgentSession({
+			agent,
+			sessionManager,
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+		});
+
+		const stats = session.getSessionStats();
+
+		expect(stats.tokens.total).toBe(0);
+		expect(stats.sessionUsage).toEqual({
+			input: 20,
+			output: 10,
+			cacheRead: 70,
+			cacheWrite: 5,
+			totalTokens: 105,
+			orchestrationInput: 0,
+			orchestrationOutput: 0,
+			orchestrationCacheRead: 0,
+			premiumRequests: 0,
+			cost: 0.034,
+		});
+		expect(stats.contextBreakdown).toEqual(session.getContextBreakdown());
 	});
 
 	it("reconstructs persisted and active tool-loop context when provider prompt usage is unavailable", async () => {

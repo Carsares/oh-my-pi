@@ -92,11 +92,25 @@
     "copyFailed": "Copy failed"
   },
   "context": {
+    "current": "Current context",
+    "sessionUsage": "Session usage",
+    "totalInput": "Total input",
+    "totalOutput": "Total output",
+    "cacheUtilization": "Cache utilization",
+    "sessionCost": "Cost",
+    "systemPrompt": "System prompt",
+    "systemTools": "System tools",
+    "systemContext": "System context",
+    "skills": "Skills",
+    "messages": "Messages",
     "cached": "Cached",
     "input": "Input",
     "output": "Output",
     "available": "Available",
     "used": "{pct}% used",
+    "total": "{used} / {total}",
+    "categoryValue": "{tokens} · {pct}%",
+    "triggerLabel": "Context usage: {pct}%",
     "tooltip": "{label}: {tokens}"
   },
   "models": {

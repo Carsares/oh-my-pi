@@ -395,7 +395,7 @@ describe("settings API key model refresh", () => {
   });
 
   test("health check updates model row state", async () => {
-    const call = vi.fn(async (operation) => {
+    const call = vi.fn(async (operation, params) => {
       if (operation === "list_model_catalog") {
         return makeCatalogResponse([
           {
@@ -416,6 +416,7 @@ describe("settings API key model refresh", () => {
         ]);
       }
       if (operation === "check_model_health") {
+        expect(params).toEqual({ provider: "anthropic", modelId: "claude-sonnet-5" });
         expect(document.querySelector(".api-model-health-dot.checking")).not.toBeNull();
         return {
           ok: true,
@@ -448,6 +449,68 @@ describe("settings API key model refresh", () => {
         "model overloaded",
       );
     });
+  });
+
+  test("renders each model result before checking the next model", async () => {
+    let firstResultRendered = false;
+    const call = vi.fn(async (operation, params) => {
+      if (operation === "list_model_catalog") {
+        return makeCatalogResponse([
+          {
+            provider: "anthropic",
+            displayName: "Anthropic",
+            configured: true,
+            models: [
+              { provider: "anthropic", id: "claude-sonnet-5", available: true, visible: true },
+              { provider: "anthropic", id: "claude-opus-5", available: true, visible: true },
+            ],
+          },
+        ]);
+      }
+      if (operation === "check_model_health") {
+        expect(params.provider).toBe("anthropic");
+        if (params.modelId === "claude-opus-5") {
+          firstResultRendered = document
+            .querySelector('[data-model-id="claude-sonnet-5"] .api-model-health-dot')
+            .classList.contains("healthy");
+        }
+        return {
+          ok: true,
+          data: {
+            results: [
+              {
+                provider: "anthropic",
+                modelId: params.modelId,
+                status: "healthy",
+                latencyMs: 42,
+              },
+            ],
+          },
+        };
+      }
+      throw new Error(`Unexpected operation: ${operation}`);
+    });
+
+    const { loadApiKeysPanel } = setupSettingsConfig({
+      configGateway: { call },
+      onModelConfigurationChanged: vi.fn(),
+    });
+
+    await loadApiKeysPanel();
+    document.querySelector(".api-key-row-actions .api-model-check-visible").click();
+
+    await vi.waitFor(() => {
+      expect(firstResultRendered).toBe(true);
+      expect(document.querySelectorAll(".api-model-health-dot.healthy")).toHaveLength(2);
+    });
+    expect(document.querySelector(".api-key-row-summary").textContent).toBe(
+      "2 enabled · 2 healthy · 0 issues",
+    );
+    expect(
+      call.mock.calls
+        .filter(([operation]) => operation === "check_model_health")
+        .map(([, params]) => params.modelId),
+    ).toEqual(["claude-sonnet-5", "claude-opus-5"]);
   });
 
   test("keeps the provider card mounted when a health check fails", async () => {

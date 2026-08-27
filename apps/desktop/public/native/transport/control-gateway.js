@@ -19,11 +19,19 @@ export class HostControlGateway {
     });
   }
 
-  #request(operation, parameters = {}) {
+  #request(operation, parameters = {}, { timeoutMs = 0 } = {}) {
     const requestId = `host-${this.#nextRequestId++}`;
     const generation = this.#generation;
     return new Promise((resolve, reject) => {
-      this.#pending.set(requestId, { resolve, reject, generation });
+      const pending = { resolve, reject, generation, timer: null };
+      this.#pending.set(requestId, pending);
+      if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+        pending.timer = setTimeout(() => {
+          if (this.#pending.get(requestId) !== pending) return;
+          this.#pending.delete(requestId);
+          reject(new Error(`Host request "${operation}" timed out`));
+        }, timeoutMs);
+      }
       try {
         this.#adapter.send({
           type: "host_request",
@@ -33,6 +41,7 @@ export class HostControlGateway {
         });
       } catch (error) {
         this.#pending.delete(requestId);
+        if (pending.timer) clearTimeout(pending.timer);
         reject(error);
       }
     });
@@ -68,8 +77,8 @@ export class HostControlGateway {
     return frame?.data ?? frame;
   }
 
-  async configManagementRequest(request, { cwd = "" } = {}) {
-    const frame = await this.#request("config_management_request", { request, cwd });
+  async configManagementRequest(request, { cwd = "", timeoutMs = 0 } = {}) {
+    const frame = await this.#request("config_management_request", { request, cwd }, { timeoutMs });
     return frame?.data ?? frame;
   }
 
@@ -120,6 +129,7 @@ export class HostControlGateway {
     const pending = this.#pending.get(frame?.requestId);
     if (!pending || pending.generation !== this.#generation) return;
     this.#pending.delete(frame.requestId);
+    if (pending.timer) clearTimeout(pending.timer);
     if (frame.error) pending.reject(new Error(frame.error.message ?? String(frame.error)));
     else pending.resolve(frame);
   }
@@ -127,6 +137,7 @@ export class HostControlGateway {
   #disconnect() {
     this.#generation += 1;
     for (const pending of this.#pending.values()) {
+      if (pending.timer) clearTimeout(pending.timer);
       pending.reject(new Error("Host disconnected before the control request completed"));
     }
     this.#pending.clear();

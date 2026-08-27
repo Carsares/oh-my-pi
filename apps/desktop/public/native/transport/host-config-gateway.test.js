@@ -13,10 +13,32 @@ describe("HostConfigGateway", () => {
       ok: true,
       data: { providers: [{ provider: "openai" }] },
     });
-    expect(configManagementRequest).toHaveBeenCalledWith({
-      operation: "list_model_catalog",
-      params: {},
-    });
+    expect(configManagementRequest).toHaveBeenCalledWith(
+      {
+        operation: "list_model_catalog",
+        params: {},
+      },
+      {},
+    );
+  });
+
+  it("forwards request options to the Host control gateway", async () => {
+    const configManagementRequest = vi.fn().mockResolvedValue({ ok: true, data: { results: [] } });
+    const gateway = new HostConfigGateway({ configManagementRequest });
+
+    await gateway.call(
+      "check_model_health",
+      { provider: "anthropic", modelId: "claude-sonnet-5" },
+      { timeoutMs: 120_000 },
+    );
+
+    expect(configManagementRequest).toHaveBeenCalledWith(
+      {
+        operation: "check_model_health",
+        params: { provider: "anthropic", modelId: "claude-sonnet-5" },
+      },
+      { timeoutMs: 120_000 },
+    );
   });
 
   it("routes external URLs to the Host-owned opener", async () => {

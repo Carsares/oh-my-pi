@@ -8,11 +8,11 @@ export class HostConfigGateway {
     this.#control = control;
   }
 
-  async call(operation, params = {}) {
+  async call(operation, params = {}, options = {}) {
     if (operation === "open_external") {
       await this.#control.openExternal(params.url);
       return { ok: true };
     }
-    return this.#control.configManagementRequest({ operation, params });
+    return this.#control.configManagementRequest({ operation, params }, options);
   }
 }

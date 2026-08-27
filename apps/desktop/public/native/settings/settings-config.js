@@ -707,24 +707,21 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     if (status) status.textContent = t("settings.apiKeys.checkingHealthEllipsis");
   }
 
-  function setModelRowHealthError(row, message) {
-    if (!row) return;
-    const dot = row.querySelector(".api-model-health-dot");
-    const status = row.querySelector(".api-model-health-status");
-    const text = t("settings.apiKeys.failedWithMessage", {
-      message: message || t("settings.apiKeys.healthCheckFailed"),
-    });
-    if (dot) {
-      dot.className = "api-model-health-dot unknown";
-      dot.title = text;
-    }
-    if (status) status.textContent = text;
-  }
-
   function applyHealthResult(result) {
     const row = apiKeysContainer.querySelector(
       `.api-model-row[data-provider="${escapeSelectorValue(result.provider)}"][data-model-id="${escapeSelectorValue(result.modelId)}"]`,
     );
+    const provider = catalogProviders.find((candidate) => candidate.provider === result.provider);
+    const model =
+      provider && getProviderModels(provider).find((candidate) => candidate.id === result.modelId);
+    if (model) {
+      model.health = {
+        status: result.status,
+        latencyMs: result.latencyMs,
+        error: result.error,
+      };
+    }
+    updateProviderSummary(result.provider);
     if (!row) return;
     const dot = row.querySelector(".api-model-health-dot");
     const status = row.querySelector(".api-model-health-status");
@@ -736,26 +733,66 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     if (status) status.textContent = describeModelHealth(health);
   }
 
-  async function checkModelHealth(provider) {
-    for (const modelRow of getProviderModelRows(provider)) {
-      const toggle = modelRow.querySelector(".api-model-visibility-toggle");
-      if (toggle?.checked && modelRow.dataset.available !== "false") setModelRowChecking(modelRow);
+  function updateProviderSummary(providerId) {
+    const provider = catalogProviders.find((candidate) => candidate.provider === providerId);
+    if (!provider) return;
+    const selector = [
+      `.api-key-row[data-provider="${escapeSelectorValue(providerId)}"]`,
+      `.provider-manager-health[data-provider="${escapeSelectorValue(providerId)}"]`,
+    ].join(",");
+    for (const container of apiKeysContainer.querySelectorAll(selector)) {
+      const summary = container.querySelector(".api-key-row-summary");
+      if (summary) summary.textContent = describeProviderSummary(getProviderModels(provider));
     }
-    const resp = await call(
-      "check_model_health",
-      { provider },
-      { timeoutMs: HEALTH_CHECK_TIMEOUT_MS },
-    ).catch((error) => ({ ok: false, error: error?.message }));
-    if (resp?.ok && Array.isArray(resp.data?.results)) {
-      for (const result of resp.data.results) applyHealthResult(result);
-    } else {
-      const message = resp?.error || t("settings.apiKeys.healthCheckFailed");
-      for (const modelRow of getProviderModelRows(provider)) {
-        const toggle = modelRow.querySelector(".api-model-visibility-toggle");
-        if (toggle?.checked && modelRow.dataset.available !== "false") {
-          setModelRowHealthError(modelRow, message);
+  }
+
+  function getHealthCheckButtons(provider) {
+    const selector = [
+      `.api-key-row[data-provider="${escapeSelectorValue(provider)}"]`,
+      `.provider-manager-health[data-provider="${escapeSelectorValue(provider)}"]`,
+    ].join(",");
+    return [...apiKeysContainer.querySelectorAll(selector)].flatMap((container) => [
+      ...container.querySelectorAll(".api-model-check-visible"),
+    ]);
+  }
+
+  async function checkModelHealth(provider) {
+    const modelRows = getProviderModelRows(provider).filter((modelRow) => {
+      const toggle = modelRow.querySelector(".api-model-visibility-toggle");
+      return toggle?.checked && modelRow.dataset.available !== "false";
+    });
+    const checkButtons = getHealthCheckButtons(provider);
+    const previousButtonStates = checkButtons.map((button) => [button, button.disabled]);
+    for (const button of checkButtons) button.disabled = true;
+    for (const modelRow of modelRows) setModelRowChecking(modelRow);
+
+    try {
+      for (const modelRow of modelRows) {
+        const modelId = modelRow.dataset.modelId;
+        const resp = await call(
+          "check_model_health",
+          { provider, modelId },
+          { timeoutMs: HEALTH_CHECK_TIMEOUT_MS },
+        ).catch((error) => ({ ok: false, error: error?.message }));
+        const result =
+          resp?.ok && Array.isArray(resp.data?.results)
+            ? resp.data.results.find(
+                (candidate) => candidate?.provider === provider && candidate?.modelId === modelId,
+              )
+            : null;
+        if (result) {
+          applyHealthResult(result);
+        } else {
+          applyHealthResult({
+            provider,
+            modelId,
+            status: "unhealthy",
+            error: resp?.error || t("settings.apiKeys.healthCheckFailed"),
+          });
         }
       }
+    } finally {
+      for (const [button, disabled] of previousButtonStates) button.disabled = disabled;
     }
   }
 
@@ -1351,6 +1388,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   function renderProviderHealthSection(main, provider) {
     const healthSection = document.createElement("div");
     healthSection.className = "provider-manager-health";
+    healthSection.dataset.provider = provider.provider;
 
     const header = document.createElement("div");
     header.className = "api-key-row-header provider-manager-health-header";

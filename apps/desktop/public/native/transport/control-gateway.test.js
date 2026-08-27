@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { HostControlGateway } from "./control-gateway.js";
 import { createInMemoryRuntimeAdapter } from "./runtime-gateway.js";
 
@@ -146,6 +146,29 @@ describe("HostControlGateway", () => {
       data: { ok: true, data: { providers: [] } },
     });
     await expect(response).resolves.toEqual({ ok: true, data: { providers: [] } });
+  });
+
+  it("times out configuration requests when requested", async () => {
+    vi.useFakeTimers();
+    try {
+      const adapter = createInMemoryRuntimeAdapter();
+      const control = new HostControlGateway(adapter);
+      const response = control.configManagementRequest(
+        {
+          operation: "check_model_health",
+          params: { provider: "anthropic", modelId: "claude-sonnet-5" },
+        },
+        { timeoutMs: 100 },
+      );
+      const rejection = expect(response).rejects.toThrow(
+        'Host request "config_management_request" timed out',
+      );
+
+      await vi.advanceTimersByTimeAsync(100);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("returns the new instance id after a runtime restart", async () => {

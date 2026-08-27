@@ -290,3 +290,13 @@ test("does not draw a curved inset border on the selected provider or model", ()
     expect(rule.groups.declarations).not.toMatch(/box-shadow/);
   }
 });
+
+test("uses the success color for active model switches in dark themes", () => {
+  const css = readFileSync("public/native/settings/settings-config.css", "utf8");
+
+  expect(css).toMatch(
+    /:root\[data-theme="night"\][\s\S]*\.api-model-visibility-toggle:checked[\s\S]*background:\s*var\(--success\)/,
+  );
+  expect(css).toContain(':root[data-theme="midnight"] .api-model-select-all-toggle:checked');
+  expect(css).toMatch(/\.api-model-visibility-toggle:checked[\s\S]*background:\s*var\(--accent\)/);
+});

@@ -600,6 +600,11 @@
   background: var(--accent);
 }
 
+:root[data-theme="night"] .pkg-manager-toggle.is-on,
+:root[data-theme="midnight"] .pkg-manager-toggle.is-on {
+  background: var(--success);
+}
+
 .pkg-manager-toggle.is-loading {
   opacity: 0.6;
   cursor: progress;

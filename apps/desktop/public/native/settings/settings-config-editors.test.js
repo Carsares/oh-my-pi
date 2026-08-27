@@ -25,6 +25,17 @@ function expectVisibilityCall(call, provider, modelId, visible) {
   ).toBe(true);
 }
 
+function expectBatchVisibilityCall(call, provider, updates) {
+  const calls = call.mock.calls.filter(([operation]) => operation === "set_models_visibility");
+  expect(
+    calls.some(
+      ([, params]) =>
+        params?.provider === provider &&
+        JSON.stringify(params?.updates) === JSON.stringify(updates),
+    ),
+  ).toBe(true);
+}
+
 describe("settings API key model refresh", () => {
   let dom;
 
@@ -374,7 +385,7 @@ describe("settings API key model refresh", () => {
           },
         ]);
       }
-      if (operation === "set_model_visibility") return { ok: true };
+      if (operation === "set_models_visibility") return { ok: true };
       throw new Error(`Unexpected operation: ${operation}`);
     });
 
@@ -389,9 +400,136 @@ describe("settings API key model refresh", () => {
     selectAllToggle.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await vi.waitFor(() => expect(onModelConfigurationChanged).toHaveBeenCalledTimes(1));
 
-    expectVisibilityCall(call, "anthropic", "claude-sonnet-5", false);
-    expectVisibilityCall(call, "anthropic", "claude-opus-5", false);
+    expectBatchVisibilityCall(call, "anthropic", [
+      { modelId: "claude-sonnet-5", visible: false },
+      { modelId: "claude-opus-5", visible: false },
+    ]);
+    expect(
+      call.mock.calls.filter(([operation]) => operation === "set_models_visibility"),
+    ).toHaveLength(1);
     expect(onModelConfigurationChanged).toHaveBeenCalledTimes(1);
+  });
+
+  test("reloads persisted visibility after a failed batch and allows retry", async () => {
+    const visibility = {
+      "claude-sonnet-5": true,
+      "claude-opus-5": true,
+    };
+    let failBatch = true;
+    const call = vi.fn(async (operation, params) => {
+      if (operation === "list_model_catalog") {
+        return makeCatalogResponse([
+          {
+            provider: "anthropic",
+            displayName: "Anthropic",
+            configured: true,
+            models: Object.entries(visibility).map(([id, visible]) => ({
+              provider: "anthropic",
+              id,
+              available: true,
+              visible,
+              health: { status: "unknown" },
+            })),
+          },
+        ]);
+      }
+      if (operation === "set_models_visibility") {
+        if (failBatch) {
+          failBatch = false;
+          return { ok: false, error: "write failed" };
+        }
+        for (const update of params.updates) visibility[update.modelId] = update.visible;
+        return { ok: true };
+      }
+      throw new Error(`Unexpected operation: ${operation}`);
+    });
+
+    const { loadApiKeysPanel } = setupSettingsConfig({
+      configGateway: { call },
+      onModelConfigurationChanged: vi.fn(),
+    });
+
+    await loadApiKeysPanel();
+    const selectAllToggle = document.querySelector(".api-model-select-all-toggle");
+    selectAllToggle.checked = false;
+    selectAllToggle.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(
+        call.mock.calls.filter(([operation]) => operation === "set_models_visibility"),
+      ).toHaveLength(1);
+      expect(document.querySelectorAll(".api-model-visibility-toggle:checked")).toHaveLength(2);
+      expect(document.querySelector(".api-model-select-all-toggle").disabled).toBe(false);
+    });
+    expect(document.querySelector(".api-model-select-all-toggle").disabled).toBe(false);
+    expect(
+      [...document.querySelectorAll(".api-model-visibility-toggle")].every(
+        (toggle) => !toggle.disabled,
+      ),
+    ).toBe(true);
+
+    const refreshedSelectAll = document.querySelector(".api-model-select-all-toggle");
+    refreshedSelectAll.checked = false;
+    refreshedSelectAll.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expectBatchVisibilityCall(call, "anthropic", [
+        { modelId: "claude-sonnet-5", visible: false },
+        { modelId: "claude-opus-5", visible: false },
+      ]);
+      expect(document.querySelectorAll(".api-model-visibility-toggle:checked")).toHaveLength(0);
+    });
+  });
+
+  test("re-enables a model toggle after a failed write so it can be retried", async () => {
+    let visible = true;
+    let failNextWrite = true;
+    const call = vi.fn(async (operation, params) => {
+      if (operation === "list_model_catalog") {
+        return makeCatalogResponse([
+          {
+            provider: "anthropic",
+            displayName: "Anthropic",
+            configured: true,
+            models: [
+              {
+                provider: "anthropic",
+                id: "claude-opus-5",
+                available: true,
+                visible,
+                health: { status: "unknown" },
+              },
+            ],
+          },
+        ]);
+      }
+      if (operation === "set_model_visibility") {
+        if (failNextWrite) {
+          failNextWrite = false;
+          return { ok: false, error: "write failed" };
+        }
+        visible = params.visible;
+        return { ok: true };
+      }
+      throw new Error(`Unexpected operation: ${operation}`);
+    });
+
+    const { loadApiKeysPanel } = setupSettingsConfig({
+      configGateway: { call },
+      onModelConfigurationChanged: vi.fn(),
+    });
+
+    await loadApiKeysPanel();
+    const toggle = document.querySelector(".api-model-visibility-toggle");
+    toggle.checked = false;
+    toggle.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(toggle.disabled).toBe(false));
+    expect(toggle.checked).toBe(true);
+
+    toggle.checked = false;
+    toggle.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    await vi.waitFor(() => expectVisibilityCall(call, "anthropic", "claude-opus-5", false));
+    expect(document.querySelector(".api-model-visibility-toggle").checked).toBe(false);
   });
 
   test("health check updates model row state", async () => {

@@ -351,6 +351,51 @@ describe("picot config models operations", () => {
     });
     expect(existsSync(join(agentDir, "models.json"))).toBe(false);
   });
+
+  it("updates multiple model visibility preferences in one batch", async () => {
+    const { agentDir, handlePicotConfig } = await loadConfigWithTempHome();
+    const preferencesPath = join(agentDir, "picot-models.json");
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(
+      preferencesPath,
+      JSON.stringify({
+        visibility: { "anthropic/claude-sonnet": true },
+        health: { "anthropic/claude-sonnet": { status: "healthy" } },
+      }),
+      "utf8",
+    );
+
+    await expect(
+      handlePicotConfig(
+        "set_models_visibility",
+        {
+          provider: "anthropic",
+          updates: [
+            { modelId: "claude-sonnet", visible: false },
+            { modelId: "claude-opus", visible: false },
+          ],
+        },
+        {},
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      data: {
+        provider: "anthropic",
+        updates: [
+          { modelId: "claude-sonnet", visible: false },
+          { modelId: "claude-opus", visible: false },
+        ],
+      },
+    });
+
+    expect(JSON.parse(readFileSync(preferencesPath, "utf8"))).toEqual({
+      visibility: {
+        "anthropic/claude-sonnet": false,
+        "anthropic/claude-opus": false,
+      },
+      health: { "anthropic/claude-sonnet": { status: "healthy" } },
+    });
+  });
 });
 
 describe("picot config auth operations", () => {

@@ -11,6 +11,15 @@ function ruleBody(selector) {
 }
 
 describe("extensions browse layout", () => {
+  test("uses the success color for enabled extension switches in dark themes", () => {
+    expect(styleCss).toContain(':root[data-theme="night"] .pkg-manager-toggle.is-on');
+    expect(styleCss).toContain(':root[data-theme="midnight"] .pkg-manager-toggle.is-on');
+    expect(styleCss).toMatch(/\.pkg-manager-toggle\.is-on\s*\{[^}]*background:\s*var\(--accent\)/);
+    expect(styleCss).toMatch(
+      /:root\[data-theme="night"\][\s\S]*\.pkg-manager-toggle\.is-on[\s\S]*background:\s*var\(--success\)/,
+    );
+  });
+
   test("lets marketplace cards grow when badges wrap", () => {
     const rowRule = ruleBody(".pkg-browse-row");
 

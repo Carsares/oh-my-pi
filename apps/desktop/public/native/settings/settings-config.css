@@ -847,6 +847,14 @@
   background: var(--accent);
 }
 
+:root[data-theme="night"] .api-model-visibility-toggle:checked,
+:root[data-theme="night"] .api-model-select-all-toggle:checked,
+:root[data-theme="midnight"] .api-model-visibility-toggle:checked,
+:root[data-theme="midnight"] .api-model-select-all-toggle:checked {
+  border-color: var(--success);
+  background: var(--success);
+}
+
 .api-model-visibility-toggle:checked::after,
 .api-model-select-all-toggle:checked::after {
   left: 18px;

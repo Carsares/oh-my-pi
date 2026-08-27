@@ -25,6 +25,11 @@ type ModelPreferencesFile = {
 	health?: Record<string, ModelHealth>;
 };
 
+type ModelVisibilityUpdate = {
+	modelId: string;
+	visible: boolean;
+};
+
 type CatalogModel = {
 	provider?: string;
 	id?: string;
@@ -72,6 +77,7 @@ export type ConfigManagementServiceOptions = {
 const CONFIG_MANAGEMENT_OPERATIONS = new Set([
 	"list_model_catalog",
 	"set_model_visibility",
+	"set_models_visibility",
 	"check_model_health",
 	"set_api_key",
 	"remove_api_key",
@@ -168,6 +174,14 @@ class ModelPreferencesStore {
 	setVisibility(provider: string, modelId: string, visible: boolean): void {
 		const preferences = this.read();
 		preferences.visibility[modelPreferenceKey(provider, modelId)] = visible;
+		this.write(preferences);
+	}
+
+	setVisibilityBatch(provider: string, updates: ModelVisibilityUpdate[]): void {
+		const preferences = this.read();
+		for (const update of updates) {
+			preferences.visibility[modelPreferenceKey(provider, update.modelId)] = update.visible;
+		}
 		this.write(preferences);
 	}
 
@@ -365,6 +379,8 @@ export class ConfigManagementService {
 					return { ok: true, data: await buildModelCatalog(this.#requireRegistry(), this.#preferences) };
 				case "set_model_visibility":
 					return { ok: true, data: this.#setModelVisibility(params) };
+				case "set_models_visibility":
+					return { ok: true, data: this.#setModelsVisibility(params) };
 				case "check_model_health":
 					return { ok: true, data: await this.#checkModelHealth(params) };
 				case "set_api_key":
@@ -410,6 +426,31 @@ export class ConfigManagementService {
 		const visible = params.visible !== false;
 		this.#preferences.setVisibility(provider, modelId, visible);
 		return { provider, modelId, visible };
+	}
+
+	#setModelsVisibility(params: Record<string, unknown>) {
+		const provider = asString(params.provider);
+		if (!provider) throw new Error("provider is required");
+		if (!Array.isArray(params.updates) || params.updates.length === 0) {
+			throw new Error("updates must be a non-empty array");
+		}
+		const updates: ModelVisibilityUpdate[] = [];
+		const modelIds = new Set<string>();
+		for (const value of params.updates) {
+			if (!value || typeof value !== "object" || Array.isArray(value)) {
+				throw new Error("Each visibility update must be an object");
+			}
+			const update = value as { modelId?: unknown; visible?: unknown };
+			const modelId = asString(update.modelId);
+			if (!modelId || typeof update.visible !== "boolean") {
+				throw new Error("Each visibility update requires modelId and visible");
+			}
+			if (modelIds.has(modelId)) throw new Error(`Duplicate modelId: ${modelId}`);
+			modelIds.add(modelId);
+			updates.push({ modelId, visible: update.visible });
+		}
+		this.#preferences.setVisibilityBatch(provider, updates);
+		return { provider, updates };
 	}
 
 	async #checkModelHealth(params: Record<string, unknown>) {

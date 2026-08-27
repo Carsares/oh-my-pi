@@ -580,20 +580,22 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     const visibilityButton = providerRow?.querySelector(".api-model-select-all-toggle");
     if (visibilityButton) visibilityButton.disabled = true;
     for (const toggle of toggles) toggle.disabled = true;
-    for (const row of modelsToUpdate) {
-      const resp = await call("set_model_visibility", {
+    let changed = false;
+    try {
+      const resp = await call("set_models_visibility", {
         provider,
-        modelId: row.dataset.modelId,
-        visible,
+        updates: modelsToUpdate.map((row) => ({ modelId: row.dataset.modelId, visible })),
       }).catch(() => null);
-      if (!resp?.ok) {
-        if (visibilityButton) visibilityButton.disabled = false;
-        for (const toggle of toggles) toggle.disabled = false;
-        return;
+      changed = Boolean(resp?.ok);
+    } finally {
+      // Re-read persisted visibility after the batch write so the DOM cannot
+      // keep a stale state that prevents the next toggle.
+      try {
+        if (changed) await onModelConfigurationChanged?.();
+      } finally {
+        await loadApiKeysPanel({ preserveUi: true });
       }
     }
-    await onModelConfigurationChanged?.();
-    await loadApiKeysPanel({ preserveUi: true });
   }
 
   function buildModelRow(model) {
@@ -633,18 +635,25 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     );
     visibility.checked = model.visible !== false;
     visibility.addEventListener("change", async () => {
+      const previousValue = !visibility.checked;
       visibility.disabled = true;
-      const resp = await call("set_model_visibility", {
-        provider: model.provider,
-        modelId: model.id,
-        visible: visibility.checked,
-      }).catch(() => null);
-      if (resp?.ok) {
-        await onModelConfigurationChanged?.();
-        await loadApiKeysPanel({ preserveUi: true });
-      } else {
-        visibility.checked = !visibility.checked;
-        visibility.disabled = false;
+      try {
+        const resp = await call("set_model_visibility", {
+          provider: model.provider,
+          modelId: model.id,
+          visible: visibility.checked,
+        }).catch(() => null);
+        if (resp?.ok) {
+          try {
+            await onModelConfigurationChanged?.();
+          } finally {
+            await loadApiKeysPanel({ preserveUi: true });
+          }
+        } else {
+          visibility.checked = previousValue;
+        }
+      } finally {
+        if (visibility.isConnected) visibility.disabled = false;
       }
     });
     visibilityLabel.appendChild(visibility);

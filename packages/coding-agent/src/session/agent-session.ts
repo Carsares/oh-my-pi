@@ -54,6 +54,7 @@ import {
 import type {
 	AssistantMessage,
 	CodexCompactionContext,
+	ContextToolCall,
 	ImageContent,
 	Message,
 	Model,
@@ -2125,7 +2126,7 @@ export class AgentSession {
 		if (skills.length > 0) snapshot.usedSkills = [...new Set([...(snapshot.usedSkills ?? []), ...skills])];
 		if (tools.length > 0 || priorToolCalls.length > 0) {
 			const previous = new Map(allToolCalls.map(call => [call.callId, call]));
-			const currentToolCalls = message.content.flatMap(block => {
+			const currentToolCalls: ContextToolCall[] = message.content.flatMap(block => {
 				if (block.type !== "toolCall") return [];
 				return [
 					{

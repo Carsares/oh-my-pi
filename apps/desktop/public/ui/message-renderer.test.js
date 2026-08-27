@@ -26,9 +26,12 @@ const enMessages = {
     systemPromptFiles: "System prompt files",
     toolsProvided: "Tools provided",
     toolsCalled: "Tools called",
-    toolsUsed: "Tools used",
+    toolsUsed: "Tools actually used",
     skillsProvided: "Skills provided",
-    skillsUsed: "Skills used",
+    skillsUsed: "Skills actually activated",
+    noToolsUsed: "None used",
+    noSkillsUsed: "None activated",
+    usageNotRecorded: "Usage not recorded",
     toolStatus: {
       requested: "Requested",
       started: "Running",
@@ -70,9 +73,12 @@ const zhMessages = {
     systemPromptFiles: "系统提示词文件",
     toolsProvided: "传入的工具",
     toolsCalled: "调用的工具",
-    toolsUsed: "使用的工具",
+    toolsUsed: "实际使用的工具",
     skillsProvided: "传入的技能",
-    skillsUsed: "使用的技能",
+    skillsUsed: "实际激活的技能",
+    noToolsUsed: "未使用",
+    noSkillsUsed: "未激活",
+    usageNotRecorded: "暂无使用记录",
     toolStatus: {
       requested: "已请求",
       started: "执行中",
@@ -309,6 +315,56 @@ describe("MessageRenderer streaming markdown preview", () => {
     );
     expect(renderer._messageContextPopup.details).toBe(true);
     expect(renderer._messageContextPopup.popup.textContent).toContain("Skills provided");
+  });
+
+  it("shows explicit states for unused and unrecorded provenance", () => {
+    const breakdown = {
+      contextWindow: 1000,
+      usedTokens: 640,
+      systemPromptTokens: 100,
+      systemToolsTokens: 200,
+      systemContextTokens: 80,
+      skillsTokens: 60,
+      messagesTokens: 200,
+    };
+    const baseMessage = {
+      content: "Restored answer",
+      usage: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } },
+    };
+
+    const knownUnused = renderer.renderAssistantMessage(
+      {
+        ...baseMessage,
+        contextSnapshot: {
+          contextBreakdown: breakdown,
+          providedTools: ["read"],
+          providedSkills: [{ name: "review" }],
+          usedTools: [],
+          usedSkills: [],
+        },
+      },
+      false,
+      true,
+    );
+    knownUnused.querySelector("[data-message-usage-input]").click();
+    expect(renderer._messageContextPopup.popup.textContent).toContain("None used");
+    expect(renderer._messageContextPopup.popup.textContent).toContain("None activated");
+
+    renderer.clear();
+    const legacyMessage = renderer.renderAssistantMessage(
+      {
+        ...baseMessage,
+        contextSnapshot: {
+          contextBreakdown: breakdown,
+          providedTools: ["read"],
+          providedSkills: [{ name: "review" }],
+        },
+      },
+      false,
+      true,
+    );
+    legacyMessage.querySelector("[data-message-usage-input]").click();
+    expect(renderer._messageContextPopup.popup.textContent).toContain("Usage not recorded");
   });
 
   it("keeps a partial code block previewing as a code block", () => {

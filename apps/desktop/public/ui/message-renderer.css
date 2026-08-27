@@ -188,6 +188,11 @@
   font-size: var(--font-size-sm);
 }
 
+.message-context-empty {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
 .message-context-detail-list {
   display: flex;
   flex-direction: column;

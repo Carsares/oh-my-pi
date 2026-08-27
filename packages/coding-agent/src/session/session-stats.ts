@@ -352,6 +352,8 @@ export class SessionStatsTracker {
 			...(pending?.systemPromptFiles ? { systemPromptFiles: pending.systemPromptFiles } : {}),
 			...(pending?.providedTools ? { providedTools: pending.providedTools } : {}),
 			...(pending?.providedSkills ? { providedSkills: pending.providedSkills } : {}),
+			usedTools: [...(assistant.contextSnapshot?.usedTools ?? [])],
+			usedSkills: [...(assistant.contextSnapshot?.usedSkills ?? [])],
 			...(assistant.content.some(block => block.type === "toolCall")
 				? {
 						toolCalls: assistant.content.flatMap((block): ContextToolCall[] =>

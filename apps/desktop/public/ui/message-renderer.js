@@ -493,8 +493,14 @@ export class MessageRenderer {
     }
     popup.appendChild(legend);
 
-    this._appendUsedItems(popup, "usage.toolsUsed", snapshot.usedTools);
-    this._appendUsedItems(popup, "usage.skillsUsed", snapshot.usedSkills);
+    this._appendUsedItems(popup, "usage.toolsUsed", snapshot.usedTools, {
+      emptyLabelKey: "usage.noToolsUsed",
+      missingLabelKey: "usage.usageNotRecorded",
+    });
+    this._appendUsedItems(popup, "usage.skillsUsed", snapshot.usedSkills, {
+      emptyLabelKey: "usage.noSkillsUsed",
+      missingLabelKey: "usage.usageNotRecorded",
+    });
     if (details) this._appendContextDetails(popup, snapshot);
     document.body.appendChild(popup);
     const rect = button.getBoundingClientRect();
@@ -613,8 +619,9 @@ export class MessageRenderer {
     if (section.children.length > 0) popup.appendChild(section);
   }
 
-  _appendUsedItems(popup, labelKey, items) {
-    if (!Array.isArray(items) || items.length === 0) return;
+  _appendUsedItems(popup, labelKey, items, { emptyLabelKey = null, missingLabelKey = null } = {}) {
+    if (!Array.isArray(items) && !missingLabelKey) return;
+    if (Array.isArray(items) && items.length === 0 && !emptyLabelKey) return;
     const section = document.createElement("section");
     section.className = "message-context-used";
     const heading = document.createElement("div");
@@ -622,10 +629,17 @@ export class MessageRenderer {
     heading.textContent = t(labelKey);
     const list = document.createElement("div");
     list.className = "message-context-used-list";
-    for (const item of items) {
-      const value = document.createElement("code");
-      value.textContent = item;
-      list.appendChild(value);
+    if (Array.isArray(items) && items.length > 0) {
+      for (const item of items) {
+        const value = document.createElement("code");
+        value.textContent = item;
+        list.appendChild(value);
+      }
+    } else {
+      const empty = document.createElement("span");
+      empty.className = "message-context-empty";
+      empty.textContent = t(Array.isArray(items) ? emptyLabelKey : missingLabelKey);
+      list.appendChild(empty);
     }
     section.append(heading, list);
     popup.appendChild(section);

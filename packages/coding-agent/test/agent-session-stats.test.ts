@@ -88,6 +88,29 @@ describe("AgentSession session stats", () => {
 		expect(stats.contextBreakdown).toEqual(session.getContextBreakdown());
 	});
 
+	it("uses refreshed registry limits for the active model without changing its identity", async () => {
+		const model = modelRegistry.getAll().find(candidate => candidate.contextWindow && candidate.contextWindow > 0);
+		if (!model?.contextWindow) {
+			throw new Error("Expected bundled model with a context window");
+		}
+		const staleModel = { ...model, contextWindow: 0, maxTokens: 0 };
+		const agent = new Agent({
+			initialState: { model: staleModel, systemPrompt: ["Test"], tools: [], messages: [] },
+		});
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+		});
+
+		expect(session.getSessionStats().contextBreakdown?.contextWindow).toBe(0);
+		expect(await session.syncActiveModelFromRegistry()).toBe(true);
+		expect(session.model?.provider).toBe(model.provider);
+		expect(session.model?.id).toBe(model.id);
+		expect(session.getSessionStats().contextBreakdown?.contextWindow).toBe(model.contextWindow);
+	});
+
 	it("exposes cumulative journal usage separately from active-message totals", () => {
 		const model = modelRegistry.getAll().find(candidate => candidate.contextWindow && candidate.contextWindow > 0);
 		if (!model?.contextWindow) {

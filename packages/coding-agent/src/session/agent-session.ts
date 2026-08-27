@@ -7244,6 +7244,16 @@ export class AgentSession {
 		return this.#models.getAvailableModels();
 	}
 
+	/** Rebinds the selected model to its latest registry metadata without changing the selection. */
+	async syncActiveModelFromRegistry(): Promise<boolean> {
+		const currentModel = this.model;
+		if (!currentModel || this.#isDisposed) return false;
+		const updatedModel = this.#modelRegistry.find(currentModel.provider, currentModel.id);
+		if (!updatedModel || Bun.deepEquals(currentModel, updatedModel)) return false;
+		await this.#setModelWithProviderSessionReset(updatedModel);
+		return true;
+	}
+
 	/** Selects the session thinking level and optionally persists it as the default. */
 	setThinkingLevel(level: ConfiguredThinkingLevel | undefined, persist: boolean = false): void {
 		this.#models.setThinkingLevel(level, persist);

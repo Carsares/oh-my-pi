@@ -7,10 +7,12 @@ import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { resolveModelScope } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import {
+	type ActiveModelSink,
 	buildSessionOptions,
 	rebuildScopedModelsAfterDiscovery,
 	resolveScopedModels,
 	type ScopedModelSink,
+	syncActiveModelAfterDiscovery,
 	toSessionScopedModels,
 } from "@oh-my-pi/pi-coding-agent/main";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
@@ -67,6 +69,18 @@ class FakeSession implements ScopedModelSink {
 	setScopedModels(scopedModels: Array<{ model: Model; thinkingLevel?: ThinkingLevel }>): void {
 		this.setCalls += 1;
 		this.scopedModels = scopedModels;
+	}
+}
+
+class FakeActiveModelSession implements ActiveModelSink {
+	isDisposed = false;
+	syncCalls = 0;
+	refreshedBeforeSync = false;
+	constructor(readonly refreshSettled: () => boolean) {}
+	async syncActiveModelFromRegistry(): Promise<boolean> {
+		this.syncCalls += 1;
+		this.refreshedBeforeSync = this.refreshSettled();
+		return true;
 	}
 }
 
@@ -145,6 +159,29 @@ describe("rebuildScopedModelsAfterDiscovery", () => {
 
 		expect(session.setCalls).toBe(0);
 		expect(session.scopedModels.map(s => s.model.id)).toEqual(["a"]);
+	});
+});
+
+describe("syncActiveModelAfterDiscovery", () => {
+	it("waits for discovery before syncing the active model", async () => {
+		let refreshSettled = false;
+		const session = new FakeActiveModelSession(() => refreshSettled);
+		await syncActiveModelAfterDiscovery(session, {
+			awaitBackgroundRefresh: async () => {
+				refreshSettled = true;
+			},
+		});
+
+		expect(session.syncCalls).toBe(1);
+		expect(session.refreshedBeforeSync).toBe(true);
+	});
+
+	it("does not sync a disposed session", async () => {
+		const session = new FakeActiveModelSession(() => true);
+		session.isDisposed = true;
+		await syncActiveModelAfterDiscovery(session, { awaitBackgroundRefresh: async () => {} });
+
+		expect(session.syncCalls).toBe(0);
 	});
 });
 

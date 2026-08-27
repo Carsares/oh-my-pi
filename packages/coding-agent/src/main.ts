@@ -814,6 +814,22 @@ export interface ScopedModelSink {
 	setScopedModels(scopedModels: Array<{ model: Model; thinkingLevel?: ThinkingLevel }>): void;
 }
 
+/** Minimal session surface whose selected model metadata follows background discovery. */
+export interface ActiveModelSink {
+	readonly isDisposed: boolean;
+	syncActiveModelFromRegistry(): Promise<boolean>;
+}
+
+/** Keep the active model's limits and capabilities aligned with the refreshed registry. */
+export async function syncActiveModelAfterDiscovery(
+	session: ActiveModelSink,
+	modelRegistry: Pick<ModelRegistry, "awaitBackgroundRefresh">,
+): Promise<void> {
+	await modelRegistry.awaitBackgroundRefresh();
+	if (session.isDisposed) return;
+	await session.syncActiveModelFromRegistry();
+}
+
 /**
  * Startup resolves the `--models`/`enabledModels` scope from the model registry
  * before background provider discovery runs — `createSession` fires
@@ -1919,6 +1935,13 @@ export async function runRootCommand(
 			if (parsedArgs.apiKey && !sessionOptions.model && session.model) {
 				authStorage.setRuntimeApiKey(session.model.provider, parsedArgs.apiKey);
 			}
+
+			// The startup refresh can replace a cache-cold model entry after the
+			// session has already retained it. Rebind the same selected model so
+			// context limits and other metadata become authoritative without restart.
+			void syncActiveModelAfterDiscovery(session, modelRegistry).catch(error =>
+				logger.warn("Active model sync after discovery failed", { error: String(error) }),
+			);
 
 			// Runtime provider discovery (opencode-go, models.yml `discovery:`, proxies)
 			// populates the registry AFTER the scope was snapshotted at startup; re-resolve

@@ -211,26 +211,31 @@ describe("computeNonMessageTokens / computeNonMessageBreakdown memoization", () 
  * Contract: the Skills category counts only skills actually rendered into the
  * system prompt (mirroring `buildSystemPrompt`'s filter) — hidden/explicit-only
  * skills, and every skill when the `read` tool is absent, contribute zero. The
- * System-prompt subtraction must not be inflated by unrendered skill metadata
- * and clamped to 0 (issue #6498).
+ * skills block is accounted for independently from the stable system prompt
+ * block (issue #6498).
  */
 describe("computeNonMessageBreakdown skills filtering", () => {
 	const readTool = { name: "read", description: "read files", parameters: {} };
 	const hidden = { name: "hidden-skill", description: "X".repeat(4000), filePath: "/s/h.md", hide: true };
 	const visible = { name: "vis", description: "small visible skill", filePath: "/s/v.md" };
-	// First prompt block as rendered: only the visible skill appears.
-	const renderedPrompt = "You are an agent.\nSkills:\n- vis: small visible skill\n";
+	// Session skills are rendered in a separate, trailing system-prompt block.
+	const renderedPrompt = "You are an agent.";
+	const renderedSkillsPrompt =
+		"<session-skills>\n# Session Skills\n<skills>\n- vis: small visible skill\n</skills>\n</session-skills>";
 
 	function session(tools: unknown[], skills: unknown[]) {
-		return { systemPrompt: [renderedPrompt], agent: { state: { tools } }, skills } as never;
+		return { systemPrompt: [renderedPrompt, renderedSkillsPrompt], agent: { state: { tools } }, skills } as never;
 	}
 
-	it("excludes hidden skills and does not clamp System prompt to 0", () => {
+	it("counts visible skills in their separate prompt category", () => {
 		const b = computeNonMessageBreakdown(session([readTool], [hidden, visible]), tokenizer);
 		// Only the visible skill is counted, not the large hidden one.
 		expect(b.skillsTokens).toBe(computeNonMessageBreakdown(session([readTool], [visible]), tokenizer).skillsTokens);
 		expect(b.skillsTokens).toBeLessThan(100);
 		expect(b.systemPromptTokens).toBeGreaterThan(0);
+		expect(b.skillsTokens + b.systemPromptTokens + b.systemContextTokens + b.toolsTokens).toBe(
+			computeNonMessageTokens(session([readTool], [hidden, visible]), tokenizer),
+		);
 	});
 
 	it("counts zero Skills tokens when the read tool is unavailable", () => {

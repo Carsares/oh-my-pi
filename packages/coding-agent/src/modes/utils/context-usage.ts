@@ -94,6 +94,7 @@ export interface NonMessageTokenSource {
 const EMPTY_STRING_PARTS: string[] = [];
 const EMPTY_TOOLS: ReadonlyArray<Pick<Tool, "name" | "description" | "parameters">> = [];
 const EMPTY_SKILLS: readonly Skill[] = [];
+const SESSION_SKILLS_PROMPT_MARKER = "<session-skills>";
 
 /**
  * Skills actually rendered into the system prompt, mirroring the filter in
@@ -149,9 +150,9 @@ export function estimateToolSchemaTokens(
 }
 
 /**
- * Compute just the NON-MESSAGE token total: system prompt (with its skills
- * section subtracted, since skills are tokenized separately) + system context
- * (the rest of the system-prompt array) + tools + skills.
+ * Compute just the NON-MESSAGE token total: system prompt + system context (the
+ * non-skill system-prompt blocks) + tools + skills. Session skills are kept in
+ * their own system-prompt block, so they are no longer subtracted from block 0.
  *
  * Exposed so callers like `StatusLineComponent` can cache the non-message
  * total separately from the message total. Non-message inputs (skills,
@@ -243,11 +244,31 @@ export function computeNonMessageBreakdown(
 	const entry = nonMessageTokenCacheEntry(session, tokenizer);
 	if (entry.breakdown) return entry.breakdown;
 	const tools = session.agent?.state?.tools ?? EMPTY_TOOLS;
-	const skillsTokens = estimateSkillsTokens(renderedSkills(session.skills ?? EMPTY_SKILLS, tools), tokenizer);
-	const toolsTokens = estimateToolSchemaTokens(tools, tokenizer);
+	const visibleSkills = renderedSkills(session.skills ?? EMPTY_SKILLS, tools);
 	const systemPromptParts = session.systemPrompt ?? EMPTY_STRING_PARTS;
-	const systemContextTokens = tokenizer.countTokens(Array.from(systemPromptParts.slice(1), part => part ?? ""));
-	const systemPromptTokens = Math.max(0, tokenizer.countTokens(systemPromptParts[0] ?? "") - skillsTokens);
+	// buildSystemPrompt appends the rendered skill listing after every other
+	// system-prompt block. Keep that block in the Skills category rather than
+	// counting it again as generic system context. Custom prompt overrides may
+	// replace that block, so retain the metadata estimate when no trailing block
+	// is available.
+	let skillPromptIndex = -1;
+	if (visibleSkills.length > 0) {
+		for (let index = systemPromptParts.length - 1; index >= 1; index -= 1) {
+			if (systemPromptParts[index]?.includes(SESSION_SKILLS_PROMPT_MARKER)) {
+				skillPromptIndex = index;
+				break;
+			}
+		}
+	}
+	const trailingSkillPrompt = skillPromptIndex >= 0 ? systemPromptParts[skillPromptIndex] : undefined;
+	const skillsTokens = trailingSkillPrompt
+		? tokenizer.countTokens(trailingSkillPrompt)
+		: estimateSkillsTokens(visibleSkills, tokenizer);
+	const toolsTokens = estimateToolSchemaTokens(tools, tokenizer);
+	const systemContextParts = systemPromptParts.slice(1);
+	if (skillPromptIndex >= 1) systemContextParts.splice(skillPromptIndex - 1, 1);
+	const systemContextTokens = tokenizer.countTokens(Array.from(systemContextParts, part => part ?? ""));
+	const systemPromptTokens = tokenizer.countTokens(systemPromptParts[0] ?? "");
 	const breakdown = { skillsTokens, toolsTokens, systemContextTokens, systemPromptTokens };
 	entry.breakdown = breakdown;
 	return breakdown;

@@ -32,6 +32,7 @@ import defaultPersonality from "./prompts/system/personalities/default.md" with 
 import friendlyPersonality from "./prompts/system/personalities/friendly.md" with { type: "text" };
 import pragmaticPersonality from "./prompts/system/personalities/pragmatic.md" with { type: "text" };
 import projectPromptTemplate from "./prompts/system/project-prompt.md" with { type: "text" };
+import sessionSkillsPromptTemplate from "./prompts/system/session-skills.md" with { type: "text" };
 import systemPromptTemplate from "./prompts/system/system-prompt.md" with { type: "text" };
 import { normalizeConcurrencyLimit } from "./task/parallel";
 import { usesCodexTaskPrompt } from "./task/prompt-policy";
@@ -1027,6 +1028,14 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	}
 	if (activeRepoContextPrompt) {
 		systemPrompt.push(activeRepoContextPrompt);
+	}
+	// Keep the mutable skill inventory last so changing session skills preserves
+	// the cacheable prefix shared by the preceding prompt blocks.
+	const sessionSkillsPrompt = prompt
+		.render(sessionSkillsPromptTemplate, { skills: filteredSkills, customPrompt: !!resolvedCustomPrompt })
+		.trim();
+	if (sessionSkillsPrompt) {
+		systemPrompt.push(sessionSkillsPrompt);
 	}
 
 	// The xd:// protocol section (with its device catalog) is only rendered by the

@@ -23,15 +23,7 @@ Helpful, trusted assistant for load-bearing changes in Oh My Pi coding harness.
 {{/if}}
 
 § Runtime
-# Skills & Rules
-{{#if skills.length}}
-Matching skill → MUST read `skill://<name>` first.
-<skills>
-{{#each skills}}
-- {{name}}: {{description}}
-{{/each}}
-</skills>
-{{/if}}
+# Rules
 
 {{#if alwaysApplyRules.length}}
 <generic-rules>
@@ -173,7 +165,7 @@ Delegation preferred. Once design settles, SHOULD fan substantial work to `{{too
 
 § Workflow
 # 1. Scope
-{{#ifAny skills.length rules.length}}- Read relevant {{#if skills.length}}skills{{#if rules.length}} and rules{{/if}}{{else}}rules{{/if}} first.{{/ifAny}}
+{{#if rules.length}}- Read relevant rules first.{{/if}}
 - Multi-file work: plan before files.
 
 # 2. Research Before Editing

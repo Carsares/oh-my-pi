@@ -681,6 +681,47 @@ describe("system prompt tool inventory", () => {
 		expect(text).toContain("- frontend-design: Frontend UI workflow");
 	});
 
+	it("keeps the stable prompt block unchanged when session skills differ", async () => {
+		const baseOptions = {
+			cwd: tempDir,
+			contextFiles: [],
+			rules: [],
+			toolNames: ["read"],
+			tools: TOOLS,
+			workspaceTree: { ...EMPTY_TREE, rootPath: tempDir },
+		};
+		const first = await buildSystemPrompt({
+			...baseOptions,
+			skills: [
+				{
+					name: "frontend-design",
+					description: "Frontend UI workflow",
+					filePath: path.join(tempDir, "frontend", "SKILL.md"),
+					baseDir: path.join(tempDir, "frontend"),
+					source: "test",
+				},
+			],
+		});
+		const second = await buildSystemPrompt({
+			...baseOptions,
+			skills: [
+				{
+					name: "backend-testing",
+					description: "Backend testing workflow",
+					filePath: path.join(tempDir, "backend", "SKILL.md"),
+					baseDir: path.join(tempDir, "backend"),
+					source: "test",
+				},
+			],
+		});
+
+		expect(first.systemPrompt[0]).toBe(second.systemPrompt[0]);
+		expect(first.systemPrompt.at(-1)).toContain("frontend-design");
+		expect(second.systemPrompt.at(-1)).toContain("backend-testing");
+		expect(first.systemPrompt[0]).not.toContain("frontend-design");
+		expect(second.systemPrompt[0]).not.toContain("backend-testing");
+	});
+
 	it("omits the read-only scout delegation gate when scout is unavailable", async () => {
 		const opts = { toolNames: ["read", "bash", "task"], tools: TOOLS };
 		const withScout = (

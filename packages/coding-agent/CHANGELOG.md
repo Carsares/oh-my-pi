@@ -10,6 +10,10 @@
 
 - Session skill collections can now all be removed, allowing a session to use no collection-provided Skills while retaining manually added Skills.
 
+### Fixed
+
+- Improved prompt-cache reuse when session skill collections differ by isolating the session skill listing in its own prompt block.
+
 ## [18.0.4] - 2026-08-24
 
 ### Added

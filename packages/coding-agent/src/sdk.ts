@@ -878,8 +878,9 @@ export interface BuildSystemPromptOptions {
 /**
  * Build the default provider-facing system prompt blocks.
  *
- * The returned `systemPrompt` preserves the stable harness prompt and dynamic project context
- * as separate entries so providers can cache prompt prefixes without concatenating blocks.
+ * The returned `systemPrompt` preserves the stable harness prompt, dynamic project context,
+ * and session skill listing as separate entries so providers can cache prompt prefixes without
+ * concatenating blocks.
  */
 export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}): Promise<BuildSystemPromptResult> {
 	const toolNames = options.tools?.map(tool => tool.name);

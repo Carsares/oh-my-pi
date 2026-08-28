@@ -220,9 +220,12 @@ describe("MessageRenderer streaming markdown preview", () => {
 
     el.querySelector("[data-message-usage-input]").click();
 
-    expect(document.querySelector(".message-context-viz").textContent).toContain("System tools");
-    expect(document.querySelector(".message-context-viz").textContent).toContain("read");
-    expect(document.querySelector(".message-context-viz").textContent).toContain("review");
+    const popup = document.querySelector(".message-context-viz");
+    expect(
+      [...popup.querySelectorAll(".context-legend-label")].map((label) => label.textContent),
+    ).toEqual(["System prompt", "System context", "System tools", "Skills", "Messages"]);
+    expect(popup.textContent).toContain("read");
+    expect(popup.textContent).toContain("review");
   });
 
   it("opens full provenance details and emits file previews", () => {

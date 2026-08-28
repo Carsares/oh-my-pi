@@ -86,8 +86,8 @@ describe("context usage control", () => {
     );
     expect(rows).toEqual([
       "System prompt2.0k · 5.0%",
-      "System tools8.0k · 20.0%",
       "System context4.0k · 10.0%",
+      "System tools8.0k · 20.0%",
       "Skills6.0k · 15.0%",
       "Messages20.0k · 50.0%",
     ]);
